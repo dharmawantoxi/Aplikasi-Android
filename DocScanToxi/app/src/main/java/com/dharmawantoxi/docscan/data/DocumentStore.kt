@@ -29,7 +29,6 @@ import kotlin.math.roundToInt
 object DocumentStore {
     const val MAX_PAGES = 25
     const val MAX_PDF_BYTES = 100L * 1024 * 1024
-    private const val MAX_PDF_POINTS = 14400
     private const val PDF_RENDER_MAX_SIDE = 2400
     private val lock = Any()
     private val idPattern = Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
@@ -70,7 +69,7 @@ object DocumentStore {
             val entry = formatJson?.optJSONObject(page) ?: return@mapNotNull null
             val width = entry.optInt("width", 0)
             val height = entry.optInt("height", 0)
-            if (width in 1..MAX_PDF_POINTS && height in 1..MAX_PDF_POINTS)
+            if (width in 1..PdfPageFormat.MAX_POINTS && height in 1..PdfPageFormat.MAX_POINTS)
                 page to PdfPageFormat(width, height) else null
         }.toMap()
         return Document(id, obj.getString("title"), obj.getLong("createdAt"), obj.getLong("updatedAt"), pages, formats)
@@ -190,7 +189,7 @@ object DocumentStore {
                         pdf.openPage(index).use { sourcePage ->
                             val width = sourcePage.width
                             val height = sourcePage.height
-                            if (width !in 1..MAX_PDF_POINTS || height !in 1..MAX_PDF_POINTS) {
+                            if (width !in 1..PdfPageFormat.MAX_POINTS || height !in 1..PdfPageFormat.MAX_POINTS) {
                                 throw IOException("Ukuran halaman ${index + 1} tidak didukung")
                             }
                             val scale = PDF_RENDER_MAX_SIDE.toFloat() / max(width, height)
@@ -233,7 +232,7 @@ object DocumentStore {
         val base = name.orEmpty().let { if (it.endsWith(".pdf", ignoreCase = true)) it.dropLast(4) else it }
             .trim().ifBlank { "PDF" }
         // Sisakan ruang untuk penanda agar nama ekspor awal berbeda dari file sumber.
-        return DocumentNames.displayName("${base.take(72)} (edit)")
+        return DocumentNames.displayName("${base.take(72).trimEnd()} (edit)")
     }
 
     fun addPages(context: Context, id: String, uris: List<Uri>): Document = synchronized(lock) {
@@ -284,13 +283,8 @@ object DocumentStore {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(file.absolutePath, bounds)
             if (bounds.outWidth > 0 && bounds.outHeight > 0) {
-                // Pertahankan skala fisik saat gambar dipotong atau diputar.
-                val pointsPerPixel = (format.width.toFloat() / bounds.outWidth +
-                    format.height.toFloat() / bounds.outHeight) / 2f
-                formats[page] = PdfPageFormat(
-                    (bitmap.width * pointsPerPixel).roundToInt().coerceIn(1, MAX_PDF_POINTS),
-                    (bitmap.height * pointsPerPixel).roundToInt().coerceIn(1, MAX_PDF_POINTS)
-                )
+                formats[page] = PdfGeometry.editedPageFormat(format, bounds.outWidth, bounds.outHeight,
+                    bitmap.width, bitmap.height)
             }
         }
         saveBitmap(file, bitmap)

@@ -1,7 +1,9 @@
 package com.dharmawantoxi.docscan.data
 
 /** Ukuran halaman PDF dalam satuan point (1/72 inci). */
-data class PdfPageFormat(val width: Int, val height: Int)
+data class PdfPageFormat(val width: Int, val height: Int) {
+    companion object { const val MAX_POINTS = 14400 }
+}
 
 /** Dokumen dan urutan halamannya; isi gambar tersimpan di penyimpanan privat aplikasi. */
 data class Document(

@@ -16,7 +16,7 @@ import java.io.OutputStream
 import java.util.UUID
 
 object Exports {
-    /** Setiap halaman dipasang secara proporsional pada kertas A4 putih. */
+    /** Halaman PDF impor mempertahankan ukurannya; foto dipasang pada A4 putih. */
     fun writePdf(context: Context, doc: Document, output: OutputStream) {
         require(doc.pages.isNotEmpty()) { "Dokumen tidak memiliki halaman" }
         val pdf = PdfDocument()

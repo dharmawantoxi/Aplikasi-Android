@@ -9,6 +9,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.pdf.PdfDocument
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
@@ -20,6 +21,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.EditText
 import android.widget.SeekBar
 import android.widget.TextView
+import androidx.core.content.FileProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -92,13 +94,18 @@ class PdfEditFlowTest {
     @Test fun importPdfEditReorderAndExportKeepPageSizesAndSource() {
         val red = Color.rgb(210, 30, 30)
         val blue = Color.rgb(30, 80, 210)
-        val source = makePdf(listOf(300 to 500, 640 to 320), listOf(red, blue))
+        val temporarySource = makePdf(listOf(300 to 500, 640 to 320), listOf(red, blue))
+        val sharedDir = File(context.cacheDir, "shared").apply { mkdirs() }
+        val source = File(sharedDir, "Nama PDF sangat panjang ".repeat(4) + System.nanoTime() + ".pdf")
+        temporarySource.copyTo(source, overwrite = true)
+        temporarySource.delete()
         val original = source.readBytes()
         val output = File.createTempFile("edited-pdf-", ".pdf", context.cacheDir)
         val photo = makePhoto()
         var id: String? = null
         try {
-            val imported = DocumentStore.importPdf(context, Uri.fromFile(source))
+            val contentUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", source)
+            val imported = DocumentStore.importPdf(context, contentUri)
             id = imported.id
             assertEquals(2, imported.pages.size)
             assertTrue(DocumentNames.fileName(imported.title).endsWith(" (edit)"))
@@ -189,7 +196,12 @@ class PdfEditFlowTest {
     }
 
     @Test fun homeWarningAndPdfPickerOpenNewDocument() {
-        val source = makePdf(listOf(240 to 360))
+        val temporarySource = makePdf(listOf(240 to 360))
+        val sharedDir = File(context.cacheDir, "shared").apply { mkdirs() }
+        val source = File(sharedDir, "pilihan-${System.nanoTime()}.pdf")
+        temporarySource.copyTo(source, overwrite = true)
+        temporarySource.delete()
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", source)
         val original = source.readBytes()
         val before = DocumentStore.list(context).map { it.id }.toSet()
         val filter = IntentFilter(Intent.ACTION_OPEN_DOCUMENT).apply {
@@ -197,7 +209,7 @@ class PdfEditFlowTest {
             addDataType("*/*")
         }
         val picker = instrumentation.addMonitor(filter,
-            Instrumentation.ActivityResult(Activity.RESULT_OK, Intent().setData(Uri.fromFile(source))), true)
+            Instrumentation.ActivityResult(Activity.RESULT_OK, Intent().setData(uri)), true)
         val documentMonitor = instrumentation.addMonitor(DocumentActivity::class.java.name, null, false)
         var opened: Activity? = null
         try {
@@ -260,7 +272,7 @@ class PdfEditFlowTest {
                     assertTrue(view.spec.y > 0.5f)
                     assertTrue(findText(root, "Posisi")!!.performClick())
                 }
-                clickNode("Kiri atas")
+                tapNode("Kiri atas")
                 editor.onActivity { activity ->
                     val root = activity.window.decorView
                     val view = findType<TextOverlayView>(root)!!
@@ -318,6 +330,22 @@ class PdfEditFlowTest {
             if (!clicked) node = node.parent
         }
         assertTrue("Elemen dialog tidak dapat ditekan: $text", clicked)
+        instrumentation.waitForIdleSync()
+    }
+
+    private fun tapNode(text: String) {
+        val node = waitForNode(text)
+        assertNotNull("Elemen dialog tidak ditemukan: $text", node)
+        val bounds = Rect()
+        node!!.getBoundsInScreen(bounds)
+        assertTrue("Elemen dialog tidak terlihat: $text", !bounds.isEmpty)
+        val now = android.os.SystemClock.uptimeMillis()
+        val down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, bounds.exactCenterX(), bounds.exactCenterY(), 0)
+        val up = MotionEvent.obtain(now, now + 20, MotionEvent.ACTION_UP, bounds.exactCenterX(), bounds.exactCenterY(), 0)
+        try {
+            instrumentation.sendPointerSync(down)
+            instrumentation.sendPointerSync(up)
+        } finally { down.recycle(); up.recycle() }
         instrumentation.waitForIdleSync()
     }
 
