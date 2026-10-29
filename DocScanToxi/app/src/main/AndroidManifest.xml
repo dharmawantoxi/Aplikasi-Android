@@ -24,6 +24,8 @@
         <activity android:name=".DocumentActivity" android:exported="false" />
         <activity android:name=".edit.PageEditActivity" android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden" />
+        <activity android:name=".edit.TextEditActivity" android:exported="false"
+            android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
         <activity android:name=".ocr.OcrActivity" android:exported="false"
             android:windowSoftInputMode="adjustResize" />
 

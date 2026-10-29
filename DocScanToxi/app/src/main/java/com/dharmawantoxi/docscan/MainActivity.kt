@@ -1,5 +1,6 @@
 package com.dharmawantoxi.docscan
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
@@ -16,6 +17,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.ScrollView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
 import com.dharmawantoxi.docscan.data.Document
@@ -35,6 +37,9 @@ class MainActivity : ScanHostActivity() {
     private var documents: List<Document> = emptyList()
     private var query = ""
     private var refreshVersion = 0
+    private val openPdfLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) importPdf(uri)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,6 +65,30 @@ class MainActivity : ScanHostActivity() {
                 error("Dokumen tidak dapat disimpan. Pastikan foto dapat dibuka dan ruang penyimpanan cukup.", e)
             } finally {
                 cleanCameraInputs(uris)
+            }
+        }
+    }
+
+    private fun showPdfImportInfo() {
+        AlertDialog.Builder(this).setTitle("Edit PDF yang sudah ada")
+            .setMessage("PDF akan diimpor sebagai salinan. Setiap halaman diubah menjadi gambar: teks asli tidak dapat diedit atau dicari, dan tautan, formulir serta tanda tangan digital tidak dipertahankan.\n\nFile sumber tidak diubah saat impor. Pilih nama atau lokasi baru saat mengekspor. Maksimal 25 halaman dan 100 MB; PDF dengan kata sandi tidak didukung.")
+            .setNegativeButton("Batal", null)
+            .setPositiveButton("Pilih PDF") { _, _ ->
+                try { openPdfLauncher.launch(arrayOf("application/pdf")) }
+                catch (_: ActivityNotFoundException) { error("Pemilih dokumen tidak tersedia di perangkat ini.") }
+            }.show()
+    }
+
+    private fun importPdf(uri: Uri) {
+        busy(true, "Mengimpor halaman PDF…")
+        lifecycleScope.launch {
+            try {
+                val doc = withContext(Dispatchers.IO) { DocumentStore.importPdf(applicationContext, uri) }
+                busy(false)
+                startActivity(Intent(this@MainActivity, DocumentActivity::class.java).putExtra(DocumentActivity.EXTRA_ID, doc.id))
+            } catch (e: Exception) {
+                busy(false)
+                error("PDF tidak dapat diimpor. Pastikan file valid, tidak memiliki kata sandi, dan ruang penyimpanan cukup.", e)
             }
         }
     }
@@ -123,6 +152,25 @@ class MainActivity : ScanHostActivity() {
         }, LinearLayout.LayoutParams(0, dp(50), 1f).apply { leftMargin = dp(8) })
         hero.addView(heroActions)
         content.addView(hero, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(22) })
+
+        val editPdf = Ui.row(c).apply {
+            background = Ui.bg(surface, dp(18).toFloat(), Ui.color(c, R.color.md_outline_variant), dp(1))
+            setPadding(dp(14), dp(12), dp(12), dp(12))
+            isClickable = true; isFocusable = true
+            contentDescription = "Edit PDF yang sudah ada"
+            setOnClickListener { showPdfImportInfo() }
+        }
+        editPdf.addView(Ui.image(c, R.drawable.ic_pdf, primary).apply {
+            background = Ui.bg(Ui.color(c, R.color.md_primary_container), dp(12).toFloat())
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+        }, LinearLayout.LayoutParams(dp(44), dp(44)))
+        val editPdfText = Ui.column(c).apply { setPadding(dp(12), 0, 0, 0) }
+        editPdfText.addView(Ui.text(c, "Edit PDF", 15f, onSurface, true))
+        editPdfText.addView(Ui.text(c, "Buka PDF untuk mengatur dan mengedit halaman", 12f, muted))
+        editPdf.addView(editPdfText, LinearLayout.LayoutParams(0, -2, 1f))
+        editPdf.addView(Ui.image(c, R.drawable.ic_arrow_back, muted).apply { rotation = 180f },
+            LinearLayout.LayoutParams(dp(24), dp(24)))
+        content.addView(editPdf, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
 
         val stats = Ui.row(c).apply {
             background = Ui.bg(surface, dp(18).toFloat(), Ui.color(c, R.color.md_outline_variant), dp(1))

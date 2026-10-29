@@ -1,12 +1,17 @@
 package com.dharmawantoxi.docscan.data
 
+/** Ukuran halaman PDF dalam satuan point (1/72 inci). */
+data class PdfPageFormat(val width: Int, val height: Int)
+
 /** Dokumen dan urutan halamannya; isi gambar tersimpan di penyimpanan privat aplikasi. */
 data class Document(
     val id: String,
     val title: String,
     val createdAt: Long,
     val updatedAt: Long,
-    val pages: List<String>
+    val pages: List<String>,
+    // Hanya halaman hasil impor PDF memiliki ukuran asli. Dokumen lama tetap memakai A4.
+    val pageFormats: Map<String, PdfPageFormat> = emptyMap()
 )
 
 object DocumentNames {

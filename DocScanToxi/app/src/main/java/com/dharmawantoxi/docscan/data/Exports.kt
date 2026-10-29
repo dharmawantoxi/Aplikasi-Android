@@ -26,11 +26,16 @@ object Exports {
                 val bitmap = BitmapFactory.decodeFile(file.absolutePath)
                     ?: throw IOException("Halaman ${index + 1} tidak dapat dibaca")
                 try {
-                    val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, index + 1).create())
+                    val format = doc.pageFormats[name]
+                    val pageWidth = format?.width ?: 595
+                    val pageHeight = format?.height ?: 842
+                    val page = pdf.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, index + 1).create())
                     val canvas = page.canvas
                     canvas.drawColor(Color.WHITE)
-                    val rect = PdfGeometry.fit(bitmap.width, bitmap.height)
-                    canvas.drawBitmap(bitmap, null, RectF(rect.left, rect.top, rect.right, rect.bottom),
+                    // Halaman PDF impor sudah mencakup seluruh halaman asli: jangan tambahkan margin lagi.
+                    val destination = if (format != null) RectF(0f, 0f, pageWidth.toFloat(), pageHeight.toFloat())
+                    else PdfGeometry.fit(bitmap.width, bitmap.height).let { RectF(it.left, it.top, it.right, it.bottom) }
+                    canvas.drawBitmap(bitmap, null, destination,
                         Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
                     pdf.finishPage(page)
                 } finally {
