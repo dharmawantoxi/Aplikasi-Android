@@ -260,12 +260,12 @@ class PdfEditFlowTest {
                     assertTrue(view.spec.y > 0.5f)
                     assertTrue(findText(root, "Posisi")!!.performClick())
                 }
-                clickNode("Kanan bawah")
+                clickNode("Kiri atas")
                 editor.onActivity { activity ->
                     val root = activity.window.decorView
                     val view = findType<TextOverlayView>(root)!!
-                    assertEquals(1f, view.spec.x, 0.001f)
-                    assertEquals(1f, view.spec.y, 0.001f)
+                    assertEquals(0f, view.spec.x, 0.001f)
+                    assertEquals(0f, view.spec.y, 0.001f)
                     assertEquals(0xFFBA1A1A.toInt(), view.spec.color)
                     val save = findDescription(root, "Simpan teks pada halaman")!!
                     assertTrue(save.isEnabled)
@@ -287,8 +287,8 @@ class PdfEditFlowTest {
             val image = BitmapFactory.decodeFile(pageFile.absolutePath)
             try {
                 var redPixels = 0
-                for (y in image.height * 3 / 4 until image.height step 2) {
-                    for (x in image.width / 4 until image.width step 2) {
+                for (y in 0 until image.height / 4 step 2) {
+                    for (x in 0 until image.width * 3 / 4 step 2) {
                         val p = image.getPixel(x, y)
                         if (Color.red(p) > 120 && Color.green(p) < 110 && Color.blue(p) < 110) redPixels++
                     }
@@ -309,9 +309,15 @@ class PdfEditFlowTest {
     }
 
     private fun clickNode(text: String) {
-        val node = waitForNode(text)
+        var node = waitForNode(text)
         assertNotNull("Elemen dialog tidak ditemukan: $text", node)
-        assertTrue("Elemen dialog tidak dapat ditekan: $text", node!!.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        var clicked = false
+        // Item daftar AlertDialog sering menempatkan teks pada anak yang tidak dapat diklik.
+        while (node != null && !clicked) {
+            clicked = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            if (!clicked) node = node.parent
+        }
+        assertTrue("Elemen dialog tidak dapat ditekan: $text", clicked)
         instrumentation.waitForIdleSync()
     }
 
