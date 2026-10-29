@@ -39,9 +39,22 @@ jobs:
           result=$?
           cat "$RUNNER_TEMP/gradle-build.log"
           if [ "$result" -ne 0 ]; then
-            grep -E '^e: |^\* What went wrong:|^Execution failed|^A problem occurred|^> |^Caused by:|^FAILURE:' "$RUNNER_TEMP/gradle-build.log" | tail -40 | while IFS= read -r line; do
-              echo "::error::$line"
-            done
+            # Sajikan penyebab build sebagai anotasi, bukan baris "Task" biasa.
+            python3 - "$RUNNER_TEMP/gradle-build.log" <<'PYLOG'
+          import sys
+          lines = open(sys.argv[1], errors="replace").read().splitlines()
+          primary = [s for s in lines if s.startswith("e: ") or " error:" in s.lower() or s.startswith("AGPBI: ")]
+          fallback = [s for s in lines if s.startswith(("Execution failed", "A problem occurred", "Caused by:", "FAILURE:")) or " FAILED" in s]
+          seen = set()
+          for line in primary + fallback:
+              line = line.strip()[:2000]
+              if not line or line in seen:
+                  continue
+              seen.add(line)
+              print("::error::" + line.replace("%", "%25"))
+              if len(seen) >= 10:
+                  break
+          PYLOG
           fi
           exit "$result"
       - name: Upload installable debug APK
