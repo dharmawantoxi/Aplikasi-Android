@@ -20,8 +20,10 @@ object ImageFiles {
     fun decodeImport(context: Context, uri: Uri): Bitmap {
         val resolver = context.contentResolver
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-            ?: throw IOException("Foto tidak dapat dibuka")
+        val boundsStream = resolver.openInputStream(uri) ?: throw IOException("Foto tidak dapat dibuka")
+        // Saat inJustDecodeBounds=true, decodeStream memang mengembalikan null;
+        // ukuran gambar dibaca dari Options, bukan dari nilai kembali.
+        boundsStream.use { BitmapFactory.decodeStream(it, null, bounds) }
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
             throw IOException("Format gambar tidak didukung atau file rusak")
         }
