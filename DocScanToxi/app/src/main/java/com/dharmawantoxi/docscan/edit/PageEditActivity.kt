@@ -49,20 +49,20 @@ class PageEditActivity : BaseActivity() {
         val muted = Ui.color(c, R.color.md_on_surface_variant)
         val root = Ui.column(c).apply { setBackgroundColor(Ui.color(c, R.color.md_background)) }
         val bar = Ui.row(c).apply { setPadding(dp(8), dp(6), dp(12), dp(6)) }
-        bar.addView(Ui.iconButton(c, R.drawable.ic_close, "Tutup editor").apply { setOnClickListener { closeEditor() } },
+        bar.addView(Ui.iconButton(c, R.drawable.ic_close, tr("Tutup editor", "Close editor")).apply { setOnClickListener { closeEditor() } },
             LinearLayout.LayoutParams(dp(48), dp(48)))
-        bar.addView(Ui.text(c, "Edit halaman", 18f, onSurface, true), LinearLayout.LayoutParams(0, -2, 1f))
-        saveAction = Ui.text(c, "Simpan", 15f, Ui.color(c, R.color.md_primary), true).apply {
+        bar.addView(Ui.text(c, tr("Edit halaman", "Edit page"), 18f, onSurface, true), LinearLayout.LayoutParams(0, -2, 1f))
+        saveAction = Ui.text(c, tr("Simpan", "Save"), 15f, Ui.color(c, R.color.md_primary), true).apply {
             gravity = Gravity.CENTER
             setPadding(dp(10), 0, dp(10), 0)
             isEnabled = false
             alpha = 0.4f
-            contentDescription = "Simpan perubahan halaman"
+            contentDescription = tr("Simpan perubahan halaman", "Save page changes")
             setOnClickListener { save() }
         }
         bar.addView(saveAction, LinearLayout.LayoutParams(-2, dp(48)))
         root.addView(bar)
-        root.addView(Ui.text(c, "Geser empat sudut untuk memilih area dokumen. Hasil akan diluruskan saat disimpan.", 13f, muted).apply {
+        root.addView(Ui.text(c, tr("Geser empat sudut untuk memilih area dokumen. Hasil akan diluruskan saat disimpan.", "Drag the four corners to select the document area. It will be straightened when saved."), 13f, muted).apply {
             setPadding(dp(22), dp(3), dp(22), dp(12))
         })
         cropView = CropView(c).apply {
@@ -72,10 +72,10 @@ class PageEditActivity : BaseActivity() {
         root.addView(cropView, LinearLayout.LayoutParams(-1, 0, 1f))
         val controls = Ui.column(c).apply { setPadding(dp(20), dp(14), dp(20), dp(16)) }
         val tools = Ui.row(c)
-        tools.addView(Ui.button(c, "Putar 90°", R.drawable.ic_rotate, outlined = true).apply {
+        tools.addView(Ui.button(c, tr("Putar 90°", "Rotate 90°"), R.drawable.ic_rotate, outlined = true).apply {
             setOnClickListener { rotate() }
         }, LinearLayout.LayoutParams(0, dp(50), 1f))
-        tools.addView(Ui.button(c, "Reset sudut", R.drawable.ic_undo, outlined = true).apply {
+        tools.addView(Ui.button(c, tr("Reset sudut", "Reset corners"), R.drawable.ic_undo, outlined = true).apply {
             setOnClickListener { cropView.resetCorners(); dirty = true }
         }, LinearLayout.LayoutParams(0, dp(50), 1f).apply { leftMargin = dp(8) })
         controls.addView(tools)
@@ -90,7 +90,7 @@ class PageEditActivity : BaseActivity() {
     }
 
     private fun renderFilters() {
-        val labels = listOf("Asli", "Abu-abu", "Hitam putih")
+        val labels = listOf(tr("Asli", "Original"), tr("Abu-abu", "Grayscale"), tr("Hitam putih", "Black and white"))
         filterButtons.removeAllViews()
         labels.forEachIndexed { index, label ->
             val button = Ui.button(this, label, outlined = filterMode != index).apply {
@@ -110,15 +110,15 @@ class PageEditActivity : BaseActivity() {
     }
 
     private fun loadImage() {
-        busy(true, "Memuat halaman…")
+        busy(true, tr("Memuat halaman…", "Loading page…"))
         lifecycleScope.launch {
             try {
                 val bitmap = withContext(Dispatchers.IO) {
                     val doc = DocumentStore.get(applicationContext, docId)
-                        ?: throw IllegalStateException("Dokumen tidak ditemukan")
-                    require(page in doc.pages) { "Halaman tidak ditemukan" }
+                        ?: throw IllegalStateException(tr("Dokumen tidak ditemukan", "Document not found"))
+                    require(page in doc.pages) { tr("Halaman tidak ditemukan", "Page not found") }
                     BitmapFactory.decodeFile(DocumentStore.pageFile(applicationContext, docId, page).absolutePath)
-                        ?: throw IllegalStateException("Gambar tidak dapat dibaca")
+                        ?: throw IllegalStateException(tr("Gambar tidak dapat dibaca", "The image could not be read"))
                 }
                 busy(false)
                 cropView.setImage(bitmap)
@@ -126,9 +126,9 @@ class PageEditActivity : BaseActivity() {
                 saveAction.alpha = 1f
             } catch (e: Exception) {
                 busy(false)
-                AlertDialog.Builder(this@PageEditActivity).setTitle("Halaman tidak dapat dibuka")
-                    .setMessage(e.localizedMessage ?: "Silakan coba lagi.")
-                    .setPositiveButton("Kembali") { _, _ -> finish() }
+                AlertDialog.Builder(this@PageEditActivity).setTitle(tr("Halaman tidak dapat dibuka", "The page could not be opened"))
+                    .setMessage(detail(e.localizedMessage) ?: tr("Silakan coba lagi.", "Please try again."))
+                    .setPositiveButton(tr("Kembali", "Back")) { _, _ -> finish() }
                     .setOnCancelListener { finish() }.show()
             }
         }
@@ -136,14 +136,14 @@ class PageEditActivity : BaseActivity() {
 
     private fun rotate() {
         val source = cropView.bitmap ?: return
-        busy(true, "Memutar halaman…")
+        busy(true, tr("Memutar halaman…", "Rotating page…"))
         lifecycleScope.launch {
             try {
                 val rotated = withContext(Dispatchers.Default) { ImageEditor.rotate(source) }
                 cropView.setImage(rotated)
                 dirty = true
                 busy(false)
-            } catch (e: Exception) { busy(false); error("Halaman tidak dapat diputar.", e) }
+            } catch (e: Exception) { busy(false); error(tr("Halaman tidak dapat diputar.", "The page could not be rotated."), e) }
         }
     }
 
@@ -151,7 +151,7 @@ class PageEditActivity : BaseActivity() {
         val source = cropView.bitmap ?: return
         val points = cropView.selection()
         val selectedFilter = filterMode
-        busy(true, "Menyimpan perubahan…")
+        busy(true, tr("Menyimpan perubahan…", "Saving changes…"))
         lifecycleScope.launch {
             try {
                 withContext(Dispatchers.IO) {
@@ -163,15 +163,15 @@ class PageEditActivity : BaseActivity() {
                 dirty = false
                 setResult(Activity.RESULT_OK)
                 finish()
-            } catch (e: Exception) { busy(false); error("Perubahan tidak dapat disimpan.", e) }
+            } catch (e: Exception) { busy(false); error(tr("Perubahan tidak dapat disimpan.", "Changes could not be saved."), e) }
         }
     }
 
     private fun closeEditor() {
         if (!dirty) { finish(); return }
-        AlertDialog.Builder(this).setTitle("Buang perubahan?")
-            .setMessage("Perubahan halaman belum disimpan.")
-            .setNegativeButton("Lanjut mengedit", null)
-            .setPositiveButton("Buang") { _, _ -> finish() }.show()
+        AlertDialog.Builder(this).setTitle(tr("Buang perubahan?", "Discard changes?"))
+            .setMessage(tr("Perubahan halaman belum disimpan.", "Page changes have not been saved."))
+            .setNegativeButton(tr("Lanjut mengedit", "Continue editing"), null)
+            .setPositiveButton(tr("Buang", "Discard")) { _, _ -> finish() }.show()
     }
 }

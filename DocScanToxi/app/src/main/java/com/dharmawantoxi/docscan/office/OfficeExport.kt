@@ -24,7 +24,7 @@ object OfficeExport {
         if (text.length > MAX_CHARS) throw IOException("Teks terlalu panjang untuk ekspor Office")
         OfficePackage.checkXmlText(text)
         val normalized = text.replace("\r\n", "\n").replace('\r', '\n')
-        val pattern = Regex("(?m)^--- Halaman ([0-9]+) ---[ \\t]*$")
+        val pattern = Regex("(?m)^--- (?:Halaman|Page) ([0-9]+) ---[ \\t]*$")
         val matches = pattern.findAll(normalized).toList()
         // Penanda hanya dipercaya jika teks dimulai dengan penanda dan nomornya menaik;
         // jika tidak, seluruh teks dianggap satu halaman agar tidak ada isi yang hilang.
@@ -36,11 +36,11 @@ object OfficeExport {
         return matches.mapIndexed { index, match ->
             val start = (match.range.last + 1).let { if (normalized.getOrNull(it) == '\n') it + 1 else it }
             val end = if (index + 1 < matches.size) matches[index + 1].range.first else normalized.length
-            normalized.substring(start, end).trimEnd('\n').let { if (it == "[Tidak ada teks yang dikenali]") "" else it }
+            normalized.substring(start, end).trimEnd('\n').let { if (it == "[Tidak ada teks yang dikenali]" || it == "[No text recognized]") "" else it }
         }
     }
 
-    fun write(format: OfficeFormat, pages: List<String>, output: OutputStream) {
+    fun write(format: OfficeFormat, pages: List<String>, output: OutputStream, english: Boolean = false) {
         require(pages.size in 1..MAX_PAGES) { "Dokumen harus berisi 1 sampai $MAX_PAGES halaman" }
         if (pages.sumOf { it.length.toLong() } > MAX_CHARS) throw IOException("Teks terlalu panjang untuk ekspor Office")
         pages.forEach(OfficePackage::checkXmlText)
@@ -48,7 +48,7 @@ object OfficeExport {
         ZipOutputStream(output.buffered()).use { zip ->
             when (format) {
                 OfficeFormat.WORD -> word(zip, normalized)
-                OfficeFormat.EXCEL -> excel(zip, normalized)
+                OfficeFormat.EXCEL -> excel(zip, normalized, english)
                 OfficeFormat.POWERPOINT -> powerpoint(zip, normalized)
             }
         }
@@ -74,7 +74,7 @@ object OfficeExport {
         put(zip, "word/document.xml", doc)
     }
 
-    private fun excel(zip: ZipOutputStream, pages: List<String>) {
+    private fun excel(zip: ZipOutputStream, pages: List<String>, english: Boolean) {
         val overrides = mutableListOf(
             "/xl/workbook.xml" to "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
             "/xl/styles.xml" to "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"
@@ -84,7 +84,7 @@ object OfficeExport {
         put(zip, "_rels/.rels", rootRels("xl/workbook.xml"))
         put(zip, "xl/workbook.xml", buildString {
             append("<?xml version=\"1.0\" encoding=\"UTF-8\"?><workbook xmlns=\"$SPREADSHEET\" xmlns:r=\"$REL_OFFICE\"><sheets>")
-            pages.indices.forEach { append("<sheet name=\"Halaman ${it + 1}\" sheetId=\"${it + 1}\" r:id=\"rId${it + 1}\"/>") }
+            pages.indices.forEach { append("<sheet name=\"${if (english) "Page" else "Halaman"} ${it + 1}\" sheetId=\"${it + 1}\" r:id=\"rId${it + 1}\"/>") }
             append("</sheets><calcPr fullCalcOnLoad=\"1\"/></workbook>")
         })
         put(zip, "xl/_rels/workbook.xml.rels", buildString {

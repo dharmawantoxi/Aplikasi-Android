@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import android.util.AtomicFile
+import com.dharmawantoxi.docscan.ui.Language
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -140,8 +141,8 @@ object DocumentStore {
         try {
             val pages = copyPages(context, id, uris)
             val now = System.currentTimeMillis()
-            val date = SimpleDateFormat("dd MMM yyyy HH.mm", Locale("id", "ID")).format(Date(now))
-            Document(id, "Pindai $date", now, now, pages).also { write(context, it) }
+            val date = SimpleDateFormat("dd MMM yyyy HH.mm", Locale.forLanguageTag(Language.code(context))).format(Date(now))
+            Document(id, Language.text(context, "Pindai $date", "Scan $date"), now, now, pages).also { write(context, it) }
         } catch (e: Exception) {
             dir.deleteRecursively()
             throw e

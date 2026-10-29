@@ -15,6 +15,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.content.FileProvider
 import com.dharmawantoxi.docscan.data.DocumentStore
 import com.dharmawantoxi.docscan.ui.BaseActivity
+import com.dharmawantoxi.docscan.ui.Language
 import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
@@ -32,7 +33,7 @@ abstract class ScanHostActivity : BaseActivity() {
         if (result.resultCode == Activity.RESULT_OK) {
             val pages = GmsDocumentScanningResult.fromActivityResultIntent(result.data)?.pages.orEmpty()
             val uris = pages.map { it.imageUri }
-            if (uris.isNotEmpty()) receive(uris) else error("Tidak ada halaman yang diterima dari pemindai.")
+            if (uris.isNotEmpty()) receive(uris) else error(tr("Tidak ada halaman yang diterima dari pemindai.", "No pages were received from the scanner."))
         }
     }
 
@@ -48,7 +49,7 @@ abstract class ScanHostActivity : BaseActivity() {
             receive(listOf(Uri.fromFile(file)))
         } else {
             file?.delete()
-            if (success) error("Foto dari kamera kosong. Coba lagi atau impor foto dari galeri.")
+            if (success) error(tr("Foto dari kamera kosong. Coba lagi atau impor foto dari galeri.", "The camera photo is empty. Try again or import a photo from the gallery."))
         }
     }
 
@@ -66,10 +67,10 @@ abstract class ScanHostActivity : BaseActivity() {
         val remaining = availablePages().coerceIn(0, DocumentStore.MAX_PAGES)
         if (remaining == 0) {
             cleanCameraInputs(uris)
-            toast("Maksimal ${DocumentStore.MAX_PAGES} halaman per dokumen.")
+            toast(tr("Maksimal ${DocumentStore.MAX_PAGES} halaman per dokumen.", "Maximum ${DocumentStore.MAX_PAGES} pages per document."))
             return
         }
-        if (uris.size > remaining) toast("Hanya $remaining halaman pertama yang ditambahkan.")
+        if (uris.size > remaining) toast(tr("Hanya $remaining halaman pertama yang ditambahkan.", "Only the first $remaining pages were added."))
         onImagesSelected(uris.take(remaining))
     }
 
@@ -86,23 +87,23 @@ abstract class ScanHostActivity : BaseActivity() {
 
     protected fun showAddOptions() {
         if (availablePages() <= 0) {
-            toast("Maksimal ${DocumentStore.MAX_PAGES} halaman per dokumen.")
+            toast(tr("Maksimal ${DocumentStore.MAX_PAGES} halaman per dokumen.", "Maximum ${DocumentStore.MAX_PAGES} pages per document."))
             return
         }
         AlertDialog.Builder(this)
-            .setTitle("Tambahkan halaman")
-            .setItems(arrayOf("Pindai otomatis", "Ambil foto dengan kamera", "Impor foto")) { _, which ->
+            .setTitle(tr("Tambahkan halaman", "Add pages"))
+            .setItems(arrayOf(tr("Pindai otomatis", "Automatic scan"), tr("Ambil foto dengan kamera", "Take a photo"), tr("Impor foto", "Import photos"))) { _, which ->
                 when (which) { 0 -> startScanner(); 1 -> startCamera(); 2 -> startGallery() }
             }
-            .setNegativeButton("Batal", null).show()
+            .setNegativeButton(tr("Batal", "Cancel"), null).show()
     }
 
     protected fun startScanner() {
         val remaining = availablePages().coerceIn(0, DocumentStore.MAX_PAGES)
-        if (remaining == 0) { toast("Maksimal ${DocumentStore.MAX_PAGES} halaman per dokumen."); return }
+        if (remaining == 0) { toast(tr("Maksimal ${DocumentStore.MAX_PAGES} halaman per dokumen.", "Maximum ${DocumentStore.MAX_PAGES} pages per document.")); return }
         if (startingScanner) return
         startingScanner = true
-        busy(true, "Menyiapkan pemindai…")
+        busy(true, tr("Menyiapkan pemindai…", "Preparing scanner…"))
         try {
             val options = GmsDocumentScannerOptions.Builder()
                 .setGalleryImportAllowed(true)
@@ -133,21 +134,21 @@ abstract class ScanHostActivity : BaseActivity() {
 
     private fun scannerUnavailable() {
         if (isFinishing || isDestroyed) return
-        AlertDialog.Builder(this).setTitle("Pemindai otomatis belum tersedia")
-            .setMessage("Fitur ini memerlukan Google Play Services dan mungkin perlu mengunduh komponennya saat pertama digunakan. Anda tetap dapat memakai kamera biasa atau mengimpor foto.")
-            .setPositiveButton("Kamera biasa") { _, _ -> startCamera() }
-            .setNeutralButton("Impor foto") { _, _ -> startGallery() }
-            .setNegativeButton("Batal", null).show()
+        AlertDialog.Builder(this).setTitle(tr("Pemindai otomatis belum tersedia", "Automatic scanning is unavailable"))
+            .setMessage(tr("Fitur ini memerlukan Google Play Services dan mungkin perlu mengunduh komponennya saat pertama digunakan. Anda tetap dapat memakai kamera biasa atau mengimpor foto.", "This feature requires Google Play Services and may need to download its component the first time. You can still use the camera or import photos."))
+            .setPositiveButton(tr("Kamera biasa", "Camera")) { _, _ -> startCamera() }
+            .setNeutralButton(tr("Impor foto", "Import photos")) { _, _ -> startGallery() }
+            .setNegativeButton(tr("Batal", "Cancel"), null).show()
     }
 
     protected fun startGallery() {
-        if (availablePages() <= 0) { toast("Dokumen sudah penuh."); return }
+        if (availablePages() <= 0) { toast(tr("Dokumen sudah penuh.", "The document is full.")); return }
         try { galleryLauncher.launch(arrayOf("image/*")) }
-        catch (_: ActivityNotFoundException) { error("Tidak ada pemilih foto di perangkat ini.") }
+        catch (_: ActivityNotFoundException) { error(tr("Tidak ada pemilih foto di perangkat ini.", "No photo picker is available on this device.")) }
     }
 
     protected fun startCamera() {
-        if (availablePages() <= 0) { toast("Dokumen sudah penuh."); return }
+        if (availablePages() <= 0) { toast(tr("Dokumen sudah penuh.", "The document is full.")); return }
         try {
             val dir = File(cacheDir, "camera").apply { mkdirs() }
             dir.listFiles().orEmpty().filter { System.currentTimeMillis() - it.lastModified() > 2 * 24 * 60 * 60 * 1000L }
@@ -159,14 +160,14 @@ abstract class ScanHostActivity : BaseActivity() {
         } catch (e: Exception) {
             pendingCameraPath?.let { File(it).delete() }
             pendingCameraPath = null
-            error("Kamera tidak dapat dibuka. Coba impor foto dari galeri.", e)
+            error(tr("Kamera tidak dapat dibuka. Coba impor foto dari galeri.", "The camera could not be opened. Try importing a photo from the gallery."), e)
         }
     }
 
     private class CaptureImage : ActivityResultContract<Uri, Boolean>() {
         override fun createIntent(context: Context, input: Uri): Intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
             putExtra(MediaStore.EXTRA_OUTPUT, input)
-            clipData = ClipData.newUri(context.contentResolver, "Foto dokumen", input)
+            clipData = ClipData.newUri(context.contentResolver, Language.text(context, "Foto dokumen", "Document photo"), input)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         }
         override fun parseResult(resultCode: Int, intent: Intent?): Boolean = resultCode == Activity.RESULT_OK

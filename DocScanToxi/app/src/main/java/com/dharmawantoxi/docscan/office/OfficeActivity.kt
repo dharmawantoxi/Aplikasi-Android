@@ -72,13 +72,13 @@ class OfficeActivity : BaseActivity() {
             override fun handleOnBackPressed() = closeEditor()
         })
         loading = true
-        busy(true, "Membuka file Office…")
+        busy(true, tr("Membuka file Office…", "Opening Office file…"))
         lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
                     val opened = if (restoredId == null) OfficeFiles.open(applicationContext, source)
                     else OfficeFiles.restore(applicationContext, restoredId)
-                        ?: throw IOException("Sesi Office tidak tersedia. Buka ulang file.")
+                        ?: throw IOException(tr("Sesi Office tidak tersedia. Buka ulang file.", "The Office session is unavailable. Reopen the file."))
                     opened to OfficePackage.inspect(opened.working).sections
                 }
                 loading = false
@@ -92,9 +92,9 @@ class OfficeActivity : BaseActivity() {
                 loading = false
                 busy(false)
                 if (!isFinishing && !isDestroyed) AlertDialog.Builder(this@OfficeActivity)
-                    .setTitle("File Office tidak dapat dibuka")
-                    .setMessage("Gunakan DOCX, XLSX, atau PPTX yang valid dan tidak dilindungi, bertanda tangan, atau berisi makro.\n\n${e.localizedMessage.orEmpty()}")
-                    .setPositiveButton("Kembali") { _, _ -> finish() }.setOnCancelListener { finish() }.show()
+                    .setTitle(tr("File Office tidak dapat dibuka", "The Office file could not be opened"))
+                    .setMessage(tr("Gunakan DOCX, XLSX, atau PPTX yang valid dan tidak dilindungi, bertanda tangan, atau berisi makro.\n\n${detail(e.localizedMessage).orEmpty()}", "Use a valid DOCX, XLSX, or PPTX that is not protected, signed, or macro-enabled.\n\n${detail(e.localizedMessage).orEmpty()}"))
+                    .setPositiveButton(tr("Kembali", "Back")) { _, _ -> finish() }.setOnCancelListener { finish() }.show()
             }
         }
     }
@@ -114,6 +114,13 @@ class OfficeActivity : BaseActivity() {
         super.onDestroy()
     }
 
+    private fun officeLabel(section: OfficeSection): String = when (section.part) {
+        "word/document.xml" -> tr("Isi dokumen", "Document body")
+        "word/footnotes.xml" -> tr("Catatan kaki", "Footnotes")
+        "word/endnotes.xml" -> tr("Catatan akhir", "Endnotes")
+        else -> section.label
+    }
+
     private fun buildScreen() {
         val c = this
         val dp = { n: Int -> Ui.dp(c, n) }
@@ -122,11 +129,11 @@ class OfficeActivity : BaseActivity() {
         val primary = Ui.color(c, R.color.md_primary)
         val root = Ui.column(c).apply { setBackgroundColor(Ui.color(c, R.color.md_background)) }
         val bar = Ui.row(c).apply { setPadding(dp(8), dp(6), dp(12), dp(6)) }
-        bar.addView(Ui.iconButton(c, R.drawable.ic_close, "Tutup editor Office").apply { setOnClickListener { closeEditor() } },
+        bar.addView(Ui.iconButton(c, R.drawable.ic_close, tr("Tutup editor Office", "Close Office editor")).apply { setOnClickListener { closeEditor() } },
             LinearLayout.LayoutParams(dp(48), dp(48)))
         val heading = Ui.column(c)
-        heading.addView(Ui.text(c, "EDIT FILE OFFICE", 10f, muted, true).apply { letterSpacing = 0.06f })
-        title = Ui.text(c, "Memuat file…", 17f, onSurface, true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
+        heading.addView(Ui.text(c, tr("EDIT FILE OFFICE", "EDIT OFFICE FILE"), 10f, muted, true).apply { letterSpacing = 0.06f })
+        title = Ui.text(c, tr("Memuat file…", "Loading file…"), 17f, onSurface, true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
         heading.addView(title)
         bar.addView(heading, LinearLayout.LayoutParams(0, -2, 1f))
         root.addView(bar)
@@ -135,22 +142,22 @@ class OfficeActivity : BaseActivity() {
         val content = Ui.column(c).apply { setPadding(dp(20), dp(6), dp(20), dp(20)) }
         scroll.addView(content)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        status = Ui.text(c, "File asli belum diubah.", 13f, muted).apply { setPadding(0, 0, 0, dp(10)) }
+        status = Ui.text(c, tr("File asli belum diubah.", "The original file has not been changed."), 13f, muted).apply { setPadding(0, 0, 0, dp(10)) }
         content.addView(status)
         val pagination = Ui.row(c)
-        previous = Ui.button(c, "Sebelumnya", outlined = true).apply { setOnClickListener { changeSection(-1) } }
-        next = Ui.button(c, "Berikutnya", outlined = true).apply { setOnClickListener { changeSection(1) } }
+        previous = Ui.button(c, tr("Sebelumnya", "Previous"), outlined = true).apply { setOnClickListener { changeSection(-1) } }
+        next = Ui.button(c, tr("Berikutnya", "Next"), outlined = true).apply { setOnClickListener { changeSection(1) } }
         sectionLabel = Ui.text(c, "–", 13f, muted, true).apply { gravity = Gravity.CENTER; maxLines = 2 }
         pagination.addView(previous, LinearLayout.LayoutParams(0, dp(48), 1f))
         pagination.addView(sectionLabel, LinearLayout.LayoutParams(dp(105), -2))
         pagination.addView(next, LinearLayout.LayoutParams(0, dp(48), 1f))
         content.addView(pagination)
-        content.addView(Ui.text(c, "Ketuk teks atau sel untuk menggantinya. Tampilan ini berupa daftar, bukan pratinjau tata letak. Periksa hasil di aplikasi Office.", 13f, muted).apply {
+        content.addView(Ui.text(c, tr("Ketuk teks atau sel untuk menggantinya. Tampilan ini berupa daftar, bukan pratinjau tata letak. Periksa hasil di aplikasi Office.", "Tap text or a cell to replace it. This is a list, not a layout preview. Check the result in an Office app."), 13f, muted).apply {
             setPadding(0, dp(14), 0, dp(10))
         })
         search = EditText(c).apply {
-            hint = "Cari teks atau alamat sel"
-            contentDescription = "Cari isi Office"
+            hint = tr("Cari teks atau alamat sel", "Search text or cell address")
+            contentDescription = tr("Cari isi Office", "Search Office content")
             setSingleLine(true)
             setTextColor(onSurface); setHintTextColor(muted)
             setPadding(dp(14), 0, dp(14), 0)
@@ -170,8 +177,8 @@ class OfficeActivity : BaseActivity() {
         content.addView(itemList)
         search.setText(query)
         val actions = Ui.row(c).apply { setPadding(dp(20), dp(8), dp(20), dp(12)) }
-        saveCopy = Ui.button(c, "Simpan salinan", outlined = true).apply { setOnClickListener { requestCopy() } }
-        overwrite = Ui.button(c, "Ganti file asli").apply { setOnClickListener { requestOverwrite() } }
+        saveCopy = Ui.button(c, tr("Simpan salinan", "Save a copy"), outlined = true).apply { setOnClickListener { requestCopy() } }
+        overwrite = Ui.button(c, tr("Ganti file asli", "Replace original")).apply { setOnClickListener { requestOverwrite() } }
         actions.addView(saveCopy, LinearLayout.LayoutParams(0, dp(50), 1f))
         actions.addView(overwrite, LinearLayout.LayoutParams(0, dp(50), 1f).apply { leftMargin = dp(8) })
         root.addView(actions)
@@ -185,7 +192,7 @@ class OfficeActivity : BaseActivity() {
         val version = ++sectionVersion
         loading = true
         updateControls()
-        busy(true, "Memuat ${section.label}…")
+        busy(true, tr("Memuat ${section.label}…", "Loading ${officeLabel(section)}…"))
         lifecycleScope.launch {
             try {
                 val loaded = withContext(Dispatchers.IO) { OfficePackage.readSection(current.working, section) }
@@ -195,7 +202,7 @@ class OfficeActivity : BaseActivity() {
             } catch (e: Exception) {
                 if (version != sectionVersion) return@launch
                 items = emptyList(); loading = false
-                busy(false); updateControls(); renderItems(e.localizedMessage ?: "Bagian ini tidak dapat dibaca")
+                busy(false); updateControls(); renderItems(detail(e.localizedMessage) ?: tr("Bagian ini tidak dapat dibaca", "This section could not be read"))
                 deliverPending()
             }
         }
@@ -210,16 +217,16 @@ class OfficeActivity : BaseActivity() {
         itemList.removeAllViews()
         val matches = items.filter { query.isBlank() || it.text.contains(query, true) || it.key.contains(query, true) }
         if (problem != null) itemList.addView(Ui.text(c, problem, 13f, muted))
-        else if (matches.isEmpty()) itemList.addView(Ui.text(c, if (items.isEmpty()) "Tidak ada teks atau sel yang didukung pada bagian ini. Formula dan konten tertentu dilewati." else "Tidak ada isi yang cocok dengan pencarian.", 13f, muted))
+        else if (matches.isEmpty()) itemList.addView(Ui.text(c, if (items.isEmpty()) tr("Tidak ada teks atau sel yang didukung pada bagian ini. Formula dan konten tertentu dilewati.", "There are no supported text segments or cells in this section. Formulas and some content are skipped.") else tr("Tidak ada isi yang cocok dengan pencarian.", "No content matches your search."), 13f, muted))
         else {
-            itemList.addView(Ui.text(c, "${matches.size} isi yang dapat diedit", 12f, muted, true).apply { setPadding(0, 0, 0, dp(8)) })
+            itemList.addView(Ui.text(c, tr("${matches.size} isi yang dapat diedit", "${matches.size} editable items"), 12f, muted, true).apply { setPadding(0, 0, 0, dp(8)) })
             matches.take(limit).forEach { item ->
                 val row = Ui.row(c).apply {
                     background = Ui.bg(Ui.color(c, R.color.md_surface_container_lowest), dp(12).toFloat(),
                         Ui.color(c, R.color.md_outline_variant), dp(1))
                     setPadding(dp(14), dp(10), dp(12), dp(10)); minimumHeight = dp(52)
                     isClickable = true; isFocusable = true
-                    contentDescription = if (session?.format == OfficeFormat.EXCEL) "Edit sel ${item.key}: ${item.text.take(80)}" else "Edit teks Office: ${item.text.take(80)}"
+                    contentDescription = if (session?.format == OfficeFormat.EXCEL) tr("Edit sel ${item.key}: ${item.text.take(80)}", "Edit cell ${item.key}: ${item.text.take(80)}") else tr("Edit teks Office: ${item.text.take(80)}", "Edit Office text: ${item.text.take(80)}")
                     setOnClickListener { editItem(item) }
                 }
                 val caption = if (session?.format == OfficeFormat.EXCEL) "${item.key} · ${item.text}" else item.text
@@ -227,7 +234,7 @@ class OfficeActivity : BaseActivity() {
                 row.addView(Ui.image(c, R.drawable.ic_edit, primary), LinearLayout.LayoutParams(dp(22), dp(22)).apply { leftMargin = dp(8) })
                 itemList.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
             }
-            if (matches.size > limit) itemList.addView(Ui.button(c, "Tampilkan lebih banyak", outlined = true).apply {
+            if (matches.size > limit) itemList.addView(Ui.button(c, tr("Tampilkan lebih banyak", "Show more"), outlined = true).apply {
                 setOnClickListener { limit += 100; renderItems() }
             }, LinearLayout.LayoutParams(-1, dp(50)))
         }
@@ -237,16 +244,16 @@ class OfficeActivity : BaseActivity() {
         if (loading) return
         val input = EditText(this).apply {
             setSingleLine(true); filters = arrayOf(InputFilter.LengthFilter(32767))
-            setText(item.text); setSelection(text.length); contentDescription = "Isi Office pengganti"
+            setText(item.text); setSelection(text.length); contentDescription = tr("Isi Office pengganti", "Replacement Office content")
         }
         val frame = Ui.column(this).apply { setPadding(Ui.dp(context, 20), 0, Ui.dp(context, 20), 0); addView(input) }
         val detail = when (item.type) {
-            OfficeItemType.NUMBER -> "Masukkan angka dengan titik desimal, misalnya 123.45. Nilai tanggal dapat berupa angka seri Excel."
-            OfficeItemType.BOOLEAN -> "Masukkan TRUE atau FALSE."
-            OfficeItemType.TEXT -> "Format run dan bagian lain dipertahankan sejauh didukung. Teks yang lebih panjang dapat mengubah tata letak."
+            OfficeItemType.NUMBER -> tr("Masukkan angka dengan titik desimal, misalnya 123.45. Nilai tanggal dapat berupa angka seri Excel.", "Enter a number with a decimal point, for example 123.45. Dates may be Excel serial numbers.")
+            OfficeItemType.BOOLEAN -> tr("Masukkan TRUE atau FALSE.", "Enter TRUE or FALSE.")
+            OfficeItemType.TEXT -> tr("Format run dan bagian lain dipertahankan sejauh didukung. Teks yang lebih panjang dapat mengubah tata letak.", "Run formatting and other content are preserved where supported. Longer text may change the layout.")
         }
-        val dialog = AlertDialog.Builder(this).setTitle(if (session?.format == OfficeFormat.EXCEL) "Ganti sel ${item.key}" else "Ganti teks")
-            .setMessage(detail).setView(frame).setNegativeButton("Batal", null).setPositiveButton("Terapkan", null).create()
+        val dialog = AlertDialog.Builder(this).setTitle(if (session?.format == OfficeFormat.EXCEL) tr("Ganti sel ${item.key}", "Replace cell ${item.key}") else tr("Ganti teks", "Replace text"))
+            .setMessage(detail).setView(frame).setNegativeButton(tr("Batal", "Cancel"), null).setPositiveButton(tr("Terapkan", "Apply"), null).create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val value = input.text.toString()
@@ -260,7 +267,7 @@ class OfficeActivity : BaseActivity() {
     private fun applyReplacement(item: OfficeItem, replacement: String) {
         val current = session ?: return
         val section = sections.getOrNull(currentSection) ?: return
-        loading = true; updateControls(); busy(true, "Menyimpan perubahan Office…")
+        loading = true; updateControls(); busy(true, tr("Menyimpan perubahan Office…", "Saving Office changes…"))
         lifecycleScope.launch {
             try {
                 withContext(Dispatchers.IO) { OfficeFiles.replace(current, section, item, replacement) }
@@ -268,9 +275,9 @@ class OfficeActivity : BaseActivity() {
             } catch (e: Exception) {
                 loading = false; busy(false); updateControls()
                 if (!isFinishing && !isDestroyed) AlertDialog.Builder(this@OfficeActivity)
-                    .setTitle("Isi tidak dapat diganti")
-                    .setMessage("File asli belum ditulis. Muat ulang bagian ini dan periksa hasilnya.\n\n${e.localizedMessage.orEmpty()}")
-                    .setPositiveButton("Muat ulang") { _, _ -> loadSection() }.setOnCancelListener { loadSection() }.show()
+                    .setTitle(tr("Isi tidak dapat diganti", "Content could not be replaced"))
+                    .setMessage(tr("File asli belum ditulis. Muat ulang bagian ini dan periksa hasilnya.\n\n${detail(e.localizedMessage).orEmpty()}", "The original file has not been written. Reload this section and check the result.\n\n${detail(e.localizedMessage).orEmpty()}"))
+                    .setPositiveButton(tr("Muat ulang", "Reload")) { _, _ -> loadSection() }.setOnCancelListener { loadSection() }.show()
             }
         }
     }
@@ -283,15 +290,15 @@ class OfficeActivity : BaseActivity() {
     private fun updateControls() {
         if (!::title.isInitialized) return
         val current = session
-        title.text = current?.let { "${it.title} · ${it.format.displayName}" } ?: "Memuat file…"
+        title.text = current?.let { "${it.title} · ${it.format.displayName}" } ?: tr("Memuat file…", "Loading file…")
         status.text = when {
-            current == null -> "File asli belum diubah."
-            current.sourceUncertain -> "Kondisi file asli tidak pasti; periksa cadangan dan buka ulang."
-            current.changed && current.unsaved -> "Ada perubahan; file asli belum diubah."
-            current.changed -> "Salinan sudah disimpan; file asli belum diubah."
-            else -> "File kerja sama dengan file asli."
+            current == null -> tr("File asli belum diubah.", "The original file has not been changed.")
+            current.sourceUncertain -> tr("Kondisi file asli tidak pasti; periksa cadangan dan buka ulang.", "The original file's state is uncertain; check the backup and reopen it.")
+            current.changed && current.unsaved -> tr("Ada perubahan; file asli belum diubah.", "There are changes; the original file has not been changed.")
+            current.changed -> tr("Salinan sudah disimpan; file asli belum diubah.", "A copy has been saved; the original file has not been changed.")
+            else -> tr("File kerja sama dengan file asli.", "The working file matches the original.")
         }
-        sectionLabel.text = sections.getOrNull(currentSection)?.let { "${it.label}\n${currentSection + 1} / ${sections.size}" } ?: "–"
+        sectionLabel.text = sections.getOrNull(currentSection)?.let { "${officeLabel(it)}\n${currentSection + 1} / ${sections.size}" } ?: "–"
         previous.isEnabled = current != null && !loading && currentSection > 0
         next.isEnabled = current != null && !loading && currentSection < sections.lastIndex
         saveCopy.isEnabled = current != null && !loading
@@ -300,20 +307,20 @@ class OfficeActivity : BaseActivity() {
 
     private fun requestCopy() {
         val current = session ?: return
-        AlertDialog.Builder(this).setTitle("Simpan sebagai salinan")
-            .setMessage("Pilih nama dan lokasi baru, bukan file asli atau cadangan penting. Beberapa penyedia dapat menimpa file saat dipilih, sebelum aplikasi dapat memeriksanya.")
-            .setNegativeButton("Batal", null).setPositiveButton("Pilih lokasi") { _, _ ->
+        AlertDialog.Builder(this).setTitle(tr("Simpan sebagai salinan", "Save a copy"))
+            .setMessage(tr("Pilih nama dan lokasi baru, bukan file asli atau cadangan penting. Beberapa penyedia dapat menimpa file saat dipilih, sebelum aplikasi dapat memeriksanya.", "Choose a new name and location, not the original or an important backup. Some providers may overwrite a file as soon as it is selected, before the app can check it."))
+            .setNegativeButton(tr("Batal", "Cancel"), null).setPositiveButton(tr("Pilih lokasi", "Choose location")) { _, _ ->
                 launchCreate(false, "${DocumentNames.fileName(current.title).take(68)} (edit).${current.format.extension}")
             }.show()
     }
 
     private fun requestOverwrite() {
         val current = session ?: return
-        if (!canWriteOriginal) { error("Penyedia tidak memberi izin menulis file asli. Gunakan Simpan salinan."); return }
-        AlertDialog.Builder(this).setTitle("Ganti file Office asli?")
-            .setMessage("Simpan cadangan terpisah terlebih dahulu. Pilih nama dan lokasi baru, bukan file asli atau cadangan penting: beberapa penyedia dapat menimpa file saat dipilih.")
-            .setNegativeButton("Batal", null).setPositiveButton("Buat cadangan") { _, _ ->
-                launchCreate(true, "${DocumentNames.fileName(current.title).take(64)} (cadangan).${current.format.extension}")
+        if (!canWriteOriginal) { error(tr("Penyedia tidak memberi izin menulis file asli. Gunakan Simpan salinan.", "The provider did not grant write access to the original. Use Save a copy.")); return }
+        AlertDialog.Builder(this).setTitle(tr("Ganti file Office asli?", "Replace the original Office file?"))
+            .setMessage(tr("Simpan cadangan terpisah terlebih dahulu. Pilih nama dan lokasi baru, bukan file asli atau cadangan penting: beberapa penyedia dapat menimpa file saat dipilih.", "First save a separate backup. Choose a new name and location, not the original or an important backup: some providers may overwrite a selected file."))
+            .setNegativeButton(tr("Batal", "Cancel"), null).setPositiveButton(tr("Buat cadangan", "Create backup")) { _, _ ->
+                launchCreate(true, "${DocumentNames.fileName(current.title).take(64)} (${tr("cadangan", "backup")}).${current.format.extension}")
             }.show()
     }
 
@@ -324,7 +331,7 @@ class OfficeActivity : BaseActivity() {
             putExtra(Intent.EXTRA_TITLE, fileName)
         }
         try { if (backup) backupLauncher.launch(intent) else copyLauncher.launch(intent) }
-        catch (_: ActivityNotFoundException) { error("Pemilih lokasi penyimpanan tidak tersedia.") }
+        catch (_: ActivityNotFoundException) { error(tr("Pemilih lokasi penyimpanan tidak tersedia.", "No save-location picker is available.")) }
     }
 
     private fun deliverPending() {
@@ -337,41 +344,41 @@ class OfficeActivity : BaseActivity() {
     private fun receiveDestination(uri: android.net.Uri, backup: Boolean) {
         if (session == null || loading) { pendingOutput = uri; pendingBackup = backup; return }
         val current = session ?: return
-        loading = true; updateControls(); busy(true, if (backup) "Menyimpan cadangan…" else "Menyimpan salinan Office…")
+        loading = true; updateControls(); busy(true, if (backup) tr("Menyimpan cadangan…", "Saving backup…") else tr("Menyimpan salinan Office…", "Saving Office copy…"))
         lifecycleScope.launch {
             try {
                 withContext(Dispatchers.IO) {
                     if (backup) OfficeFiles.saveBackup(applicationContext, current, uri) else OfficeFiles.saveCopy(applicationContext, current, uri)
                 }
                 loading = false; busy(false); updateControls()
-                if (backup) confirmOverwrite(current) else toast("Salinan ${current.format.displayName} tersimpan.")
+                if (backup) confirmOverwrite(current) else toast(tr("Salinan ${current.format.displayName} tersimpan.", "${current.format.displayName} copy saved."))
             } catch (e: Exception) {
                 loading = false; busy(false); updateControls()
-                error("File tidak dapat disimpan. Periksa file asli jika tadi dipilih di dialog.", e)
+                error(tr("File tidak dapat disimpan. Periksa file asli jika tadi dipilih di dialog.", "The file could not be saved. Check the original if it was selected in the dialog."), e)
             }
         }
     }
 
     private fun confirmOverwrite(current: OfficeSession) {
-        AlertDialog.Builder(this).setTitle("Cadangan tersimpan")
-            .setMessage("Ganti file asli dengan hasil edit sekarang? Pastikan cadangan benar-benar terpisah.")
-            .setNegativeButton("Batal") { _, _ -> current.backupUri = null }
-            .setPositiveButton("Ganti file asli") { _, _ -> overwrite(current) }
+        AlertDialog.Builder(this).setTitle(tr("Cadangan tersimpan", "Backup saved"))
+            .setMessage(tr("Ganti file asli dengan hasil edit sekarang? Pastikan cadangan benar-benar terpisah.", "Replace the original with the edited result now? Make sure the backup is truly separate."))
+            .setNegativeButton(tr("Batal", "Cancel")) { _, _ -> current.backupUri = null }
+            .setPositiveButton(tr("Ganti file asli", "Replace original")) { _, _ -> overwrite(current) }
             .setOnCancelListener { current.backupUri = null }.show()
     }
 
     private fun overwrite(current: OfficeSession) {
-        loading = true; updateControls(); busy(true, "Mengganti file Office asli…")
+        loading = true; updateControls(); busy(true, tr("Mengganti file Office asli…", "Replacing the original Office file…"))
         lifecycleScope.launch {
             try {
                 withContext(Dispatchers.IO) { OfficeFiles.overwriteOriginal(applicationContext, current) }
-                loading = false; busy(false); updateControls(); setResult(Activity.RESULT_OK); toast("File asli berhasil diganti.")
+                loading = false; busy(false); updateControls(); setResult(Activity.RESULT_OK); toast(tr("File asli berhasil diganti.", "The original file was replaced successfully."))
             } catch (e: Exception) {
                 loading = false; busy(false); updateControls()
                 if (e is CommittedOfficeSessionException) AlertDialog.Builder(this@OfficeActivity)
-                    .setTitle("File asli sudah diganti").setMessage(e.message).setCancelable(false)
-                    .setPositiveButton("Tutup") { _, _ -> finish() }.show()
-                else error("Penggantian file belum dapat diselesaikan.", e)
+                    .setTitle(tr("File asli sudah diganti", "The original file was replaced")).setMessage(detail(e.message)).setCancelable(false)
+                    .setPositiveButton(tr("Tutup", "Close")) { _, _ -> finish() }.show()
+                else error(tr("Penggantian file belum dapat diselesaikan.", "The file replacement could not be completed."), e)
             }
         }
     }
@@ -379,8 +386,8 @@ class OfficeActivity : BaseActivity() {
     private fun closeEditor() {
         if (loading) return
         if (session?.unsaved != true) { finish(); return }
-        AlertDialog.Builder(this).setTitle("Buang perubahan?")
-            .setMessage("Perubahan belum disimpan ke salinan atau file asli.")
-            .setNegativeButton("Lanjut mengedit", null).setPositiveButton("Buang") { _, _ -> finish() }.show()
+        AlertDialog.Builder(this).setTitle(tr("Buang perubahan?", "Discard changes?"))
+            .setMessage(tr("Perubahan belum disimpan ke salinan atau file asli.", "Changes have not been saved to a copy or the original file."))
+            .setNegativeButton(tr("Lanjut mengedit", "Continue editing"), null).setPositiveButton(tr("Buang", "Discard")) { _, _ -> finish() }.show()
     }
 }

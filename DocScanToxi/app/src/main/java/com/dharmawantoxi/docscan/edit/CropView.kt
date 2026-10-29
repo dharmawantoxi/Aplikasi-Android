@@ -11,6 +11,7 @@ import android.graphics.RectF
 import android.view.MotionEvent
 import android.view.View
 import com.dharmawantoxi.docscan.ui.Ui
+import com.dharmawantoxi.docscan.ui.Language
 import kotlin.math.hypot
 import kotlin.math.min
 
@@ -35,7 +36,7 @@ class CropView(context: Context) : View(context) {
     private var selectedCorner = -1
 
     init {
-        contentDescription = "Pratinjau potong. Geser empat sudut untuk memilih area dokumen."
+        contentDescription = Language.text(context, "Pratinjau potong. Geser empat sudut untuk memilih area dokumen.", "Crop preview. Drag the four corners to select the document area.")
         isFocusable = true
     }
 

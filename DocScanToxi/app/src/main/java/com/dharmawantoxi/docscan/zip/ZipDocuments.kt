@@ -5,6 +5,7 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import android.webkit.MimeTypeMap
 import com.dharmawantoxi.docscan.pdf.VerifiedPdfOutput
+import com.dharmawantoxi.docscan.ui.Language
 import java.io.File
 import java.io.IOException
 import java.util.UUID
@@ -28,7 +29,7 @@ object ZipDocuments {
                 runCatching { DocumentsContract.getDocumentId(source) }.getOrNull()?.let(reserved::add)
             }
             // A unique subfolder avoids deliberately overwriting files in the chosen tree.
-            val outputRoot = createFresh(context, tree, root, folderMime, "Hasil ZIP ${UUID.randomUUID()}", reserved)
+            val outputRoot = createFresh(context, tree, root, folderMime, "${Language.text(context, "Hasil ZIP", "Extracted ZIP")} ${UUID.randomUUID()}", reserved)
             val folders = mutableMapOf("" to outputRoot)
             val allDirs = mutableSetOf<String>()
             entries.forEach { entry ->
