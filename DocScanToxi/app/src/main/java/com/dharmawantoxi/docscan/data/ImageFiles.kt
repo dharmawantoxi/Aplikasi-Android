@@ -3,6 +3,8 @@ package com.dharmawantoxi.docscan.data
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Matrix
 import android.net.Uri
 import androidx.exifinterface.media.ExifInterface
@@ -59,6 +61,16 @@ object ImageFiles {
                 (bitmap.height * scale).roundToInt().coerceAtLeast(1), true)
             if (smaller !== bitmap) bitmap.recycle()
             bitmap = smaller
+        }
+        // JPEG tidak mendukung transparansi: jadikan area transparan putih, bukan hitam.
+        if (bitmap.hasAlpha()) {
+            val opaque = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+            Canvas(opaque).apply {
+                drawColor(Color.WHITE)
+                drawBitmap(bitmap, 0f, 0f, null)
+            }
+            if (opaque !== bitmap) bitmap.recycle()
+            bitmap = opaque
         }
         return bitmap
     }

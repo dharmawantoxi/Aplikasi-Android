@@ -66,15 +66,16 @@ object Exports {
         }
     }
 
-    private fun sharedFile(context: Context, extension: String): File {
+    private fun sharedFile(context: Context, title: String, extension: String): File {
         val dir = File(context.cacheDir, "shared").apply { mkdirs() }
         dir.listFiles().orEmpty().filter { System.currentTimeMillis() - it.lastModified() > 2 * 24 * 60 * 60 * 1000L }
             .forEach { it.delete() }
-        return File(dir, "${UUID.randomUUID()}.$extension")
+        val name = DocumentNames.fileName(title).take(60)
+        return File(dir, "$name-${UUID.randomUUID().toString().take(8)}.$extension")
     }
 
     fun preparePdf(context: Context, doc: Document): Uri {
-        val file = sharedFile(context, "pdf")
+        val file = sharedFile(context, doc.title, "pdf")
         try {
             file.outputStream().use { writePdf(context, doc, it) }
             return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
@@ -86,7 +87,7 @@ object Exports {
 
     fun prepareJpeg(context: Context, doc: Document, page: String): Uri {
         require(page in doc.pages)
-        val file = sharedFile(context, "jpg")
+        val file = sharedFile(context, doc.title, "jpg")
         try {
             DocumentStore.pageFile(context, doc.id, page).copyTo(file, overwrite = true)
             return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)

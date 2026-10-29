@@ -15,9 +15,9 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.content.FileProvider
 import com.dharmawantoxi.docscan.data.DocumentStore
 import com.dharmawantoxi.docscan.ui.BaseActivity
-import com.google.android.gms.mlkit.vision.documentscanner.GmsDocumentScannerOptions
-import com.google.android.gms.mlkit.vision.documentscanner.GmsDocumentScanning
-import com.google.android.gms.mlkit.vision.documentscanner.GmsDocumentScanningResult
+import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
 import java.io.File
 
 /** Pemindai otomatis + alternatif kamera sistem dan pemilih foto. */
