@@ -10,6 +10,7 @@ import android.graphics.RectF
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import androidx.core.content.FileProvider
+import com.dharmawantoxi.docscan.ui.Language
 import java.io.File
 import java.io.IOException
 import java.io.OutputStream
@@ -110,6 +111,6 @@ object Exports {
             clipData = ClipData.newUri(context.contentResolver, title, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        context.startActivity(Intent.createChooser(send, "Bagikan melalui"))
+        context.startActivity(Intent.createChooser(send, Language.text(context, "Bagikan melalui", "Share using")))
     }
 }

@@ -150,6 +150,14 @@ class OfficePackageTest {
         }
     }
 
+    @Test fun englishExcelExportUsesEnglishSheetNames() {
+        val file = output("english-export.xlsx")
+        file.outputStream().use { OfficeExport.write(OfficeFormat.EXCEL, listOf("One", "Two"), it, english = true) }
+        val info = OfficePackage.inspect(file)
+        assertEquals(listOf("Page 1", "Page 2"), info.sections.map { it.label })
+        assertEquals(listOf("One"), OfficePackage.readSection(file, info.sections[0]).map { it.text })
+    }
+
     @Test fun exportHandlesPaginationGracefully() {
         assertEquals(listOf("Tanpa penanda"), OfficeExport.splitPages("Tanpa penanda"))
         assertEquals(listOf("B"), OfficeExport.splitPages("--- Halaman 2 ---\nB"))
@@ -157,6 +165,9 @@ class OfficePackageTest {
         assertEquals(listOf("--- Halaman 2 ---\nA\n\n--- Halaman 1 ---\nB"), OfficeExport.splitPages("--- Halaman 2 ---\nA\n\n--- Halaman 1 ---\nB"))
         assertEquals(listOf("", "Kedua"), OfficeExport.splitPages("--- Halaman 1 ---\n[Tidak ada teks yang dikenali]\n\n--- Halaman 2 ---\nKedua"))
         assertEquals(listOf("Satu"), OfficeExport.splitPages("--- Halaman 1 ---\nSatu\n"))
+        assertEquals(listOf("First", "Second"), OfficeExport.splitPages("--- Page 1 ---\nFirst\n\n--- Page 2 ---\nSecond"))
+        assertEquals(listOf("", "Second"), OfficeExport.splitPages("--- Page 1 ---\n[No text recognized]\n\n--- Page 2 ---\nSecond"))
+        assertEquals(listOf("--- Page 2 ---\nA\n\n--- Page 1 ---\nB"), OfficeExport.splitPages("--- Page 2 ---\nA\n\n--- Page 1 ---\nB"))
         expectFailure(IllegalArgumentException::class) { OfficeExport.write(OfficeFormat.WORD, emptyList(), ByteArrayOutputStream()) }
         expectFailure(IOException::class) { OfficeExport.write(OfficeFormat.WORD, listOf("Nul\u0000"), ByteArrayOutputStream()) }
     }

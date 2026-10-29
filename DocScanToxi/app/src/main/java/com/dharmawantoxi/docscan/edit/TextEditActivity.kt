@@ -91,16 +91,16 @@ class TextEditActivity : BaseActivity() {
         val primary = Ui.color(c, R.color.md_primary)
         val root = Ui.column(c).apply { setBackgroundColor(Ui.color(c, R.color.md_background)) }
         val bar = Ui.row(c).apply { setPadding(dp(8), dp(6), dp(12), dp(6)) }
-        bar.addView(Ui.iconButton(c, R.drawable.ic_close, "Tutup editor teks").apply {
+        bar.addView(Ui.iconButton(c, R.drawable.ic_close, tr("Tutup editor teks", "Close text editor")).apply {
             setOnClickListener { closeEditor() }
         }, LinearLayout.LayoutParams(dp(48), dp(48)))
-        bar.addView(Ui.text(c, "Tambah teks", 18f, onSurface, true), LinearLayout.LayoutParams(0, -2, 1f))
-        saveAction = Ui.text(c, "Simpan", 15f, primary, true).apply {
+        bar.addView(Ui.text(c, tr("Tambah teks", "Add text"), 18f, onSurface, true), LinearLayout.LayoutParams(0, -2, 1f))
+        saveAction = Ui.text(c, tr("Simpan", "Save"), 15f, primary, true).apply {
             gravity = Gravity.CENTER
             setPadding(dp(10), 0, dp(10), 0)
             isEnabled = false
             alpha = 0.4f
-            contentDescription = "Simpan teks pada halaman"
+            contentDescription = tr("Simpan teks pada halaman", "Save text on page")
             setOnClickListener { save() }
         }
         bar.addView(saveAction, LinearLayout.LayoutParams(-2, dp(48)))
@@ -110,12 +110,12 @@ class TextEditActivity : BaseActivity() {
         val content = Ui.column(c).apply { setPadding(dp(20), dp(6), dp(20), dp(24)) }
         scroll.addView(content)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        content.addView(Ui.text(c, "Ketik satu baris, lalu ketuk atau geser pada halaman untuk mengatur posisi.", 13f, muted).apply {
+        content.addView(Ui.text(c, tr("Ketik satu baris, lalu ketuk atau geser pada halaman untuk mengatur posisi.", "Enter one line, then tap or drag on the page to position it."), 13f, muted).apply {
             setPadding(0, 0, 0, dp(8))
         })
         input = EditText(c).apply {
-            hint = "Tulis teks di sini"
-            contentDescription = "Teks yang akan ditambahkan"
+            hint = tr("Tulis teks di sini", "Type text here")
+            contentDescription = tr("Teks yang akan ditambahkan", "Text to add")
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             setSingleLine(true)
             filters = arrayOf(InputFilter.LengthFilter(100))
@@ -141,13 +141,13 @@ class TextEditActivity : BaseActivity() {
         content.addView(preview, LinearLayout.LayoutParams(-1, dp(320)).apply { topMargin = dp(12) })
 
         val sizeRow = Ui.row(c).apply { setPadding(0, dp(14), 0, 0) }
-        sizeRow.addView(Ui.text(c, "Ukuran teks", 14f, onSurface, true), LinearLayout.LayoutParams(0, -2, 1f))
+        sizeRow.addView(Ui.text(c, tr("Ukuran teks", "Text size"), 14f, onSurface, true), LinearLayout.LayoutParams(0, -2, 1f))
         sizeLabel = Ui.text(c, "", 12f, muted)
         sizeRow.addView(sizeLabel)
         content.addView(sizeRow)
         sizeControl = SeekBar(c).apply {
             max = 100
-            contentDescription = "Ukuran teks"
+            contentDescription = tr("Ukuran teks", "Text size")
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                     if (fromUser) dirty = true
@@ -159,16 +159,16 @@ class TextEditActivity : BaseActivity() {
         }
         content.addView(sizeControl, LinearLayout.LayoutParams(-1, dp(44)))
         val colorRow = Ui.row(c)
-        colorRow.addView(Ui.text(c, "Warna teks", 14f, onSurface, true), LinearLayout.LayoutParams(0, -2, 1f))
-        colorRow.addView(Ui.button(c, "Posisi", outlined = true).apply {
+        colorRow.addView(Ui.text(c, tr("Warna teks", "Text color"), 14f, onSurface, true), LinearLayout.LayoutParams(0, -2, 1f))
+        colorRow.addView(Ui.button(c, tr("Posisi", "Position"), outlined = true).apply {
             setOnClickListener { choosePosition() }
         }, LinearLayout.LayoutParams(dp(92), dp(48)))
         content.addView(colorRow)
         val buttons = Ui.row(c)
-        colorButtons = listOf("Hitam", "Biru", "Merah").mapIndexed { index, label ->
+        colorButtons = listOf(tr("Hitam", "Black"), tr("Biru", "Blue"), tr("Merah", "Red")).mapIndexed { index, label ->
             Ui.button(c, label, outlined = true).apply {
                 setPadding(dp(4), 0, dp(4), 0)
-                contentDescription = "Warna $label"
+                contentDescription = tr("Warna $label", "$label color")
                 setOnClickListener { colorIndex = index; dirty = true; updatePreview() }
                 buttons.addView(this, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
                     if (index > 0) leftMargin = dp(6)
@@ -176,7 +176,7 @@ class TextEditActivity : BaseActivity() {
             }
         }
         content.addView(buttons, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
-        content.addView(Ui.text(c, "Teks yang disimpan menyatu dengan gambar dan tidak dapat diedit lagi secara terpisah.", 12f, muted).apply {
+        content.addView(Ui.text(c, tr("Teks yang disimpan menyatu dengan gambar dan tidak dapat diedit lagi secara terpisah.", "Saved text becomes part of the image and cannot be edited separately."), 12f, muted).apply {
             setPadding(0, dp(12), 0, 0)
         })
         setScreen(root)
@@ -191,7 +191,7 @@ class TextEditActivity : BaseActivity() {
 
     private fun updatePreview() {
         preview.spec = currentSpec()
-        sizeLabel.text = "Maks. ${(3f + sizeControl.progress * 0.09f).roundToInt()}% lebar"
+        sizeLabel.text = tr("Maks. ${(3f + sizeControl.progress * 0.09f).roundToInt()}% lebar", "Max. ${(3f + sizeControl.progress * 0.09f).roundToInt()}% width")
         colorButtons.forEachIndexed { index, button ->
             val selected = index == colorIndex
             button.backgroundTintList = ColorStateList.valueOf(if (selected) colors[index] else Color.TRANSPARENT)
@@ -204,25 +204,25 @@ class TextEditActivity : BaseActivity() {
     }
 
     private fun choosePosition() {
-        val choices = arrayOf("Kiri atas", "Tengah atas", "Kanan atas", "Kiri tengah", "Tengah", "Kanan tengah", "Kiri bawah", "Tengah bawah", "Kanan bawah")
-        AlertDialog.Builder(this).setTitle("Posisi teks").setItems(choices) { _, which ->
+        val choices = arrayOf(tr("Kiri atas", "Top left"), tr("Tengah atas", "Top center"), tr("Kanan atas", "Top right"), tr("Kiri tengah", "Middle left"), tr("Tengah", "Center"), tr("Kanan tengah", "Middle right"), tr("Kiri bawah", "Bottom left"), tr("Tengah bawah", "Bottom center"), tr("Kanan bawah", "Bottom right"))
+        AlertDialog.Builder(this).setTitle(tr("Posisi teks", "Text position")).setItems(choices) { _, which ->
             positionX = (which % 3) / 2f
             positionY = (which / 3) / 2f
             dirty = true
             updatePreview()
-        }.setNegativeButton("Batal", null).show()
+        }.setNegativeButton(tr("Batal", "Cancel"), null).show()
     }
 
     private fun loadImage() {
-        busy(true, "Memuat halaman…")
+        busy(true, tr("Memuat halaman…", "Loading page…"))
         lifecycleScope.launch {
             try {
                 val bitmap = withContext(Dispatchers.IO) {
                     val doc = DocumentStore.get(applicationContext, docId)
-                        ?: throw IllegalStateException("Dokumen tidak ditemukan")
-                    require(page in doc.pages) { "Halaman tidak ditemukan" }
+                        ?: throw IllegalStateException(tr("Dokumen tidak ditemukan", "Document not found"))
+                    require(page in doc.pages) { tr("Halaman tidak ditemukan", "Page not found") }
                     BitmapFactory.decodeFile(DocumentStore.pageFile(applicationContext, docId, page).absolutePath)
-                        ?: throw IllegalStateException("Gambar tidak dapat dibaca")
+                        ?: throw IllegalStateException(tr("Gambar tidak dapat dibaca", "The image could not be read"))
                 }
                 busy(false)
                 preview.setImage(bitmap)
@@ -230,9 +230,9 @@ class TextEditActivity : BaseActivity() {
             } catch (e: Exception) {
                 busy(false)
                 if (!isFinishing && !isDestroyed) {
-                    AlertDialog.Builder(this@TextEditActivity).setTitle("Halaman tidak dapat dibuka")
-                        .setMessage(e.localizedMessage ?: "Silakan coba lagi.")
-                        .setPositiveButton("Kembali") { _, _ -> finish() }
+                    AlertDialog.Builder(this@TextEditActivity).setTitle(tr("Halaman tidak dapat dibuka", "The page could not be opened"))
+                        .setMessage(detail(e.localizedMessage) ?: tr("Silakan coba lagi.", "Please try again."))
+                        .setPositiveButton(tr("Kembali", "Back")) { _, _ -> finish() }
                         .setOnCancelListener { finish() }.show()
                 }
             }
@@ -245,7 +245,7 @@ class TextEditActivity : BaseActivity() {
         if (spec.text.isBlank() || saving) return
         saving = true
         updatePreview()
-        busy(true, "Menyimpan teks…")
+        busy(true, tr("Menyimpan teks…", "Saving text…"))
         lifecycleScope.launch {
             try {
                 withContext(Dispatchers.IO) {
@@ -262,7 +262,7 @@ class TextEditActivity : BaseActivity() {
                 busy(false)
                 saving = false
                 updatePreview()
-                error("Teks tidak dapat disimpan.", e)
+                error(tr("Teks tidak dapat disimpan.", "Text could not be saved."), e)
             }
         }
     }
@@ -270,9 +270,9 @@ class TextEditActivity : BaseActivity() {
     private fun closeEditor() {
         if (saving) return
         if (!dirty || input.text.toString().isBlank()) { finish(); return }
-        AlertDialog.Builder(this).setTitle("Buang teks?")
-            .setMessage("Teks yang belum disimpan akan hilang.")
-            .setNegativeButton("Lanjut mengedit", null)
-            .setPositiveButton("Buang") { _, _ -> finish() }.show()
+        AlertDialog.Builder(this).setTitle(tr("Buang teks?", "Discard text?"))
+            .setMessage(tr("Teks yang belum disimpan akan hilang.", "Unsaved text will be lost."))
+            .setNegativeButton(tr("Lanjut mengedit", "Continue editing"), null)
+            .setPositiveButton(tr("Buang", "Discard")) { _, _ -> finish() }.show()
     }
 }

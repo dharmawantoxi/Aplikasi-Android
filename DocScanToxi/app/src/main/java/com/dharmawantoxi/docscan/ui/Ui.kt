@@ -117,11 +117,18 @@ object Ui {
         }
     }
 
-    fun date(time: Long): String = SimpleDateFormat("dd MMM yyyy", Locale("id", "ID")).format(Date(time))
-    fun pages(count: Int) = "$count halaman"
+    fun date(context: Context, time: Long): String =
+        SimpleDateFormat("dd MMM yyyy", Locale.forLanguageTag(Language.code(context))).format(Date(time))
+    fun pages(context: Context, count: Int) = Language.text(context, "$count halaman", "$count ${if (count == 1) "page" else "pages"}")
 }
 
 open class BaseActivity : AppCompatActivity() {
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(Language.wrap(newBase))
+    }
+
+    protected fun tr(indonesian: String, english: String): String = Language.text(this, indonesian, english)
+    protected fun detail(message: String?): String? = Language.detail(this, message)
     private var progress: AlertDialog? = null
 
     /** Menghindari konten tertutup status/navigation bar, termasuk Android 15+. */
@@ -155,13 +162,13 @@ open class BaseActivity : AppCompatActivity() {
 
     protected fun error(message: String, error: Throwable? = null) {
         if (isFinishing || isDestroyed) return
-        val detail = error?.localizedMessage?.takeIf { it.isNotBlank() }
-        AlertDialog.Builder(this).setTitle("Belum berhasil")
+        val detail = detail(error?.localizedMessage)?.takeIf { it.isNotBlank() }
+        AlertDialog.Builder(this).setTitle(tr("Belum berhasil", "Unable to complete"))
             .setMessage(if (detail == null) message else "$message\n\n$detail")
-            .setPositiveButton("Mengerti", null).show()
+            .setPositiveButton(tr("Mengerti", "OK"), null).show()
     }
 
-    protected fun busy(show: Boolean, message: String = "Memproses dokumen…") {
+    protected fun busy(show: Boolean, message: String = tr("Memproses dokumen…", "Processing document…")) {
         progress?.dismiss()
         progress = null
         if (show && !isFinishing && !isDestroyed) {

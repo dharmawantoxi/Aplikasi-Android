@@ -10,6 +10,7 @@ import android.graphics.Typeface
 import android.view.MotionEvent
 import android.view.View
 import com.dharmawantoxi.docscan.ui.Ui
+import com.dharmawantoxi.docscan.ui.Language
 import java.io.IOException
 import kotlin.math.max
 import kotlin.math.min
@@ -83,7 +84,7 @@ class TextOverlayView(context: Context) : View(context) {
     private var moving = false
 
     init {
-        contentDescription = "Pratinjau teks. Ketuk atau geser pada halaman untuk memindahkan teks."
+        contentDescription = Language.text(context, "Pratinjau teks. Ketuk atau geser pada halaman untuk memindahkan teks.", "Text preview. Tap or drag on the page to move the text.")
         isFocusable = true
     }
 
@@ -100,7 +101,7 @@ class TextOverlayView(context: Context) : View(context) {
         val h = image.height * scale
         imageRect.set((width - w) / 2, (height - h) / 2, (width + w) / 2, (height + h) / 2)
         canvas.drawBitmap(image, null, imageRect, imagePaint)
-        val preview = if (spec.text.isBlank()) spec.copy(text = "Teks") else spec
+        val preview = if (spec.text.isBlank()) spec.copy(text = Language.text(context, "Teks", "Text")) else spec
         canvas.save()
         canvas.translate(imageRect.left, imageRect.top)
         canvas.scale(scale, scale)
@@ -140,7 +141,7 @@ class TextOverlayView(context: Context) : View(context) {
     }
 
     private fun moveTo(event: MotionEvent, image: Bitmap) {
-        val preview = if (spec.text.isBlank()) spec.copy(text = "Teks") else spec
+        val preview = if (spec.text.isBlank()) spec.copy(text = Language.text(context, "Teks", "Text")) else spec
         val layout = TextOverlayRenderer.layout(image.width, image.height, preview)
         val sourceX = (event.x - imageRect.left) * image.width / imageRect.width()
         val sourceY = (event.y - imageRect.top) * image.height / imageRect.height()

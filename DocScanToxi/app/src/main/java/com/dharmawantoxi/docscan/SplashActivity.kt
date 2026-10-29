@@ -116,7 +116,7 @@ class SplashActivity : BaseActivity() {
             gravity = Gravity.CENTER
             setPadding(0, dp(4), 0, 0)
         }, LinearLayout.LayoutParams(-1, -2))
-        content.addView(Ui.text(this, "Memuat aplikasi...", 14f, blue).apply {
+        content.addView(Ui.text(this, tr("Memuat aplikasi...", "Loading app..."), 14f, blue).apply {
             gravity = Gravity.CENTER
             setPadding(0, dp(16), 0, dp(8))
         }, LinearLayout.LayoutParams(-1, -2))
@@ -125,7 +125,7 @@ class SplashActivity : BaseActivity() {
             isIndeterminate = false
             progressTintList = ColorStateList.valueOf(blue)
             progressBackgroundTintList = ColorStateList.valueOf(0xFF1A1A1A.toInt())
-            contentDescription = "Animasi pembuka"
+            contentDescription = tr("Animasi pembuka", "Opening animation")
         }
         content.addView(progress, LinearLayout.LayoutParams(-1, dp(8)))
         content.addView(Ui.text(this, "© 2026 DharmawanToxi. All rights reserved.", 11f, 0xFF888888.toInt()).apply {

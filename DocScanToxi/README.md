@@ -4,6 +4,7 @@ Aplikasi Android berbahasa Indonesia untuk memindai, merapikan, menyimpan, dan b
 
 ## Fitur
 
+- **Pilihan bahasa Indonesia dan English** melalui tombol globe di beranda; pilihan tersimpan di perangkat. Sebagian detail teknis dari penyedia file atau komponen sistem mungkin tetap memakai bahasa aslinya.
 - **Splash screen** saat aplikasi dibuka, menggunakan logo `splash_logo.png` dan warna hitam-biru dari splash desktop yang sudah ada, lalu membuka beranda setelah sekitar 3 detik.
 - **Pindai otomatis** dengan pemindai dokumen ML Kit: mendeteksi tepi, mengoreksi perspektif, dan memindai beberapa halaman. Pengguna juga dapat mengambil foto dengan kamera sistem atau mengimpor foto.
 - Simpan maksimal **25 halaman per dokumen**, cari dan ubah nama dokumen, tambah, urutkan, atau hapus halaman.
@@ -35,6 +36,10 @@ Aplikasi Android berbahasa Indonesia untuk memindai, merapikan, menyimpan, dan b
 - **Edit sebagai gambar** merender setiap halaman menjadi JPEG dengan sisi terpanjang maksimal 2.400 piksel. Teks asli tidak dapat dipilih, dicari, atau diedit di tempat; tautan, formulir, lampiran, dan tanda tangan digital tidak dipertahankan. Kualitas gambar dan teks dapat berkurang. Teks baru menyatu dengan gambar setelah disimpan dan tidak dapat dipindahkan atau diedit secara terpisah. Ukuran halaman dipertahankan sejauh mungkin, dan disesuaikan jika dipotong atau diputar; foto tambahan menggunakan A4 dengan margin.
 - **Simpan salinan** dan **Ganti file asli** untuk file Office memakai aturan keamanan yang sama dengan editor PDF: cadangan terpisah wajib, konfirmasi ulang, verifikasi isi hasil, deteksi perubahan eksternal, dan percobaan pemulihan. Jika pemulihan gagal, penggantian berikutnya diblokir dan file asli harus diperiksa atau dibuka ulang. Penyedia penyimpanan dapat menimpa file yang dipilih di dialog; jangan memilih file asli atau cadangan penting sebagai tujuan.
 - Dokumen gambar dan sesi edit PDF/Office disimpan secara privat di perangkat, bukan di server aplikasi. Sesi PDF dan Office menggunakan cache sementara: jangan mengandalkan perubahan yang belum disimpan. Cadangan Android dinonaktifkan untuk privasi: **menghapus aplikasi akan menghapus dokumen lokal**. Gunakan **Simpan salinan**, **Simpan PDF**, **Simpan sebagai JPG**, **Simpan TXT**, atau ekspor Office untuk membuat salinan yang tetap tersedia. Aplikasi penerima yang dipilih saat berbagi akan memperoleh salinan yang Anda bagikan.
+
+## Bahasa / Language
+
+Tekan ikon globe **Bahasa / Language** di bagian atas beranda, lalu pilih **Bahasa Indonesia** atau **English**. Pilihan disimpan dan digunakan kembali saat aplikasi dibuka. Nama file, isi dokumen, dan bahasa hasil OCR tidak diterjemahkan secara otomatis.
 
 ## Cara menggunakan
 

@@ -114,11 +114,11 @@ class NativePdfActivity : BaseActivity() {
         val primary = Ui.color(c, R.color.md_primary)
         val root = Ui.column(c).apply { setBackgroundColor(Ui.color(c, R.color.md_background)) }
         val bar = Ui.row(c).apply { setPadding(dp(8), dp(6), dp(12), dp(6)) }
-        bar.addView(Ui.iconButton(c, R.drawable.ic_close, "Tutup editor PDF").apply { setOnClickListener { closeEditor() } },
+        bar.addView(Ui.iconButton(c, R.drawable.ic_close, tr("Tutup editor PDF", "Close PDF editor")).apply { setOnClickListener { closeEditor() } },
             LinearLayout.LayoutParams(dp(48), dp(48)))
         val heading = Ui.column(c)
-        heading.addView(Ui.text(c, "EDIT TEKS PDF ASLI", 10f, muted, true).apply { letterSpacing = 0.06f })
-        title = Ui.text(c, "Memuat PDF…", 17f, textColor, true).apply {
+        heading.addView(Ui.text(c, tr("EDIT TEKS PDF ASLI", "EDIT ORIGINAL PDF TEXT"), 10f, muted, true).apply { letterSpacing = 0.06f })
+        title = Ui.text(c, tr("Memuat PDF…", "Loading PDF…"), 17f, textColor, true).apply {
             maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
         }
         heading.addView(title)
@@ -129,28 +129,28 @@ class NativePdfActivity : BaseActivity() {
         val content = Ui.column(c).apply { setPadding(dp(20), dp(6), dp(20), dp(20)) }
         scroll.addView(content)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        status = Ui.text(c, "File asli belum diubah.", 13f, muted).apply { setPadding(0, 0, 0, dp(8)) }
+        status = Ui.text(c, tr("File asli belum diubah.", "The original file has not been changed."), 13f, muted).apply { setPadding(0, 0, 0, dp(8)) }
         content.addView(status)
         preview = ImageView(c).apply {
             setBackgroundColor(Ui.color(c, R.color.page_background))
             scaleType = ImageView.ScaleType.FIT_CENTER
-            contentDescription = "Pratinjau halaman PDF asli"
+            contentDescription = tr("Pratinjau halaman PDF asli", "Original PDF page preview")
         }
         content.addView(preview, LinearLayout.LayoutParams(-1, dp(260)))
         val pagination = Ui.row(c).apply { setPadding(0, dp(10), 0, dp(8)) }
-        previous = Ui.button(c, "Sebelumnya", outlined = true).apply { setOnClickListener { changePage(-1) } }
-        next = Ui.button(c, "Berikutnya", outlined = true).apply { setOnClickListener { changePage(1) } }
+        previous = Ui.button(c, tr("Sebelumnya", "Previous"), outlined = true).apply { setOnClickListener { changePage(-1) } }
+        next = Ui.button(c, tr("Berikutnya", "Next"), outlined = true).apply { setOnClickListener { changePage(1) } }
         pageLabel = Ui.text(c, "– / –", 13f, muted, true).apply { gravity = Gravity.CENTER }
         pagination.addView(previous, LinearLayout.LayoutParams(0, dp(48), 1f))
         pagination.addView(pageLabel, LinearLayout.LayoutParams(dp(74), -2))
         pagination.addView(next, LinearLayout.LayoutParams(0, dp(48), 1f))
         content.addView(pagination)
-        content.addView(Ui.text(c, "Ketuk segmen teks untuk menggantinya. Periksa pratinjau: teks tidak mengalir ulang secara otomatis.", 13f, muted).apply {
+        content.addView(Ui.text(c, tr("Ketuk segmen teks untuk menggantinya. Periksa pratinjau: teks tidak mengalir ulang secara otomatis.", "Tap a text segment to replace it. Check the preview: text does not reflow automatically."), 13f, muted).apply {
             setPadding(0, dp(4), 0, dp(10))
         })
         search = EditText(c).apply {
-            hint = "Cari segmen teks"
-            contentDescription = "Cari teks PDF"
+            hint = tr("Cari segmen teks", "Search text segments")
+            contentDescription = tr("Cari teks PDF", "Search PDF text")
             setSingleLine(true)
             setTextColor(textColor)
             setHintTextColor(muted)
@@ -173,10 +173,10 @@ class NativePdfActivity : BaseActivity() {
         search.setText(query)
 
         val actions = Ui.row(c).apply { setPadding(dp(20), dp(8), dp(20), dp(12)) }
-        saveCopy = Ui.button(c, "Simpan salinan", outlined = true).apply {
+        saveCopy = Ui.button(c, tr("Simpan salinan", "Save a copy"), outlined = true).apply {
             setOnClickListener { requestCopy() }
         }
-        overwrite = Ui.button(c, "Ganti file asli").apply { setOnClickListener { requestOverwrite() } }
+        overwrite = Ui.button(c, tr("Ganti file asli", "Replace original")).apply { setOnClickListener { requestOverwrite() } }
         actions.addView(saveCopy, LinearLayout.LayoutParams(0, dp(50), 1f))
         actions.addView(overwrite, LinearLayout.LayoutParams(0, dp(50), 1f).apply { leftMargin = dp(8) })
         root.addView(actions)
@@ -186,13 +186,13 @@ class NativePdfActivity : BaseActivity() {
 
     private fun openSession(source: Uri, restoredId: String?) {
         loading = true
-        busy(true, "Membuka PDF asli…")
+        busy(true, tr("Membuka PDF asli…", "Opening original PDF…"))
         lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
                     if (restoredId == null) NativePdfFiles.open(applicationContext, source)
                     else NativePdfFiles.restore(applicationContext, restoredId)
-                        ?: throw IOException("Sesi edit tidak tersedia lagi. Buka ulang PDF asli.")
+                        ?: throw IOException(tr("Sesi edit tidak tersedia lagi. Buka ulang PDF asli.", "The editing session is no longer available. Reopen the original PDF."))
                 }
                 loading = false
                 busy(false)
@@ -204,9 +204,9 @@ class NativePdfActivity : BaseActivity() {
                 loading = false
                 busy(false)
                 if (!isFinishing && !isDestroyed) AlertDialog.Builder(this@NativePdfActivity)
-                    .setTitle("PDF tidak dapat dibuka")
-                    .setMessage("Pastikan PDF valid, tidak dilindungi kata sandi, dan tidak bertanda tangan digital.\n\n${e.localizedMessage.orEmpty()}")
-                    .setPositiveButton("Kembali") { _, _ -> finish() }
+                    .setTitle(tr("PDF tidak dapat dibuka", "The PDF could not be opened"))
+                    .setMessage(tr("Pastikan PDF valid, tidak dilindungi kata sandi, dan tidak bertanda tangan digital.\n\n${detail(e.localizedMessage).orEmpty()}", "Make sure the PDF is valid, not password-protected, and not digitally signed.\n\n${detail(e.localizedMessage).orEmpty()}"))
+                    .setPositiveButton(tr("Kembali", "Back")) { _, _ -> finish() }
                     .setOnCancelListener { finish() }.show()
             }
         }
@@ -220,7 +220,7 @@ class NativePdfActivity : BaseActivity() {
         val version = ++pageVersion
         loading = true
         updateControls()
-        busy(true, "Memuat halaman…")
+        busy(true, tr("Memuat halaman…", "Loading page…"))
         lifecycleScope.launch {
             try {
                 val loaded = withContext(Dispatchers.IO) {
@@ -228,7 +228,7 @@ class NativePdfActivity : BaseActivity() {
                     try {
                         val parsed = runCatching { NativePdfText.readPage(current.working, index) }
                         LoadedPage(bitmap, parsed.getOrNull(),
-                            parsed.exceptionOrNull()?.localizedMessage ?: if (parsed.isFailure) "Teks halaman tidak dapat dibaca" else null)
+                            detail(parsed.exceptionOrNull()?.localizedMessage) ?: if (parsed.isFailure) tr("Teks halaman tidak dapat dibaca", "Page text could not be read") else null)
                     } catch (failure: Throwable) {
                         bitmap.recycle()
                         throw failure
@@ -251,7 +251,7 @@ class NativePdfActivity : BaseActivity() {
                 loading = false
                 busy(false)
                 updateControls()
-                error("Halaman PDF tidak dapat ditampilkan.", e)
+                error(tr("Halaman PDF tidak dapat ditampilkan.", "The PDF page could not be displayed."), e)
                 deliverPendingDestination()
             }
         }
@@ -288,11 +288,11 @@ class NativePdfActivity : BaseActivity() {
         if (problem != null) {
             textList.addView(Ui.text(c, problem, 13f, muted))
         } else if (filtered.isEmpty()) {
-            val message = if (segments.isNotEmpty()) "Tidak ada segmen yang cocok dengan pencarian."
-                else "Tidak ada teks yang dapat diedit pada halaman ini. Teks pada gambar, formulir, XObject, atau font tertentu mungkin tidak didukung."
+            val message = if (segments.isNotEmpty()) tr("Tidak ada segmen yang cocok dengan pencarian.", "No segments match your search.")
+                else tr("Tidak ada teks yang dapat diedit pada halaman ini. Teks pada gambar, formulir, XObject, atau font tertentu mungkin tidak didukung.", "There is no editable text on this page. Text in images, forms, XObjects, or certain fonts may not be supported.")
             textList.addView(Ui.text(c, message, 13f, muted))
         } else {
-            textList.addView(Ui.text(c, "${filtered.size} segmen teks${if (skipped > 0) " · $skipped dilewati" else ""}", 12f, muted, true).apply {
+            textList.addView(Ui.text(c, tr("${filtered.size} segmen teks${if (skipped > 0) " · $skipped dilewati" else ""}", "${filtered.size} text segments${if (skipped > 0) " · $skipped skipped" else ""}"), 12f, muted, true).apply {
                 setPadding(0, 0, 0, dp(8))
             })
             filtered.take(limit).forEach { segment ->
@@ -302,7 +302,7 @@ class NativePdfActivity : BaseActivity() {
                     setPadding(dp(14), dp(10), dp(12), dp(10))
                     minimumHeight = dp(52)
                     isClickable = true; isFocusable = true
-                    contentDescription = "Edit teks PDF: ${segment.text.take(100)}"
+                    contentDescription = tr("Edit teks PDF: ${segment.text.take(100)}", "Edit PDF text: ${segment.text.take(100)}")
                     setOnClickListener { editSegment(segment) }
                 }
                 row.addView(Ui.text(c, segment.text, 14f, Ui.color(c, R.color.md_on_surface)).apply { maxLines = 3 },
@@ -310,7 +310,7 @@ class NativePdfActivity : BaseActivity() {
                 row.addView(Ui.image(c, R.drawable.ic_edit, primary), LinearLayout.LayoutParams(dp(22), dp(22)).apply { leftMargin = dp(8) })
                 textList.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
             }
-            if (filtered.size > limit) textList.addView(Ui.button(c, "Tampilkan lebih banyak", outlined = true).apply {
+            if (filtered.size > limit) textList.addView(Ui.button(c, tr("Tampilkan lebih banyak", "Show more"), outlined = true).apply {
                 setOnClickListener { limit += 100; renderSegments() }
             }, LinearLayout.LayoutParams(-1, dp(50)))
         }
@@ -323,15 +323,15 @@ class NativePdfActivity : BaseActivity() {
             filters = arrayOf(InputFilter.LengthFilter(2000))
             setText(segment.text)
             setSelection(text.length)
-            contentDescription = "Teks PDF pengganti"
+            contentDescription = tr("Teks PDF pengganti", "Replacement PDF text")
         }
         val frame = Ui.column(this).apply {
             setPadding(Ui.dp(context, 20), 0, Ui.dp(context, 20), 0)
             addView(input)
         }
-        val dialog = AlertDialog.Builder(this).setTitle("Ganti teks asli")
-            .setMessage("Gunakan karakter yang tersedia pada font PDF. Tata letak dapat bergeser atau bertumpuk; periksa pratinjau. Metadata dan teks aksesibilitas mungkin tidak ikut berubah.")
-            .setView(frame).setNegativeButton("Batal", null).setPositiveButton("Terapkan", null).create()
+        val dialog = AlertDialog.Builder(this).setTitle(tr("Ganti teks asli", "Replace original text"))
+            .setMessage(tr("Gunakan karakter yang tersedia pada font PDF. Tata letak dapat bergeser atau bertumpuk; periksa pratinjau. Metadata dan teks aksesibilitas mungkin tidak ikut berubah.", "Use characters supported by the PDF font. Layout may shift or overlap; check the preview. Metadata and accessibility text may not be updated."))
+            .setView(frame).setNegativeButton(tr("Batal", "Cancel"), null).setPositiveButton(tr("Terapkan", "Apply"), null).create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val replacement = input.text.toString()
@@ -347,7 +347,7 @@ class NativePdfActivity : BaseActivity() {
         val current = session ?: return
         loading = true
         updateControls()
-        busy(true, "Mengganti teks PDF…")
+        busy(true, tr("Mengganti teks PDF…", "Replacing PDF text…"))
         lifecycleScope.launch {
             try {
                 withContext(Dispatchers.IO) { NativePdfFiles.replaceText(current, pageIndex, segment, replacement) }
@@ -360,9 +360,9 @@ class NativePdfActivity : BaseActivity() {
                 busy(false)
                 updateControls()
                 if (!isFinishing && !isDestroyed) AlertDialog.Builder(this@NativePdfActivity)
-                    .setTitle("Teks tidak dapat diganti")
-                    .setMessage("File asli belum ditulis. Muat ulang halaman dan periksa hasilnya.\n\n${e.localizedMessage.orEmpty()}")
-                    .setPositiveButton("Muat ulang") { _, _ -> loadPage() }
+                    .setTitle(tr("Teks tidak dapat diganti", "Text could not be replaced"))
+                    .setMessage(tr("File asli belum ditulis. Muat ulang halaman dan periksa hasilnya.\n\n${detail(e.localizedMessage).orEmpty()}", "The original file has not been written. Reload the page and check the result.\n\n${detail(e.localizedMessage).orEmpty()}"))
+                    .setPositiveButton(tr("Muat ulang", "Reload")) { _, _ -> loadPage() }
                     .setOnCancelListener { loadPage() }.show()
             }
         }
@@ -379,13 +379,13 @@ class NativePdfActivity : BaseActivity() {
     private fun updateControls() {
         if (!::title.isInitialized) return
         val current = session
-        title.text = current?.title ?: "Memuat PDF…"
+        title.text = current?.title ?: tr("Memuat PDF…", "Loading PDF…")
         status.text = when {
-            current == null -> "File asli belum diubah."
-            current.sourceUncertain -> "Kondisi file asli tidak pasti; periksa cadangan dan buka ulang PDF."
-            current.changed && current.unsaved -> "Ada perubahan; file asli belum diubah."
-            current.changed -> "Salinan sudah disimpan; file asli belum diubah."
-            else -> "File kerja sama dengan PDF asli."
+            current == null -> tr("File asli belum diubah.", "The original file has not been changed.")
+            current.sourceUncertain -> tr("Kondisi file asli tidak pasti; periksa cadangan dan buka ulang PDF.", "The original file's state is uncertain; check the backup and reopen the PDF.")
+            current.changed && current.unsaved -> tr("Ada perubahan; file asli belum diubah.", "There are changes; the original file has not been changed.")
+            current.changed -> tr("Salinan sudah disimpan; file asli belum diubah.", "A copy has been saved; the original file has not been changed.")
+            else -> tr("File kerja sama dengan PDF asli.", "The working file matches the original PDF.")
         }
         pageLabel.text = if (current == null) "– / –" else "${pageIndex + 1} / ${current.pageCount}"
         previous.isEnabled = current != null && !loading && pageIndex > 0
@@ -396,27 +396,27 @@ class NativePdfActivity : BaseActivity() {
 
     private fun requestCopy() {
         val current = session ?: return
-        AlertDialog.Builder(this).setTitle("Simpan sebagai salinan")
-            .setMessage("Pilih nama dan lokasi baru, bukan file asli atau cadangan penting. Beberapa penyedia dapat menimpa file saat dipilih, sebelum aplikasi dapat memeriksanya.")
-            .setNegativeButton("Batal", null)
-            .setPositiveButton("Pilih lokasi") { _, _ ->
+        AlertDialog.Builder(this).setTitle(tr("Simpan sebagai salinan", "Save a copy"))
+            .setMessage(tr("Pilih nama dan lokasi baru, bukan file asli atau cadangan penting. Beberapa penyedia dapat menimpa file saat dipilih, sebelum aplikasi dapat memeriksanya.", "Choose a new name and location, not the original or an important backup. Some providers may overwrite a file as soon as it is selected, before the app can check it."))
+            .setNegativeButton(tr("Batal", "Cancel"), null)
+            .setPositiveButton(tr("Pilih lokasi", "Choose location")) { _, _ ->
                 try { saveCopyLauncher.launch("${DocumentNames.fileName(current.title).take(68)} (edit).pdf") }
-                catch (_: ActivityNotFoundException) { error("Pemilih lokasi penyimpanan tidak tersedia.") }
+                catch (_: ActivityNotFoundException) { error(tr("Pemilih lokasi penyimpanan tidak tersedia.", "No save-location picker is available.")) }
             }.show()
     }
 
     private fun requestOverwrite() {
         val current = session ?: return
         if (!canWriteOriginal) {
-            error("Penyedia file tidak memberikan izin menulis ke PDF asli. Gunakan Simpan salinan atau pilih file yang dapat ditulis.")
+            error(tr("Penyedia file tidak memberikan izin menulis ke PDF asli. Gunakan Simpan salinan atau pilih file yang dapat ditulis.", "The provider did not grant write access to the original PDF. Use Save a copy or choose a writable file."))
             return
         }
-        AlertDialog.Builder(this).setTitle("Ganti file PDF asli?")
-            .setMessage("File asli akan ditimpa. Simpan cadangan terpisah terlebih dahulu. Pilih nama dan lokasi baru, bukan file asli atau cadangan penting: beberapa penyedia dapat menimpa file saat dipilih, sebelum aplikasi memeriksanya.")
-            .setNegativeButton("Batal", null)
-            .setPositiveButton("Buat cadangan") { _, _ ->
-                try { backupLauncher.launch("${DocumentNames.fileName(current.title).take(64)} (cadangan).pdf") }
-                catch (_: ActivityNotFoundException) { error("Pemilih lokasi penyimpanan tidak tersedia.") }
+        AlertDialog.Builder(this).setTitle(tr("Ganti file PDF asli?", "Replace the original PDF?"))
+            .setMessage(tr("File asli akan ditimpa. Simpan cadangan terpisah terlebih dahulu. Pilih nama dan lokasi baru, bukan file asli atau cadangan penting: beberapa penyedia dapat menimpa file saat dipilih, sebelum aplikasi memeriksanya.", "The original will be overwritten. First save a separate backup. Choose a new name and location, not the original or an important backup: some providers can overwrite a file as soon as it is selected, before the app checks it."))
+            .setNegativeButton(tr("Batal", "Cancel"), null)
+            .setPositiveButton(tr("Buat cadangan", "Create backup")) { _, _ ->
+                try { backupLauncher.launch("${DocumentNames.fileName(current.title).take(64)} (${tr("cadangan", "backup")}).pdf") }
+                catch (_: ActivityNotFoundException) { error(tr("Pemilih lokasi penyimpanan tidak tersedia.", "No save-location picker is available.")) }
             }.show()
     }
 
@@ -436,7 +436,7 @@ class NativePdfActivity : BaseActivity() {
         val current = session ?: return
         loading = true
         updateControls()
-        busy(true, if (backup) "Menyimpan cadangan…" else "Menyimpan salinan PDF…")
+        busy(true, if (backup) tr("Menyimpan cadangan…", "Saving backup…") else tr("Menyimpan salinan PDF…", "Saving PDF copy…"))
         lifecycleScope.launch {
             try {
                 withContext(Dispatchers.IO) {
@@ -446,28 +446,28 @@ class NativePdfActivity : BaseActivity() {
                 loading = false
                 busy(false)
                 updateControls()
-                if (backup) confirmOverwrite(current) else toast("Salinan PDF berhasil disimpan.")
+                if (backup) confirmOverwrite(current) else toast(tr("Salinan PDF berhasil disimpan.", "PDF copy saved successfully."))
             } catch (e: Exception) {
                 loading = false
                 busy(false)
                 updateControls()
-                error(if (backup) "Cadangan tidak dapat disimpan. Periksa file asli dan pilih lokasi baru." else "Salinan PDF tidak dapat disimpan. Periksa file asli jika tadi dipilih di dialog.", e)
+                error(if (backup) tr("Cadangan tidak dapat disimpan. Periksa file asli dan pilih lokasi baru.", "The backup could not be saved. Check the original and choose a new location.") else tr("Salinan PDF tidak dapat disimpan. Periksa file asli jika tadi dipilih di dialog.", "The PDF copy could not be saved. Check the original if it was selected in the dialog."), e)
             }
         }
     }
 
     private fun confirmOverwrite(current: NativePdfSession) {
-        AlertDialog.Builder(this).setTitle("Cadangan tersimpan")
-            .setMessage("Ganti file asli dengan hasil edit sekarang? Pastikan cadangan berada di file terpisah.")
-            .setNegativeButton("Batal") { _, _ -> current.backupReady = false; current.backupUri = null }
-            .setPositiveButton("Ganti file asli") { _, _ -> overwriteOriginal(current) }
+        AlertDialog.Builder(this).setTitle(tr("Cadangan tersimpan", "Backup saved"))
+            .setMessage(tr("Ganti file asli dengan hasil edit sekarang? Pastikan cadangan berada di file terpisah.", "Replace the original with the edited result now? Make sure the backup is a separate file."))
+            .setNegativeButton(tr("Batal", "Cancel")) { _, _ -> current.backupReady = false; current.backupUri = null }
+            .setPositiveButton(tr("Ganti file asli", "Replace original")) { _, _ -> overwriteOriginal(current) }
             .setOnCancelListener { current.backupReady = false; current.backupUri = null }.show()
     }
 
     private fun overwriteOriginal(current: NativePdfSession) {
         loading = true
         updateControls()
-        busy(true, "Mengganti PDF asli…")
+        busy(true, tr("Mengganti PDF asli…", "Replacing the original PDF…"))
         lifecycleScope.launch {
             try {
                 withContext(Dispatchers.IO) { NativePdfFiles.overwriteOriginal(applicationContext, current) }
@@ -475,16 +475,16 @@ class NativePdfActivity : BaseActivity() {
                 busy(false)
                 updateControls()
                 setResult(Activity.RESULT_OK)
-                toast("File PDF asli berhasil diganti.")
+                toast(tr("File PDF asli berhasil diganti.", "The original PDF was replaced successfully."))
             } catch (e: Exception) {
                 loading = false
                 busy(false)
                 updateControls()
                 if (e is CommittedPdfSessionException) {
-                    AlertDialog.Builder(this@NativePdfActivity).setTitle("File asli sudah diganti")
-                        .setMessage(e.message).setCancelable(false)
-                        .setPositiveButton("Tutup") { _, _ -> finish() }.show()
-                } else error("Penggantian PDF belum dapat diselesaikan.", e)
+                    AlertDialog.Builder(this@NativePdfActivity).setTitle(tr("File asli sudah diganti", "The original file was replaced"))
+                        .setMessage(detail(e.message)).setCancelable(false)
+                        .setPositiveButton(tr("Tutup", "Close")) { _, _ -> finish() }.show()
+                } else error(tr("Penggantian PDF belum dapat diselesaikan.", "The PDF replacement could not be completed."), e)
             }
         }
     }
@@ -492,9 +492,9 @@ class NativePdfActivity : BaseActivity() {
     private fun closeEditor() {
         if (loading) return
         if (session?.unsaved != true) { finish(); return }
-        AlertDialog.Builder(this).setTitle("Buang perubahan?")
-            .setMessage("Perubahan belum disimpan ke salinan atau file asli.")
-            .setNegativeButton("Lanjut mengedit", null)
-            .setPositiveButton("Buang") { _, _ -> finish() }.show()
+        AlertDialog.Builder(this).setTitle(tr("Buang perubahan?", "Discard changes?"))
+            .setMessage(tr("Perubahan belum disimpan ke salinan atau file asli.", "Changes have not been saved to a copy or the original file."))
+            .setNegativeButton(tr("Lanjut mengedit", "Continue editing"), null)
+            .setPositiveButton(tr("Buang", "Discard")) { _, _ -> finish() }.show()
     }
 }
