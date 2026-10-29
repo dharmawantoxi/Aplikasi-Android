@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- ===== Token Material 3 - mode gelap ===== -->
+    <color name="md_primary">#A9C7FF</color>
+    <color name="md_on_primary">#003164</color>
+    <color name="md_primary_container">#00488D</color>
+    <color name="md_on_primary_container">#D6E3FF</color>
+
+    <color name="md_secondary">#BDC7DC</color>
+    <color name="md_on_secondary">#273141</color>
+    <color name="md_secondary_container">#3D4759</color>
+    <color name="md_on_secondary_container">#D9E3F8</color>
+
+    <color name="md_tertiary">#4CD9E4</color>
+    <color name="md_on_tertiary">#00363A</color>
+    <color name="md_tertiary_container">#004F53</color>
+    <color name="md_on_tertiary_container">#6FF6FF</color>
+
+    <color name="md_error">#FFB4AB</color>
+    <color name="md_on_error">#690005</color>
+    <color name="md_error_container">#93000A</color>
+    <color name="md_on_error_container">#FFDAD6</color>
+
+    <color name="md_background">#111318</color>
+    <color name="md_on_background">#E2E2E9</color>
+    <color name="md_surface">#111318</color>
+    <color name="md_on_surface">#E2E2E9</color>
+    <color name="md_surface_variant">#44474E</color>
+    <color name="md_on_surface_variant">#C4C6D0</color>
+    <color name="md_outline">#8E9099</color>
+    <color name="md_outline_variant">#44474E</color>
+
+    <color name="md_surface_container_lowest">#0C0E13</color>
+    <color name="md_surface_container_low">#191C20</color>
+    <color name="md_surface_container">#1D2024</color>
+    <color name="md_surface_container_high">#282A2F</color>
+    <color name="md_surface_container_highest">#33353A</color>
+
+</resources>

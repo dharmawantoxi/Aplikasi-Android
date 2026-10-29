@@ -1,0 +1,108 @@
+name: Android CI
+
+on:
+  push:
+    paths:
+      - 'DocScanToxi/**'
+      - '.github/workflows/android.yml'
+  pull_request:
+    paths:
+      - 'DocScanToxi/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # Image ini sudah menyediakan Android SDK Platform 36 dan build-tools 35.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Verify Android SDK
+        run: |
+          test -f "$ANDROID_HOME/platforms/android-36/android.jar"
+          test -d "$ANDROID_HOME/build-tools/35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Unit tests and debug APK
+        working-directory: DocScanToxi
+        shell: bash
+        run: |
+          set +e
+          ./gradlew testDebugUnitTest assembleDebug --no-daemon --stacktrace > "$RUNNER_TEMP/gradle-build.log" 2>&1
+          result=$?
+          cat "$RUNNER_TEMP/gradle-build.log"
+          if [ "$result" -ne 0 ]; then
+            # Sajikan penyebab build sebagai anotasi, bukan baris "Task" biasa.
+            python3 - "$RUNNER_TEMP/gradle-build.log" <<'PYLOG'
+          import sys
+          lines = open(sys.argv[1], errors="replace").read().splitlines()
+          primary = [s for s in lines if s.startswith("e: ") or " error:" in s.lower() or s.startswith("AGPBI: ")]
+          fallback = [s for s in lines if s.startswith(("Execution failed", "A problem occurred", "Caused by:", "FAILURE:")) or " FAILED" in s]
+          seen = set()
+          for line in primary + fallback:
+              line = line.strip()[:2000]
+              if not line or line in seen:
+                  continue
+              seen.add(line)
+              print("::error::" + line.replace("%", "%25"))
+              if len(seen) >= 10:
+                  break
+          PYLOG
+          fi
+          exit "$result"
+      - name: Upload installable debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: DocScanToxi-debug-apk
+          path: DocScanToxi/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload unit test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DocScanToxi-test-report
+          path: DocScanToxi/app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  device-test:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Test on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: bash DocScanToxi/ci/run-instrumented-tests.sh
+      - name: Upload device test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DocScanToxi-device-test-report
+          path: DocScanToxi/app/build/reports/androidTests/connected/
+          if-no-files-found: ignore
+          retention-days: 30
