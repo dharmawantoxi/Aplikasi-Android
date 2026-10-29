@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">DocScan Toxi</string>
+    <!-- Set to the publisher's reviewed public HTTPS privacy policy before release. -->
+    <string name="privacy_policy_url" translatable="false"></string>
 </resources>

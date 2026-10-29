@@ -1,0 +1,72 @@
+name: Android release (manual)
+
+# This workflow never publishes to Play or GitHub Releases.
+on:
+  workflow_dispatch:
+    inputs:
+      artifact:
+        description: 'Build ONE channel; configure its matching signing secrets first'
+        type: choice
+        required: true
+        options:
+          - play-aab
+          - direct-apk
+      test_only:
+        description: 'Allow missing policy URL and mark artifact NOT FOR PUBLICATION'
+        type: boolean
+        required: true
+        default: false
+      version_code:
+        description: 'Positive integer greater than every previous release versionCode'
+        required: true
+        type: string
+      version_name:
+        description: 'Version name, e.g. 1.0.0'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      DOCSCAN_VERSION_CODE: ${{ inputs.version_code }}
+      DOCSCAN_VERSION_NAME: ${{ inputs.version_name }}
+      DOCSCAN_ALLOW_INCOMPLETE_POLICY: ${{ inputs.test_only && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Test release orchestration (mock tools)
+        run: python3 DocScanToxi/ci/test_release_scripts.py
+      - name: Build signed Play upload bundle
+        if: inputs.artifact == 'play-aab'
+        working-directory: DocScanToxi
+        env:
+          DOCSCAN_KEYSTORE_BASE64: ${{ secrets.PLAY_UPLOAD_KEYSTORE_BASE64 }}
+          DOCSCAN_STORE_PASSWORD: ${{ secrets.PLAY_UPLOAD_STORE_PASSWORD }}
+          DOCSCAN_KEY_ALIAS: ${{ secrets.PLAY_UPLOAD_KEY_ALIAS }}
+          DOCSCAN_KEY_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEY_PASSWORD }}
+        run: bash ci/build-signed-release-from-secret.sh play-aab
+      - name: Build signed direct-distribution APK
+        if: inputs.artifact == 'direct-apk'
+        working-directory: DocScanToxi
+        env:
+          DOCSCAN_KEYSTORE_BASE64: ${{ secrets.DIRECT_RELEASE_KEYSTORE_BASE64 }}
+          DOCSCAN_STORE_PASSWORD: ${{ secrets.DIRECT_RELEASE_STORE_PASSWORD }}
+          DOCSCAN_KEY_ALIAS: ${{ secrets.DIRECT_RELEASE_KEY_ALIAS }}
+          DOCSCAN_KEY_PASSWORD: ${{ secrets.DIRECT_RELEASE_KEY_PASSWORD }}
+        run: bash ci/build-signed-release-from-secret.sh direct-apk
+      - name: Upload verified release artifact and mapping
+        uses: actions/upload-artifact@v4
+        with:
+          name: DocScanToxi-${{ inputs.artifact }}-${{ inputs.version_code }}
+          path: DocScanToxi/release-output/
+          if-no-files-found: error
+          retention-days: 7

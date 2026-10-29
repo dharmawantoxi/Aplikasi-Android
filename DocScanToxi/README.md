@@ -100,7 +100,7 @@ cd DocScanToxi
 # Windows: gradlew.bat testDebugUnitTest assembleDebug
 ```
 
-APK debug ditandatangani dengan kunci debug dan cocok untuk pengujian, bukan untuk distribusi produksi. Untuk rilis gunakan **Build > Generate Signed Bundle / APK** dan keystore milik Anda sendiri; simpan keystore dengan aman.
+APK debug ditandatangani dengan kunci debug dan cocok untuk pengujian, bukan untuk distribusi produksi. Persiapan AAB Play Store dan APK langsung, pilihan kunci, pengujian, privasi, serta workflow rilis manual dijelaskan di **[release/RELEASE_CHECKLIST.md](release/RELEASE_CHECKLIST.md)**. Aplikasi belum siap dipublikasikan sampai poin penghalang di sana selesai.
 
 Workflow GitHub Actions `Android CI` dijalankan **secara manual** melalui `workflow_dispatch`; workflow ini membangun APK debug, menjalankan unit test, dan menguji alur dasar pada emulator Android. Pilih branch yang ingin diuji saat menjalankannya. Setelah build berhasil, APK dapat diunduh dari artifact **DocScanToxi-debug-apk** di halaman run Actions. Untuk menjalankan tes perangkat sendiri, sambungkan perangkat atau nyalakan emulator lalu jalankan `./gradlew connectedDebugAndroidTest`.
 

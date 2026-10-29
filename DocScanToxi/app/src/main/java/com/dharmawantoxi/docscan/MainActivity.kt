@@ -411,7 +411,25 @@ class MainActivity : ScanHostActivity() {
         AlertDialog.Builder(this).setTitle(tr("Tentang DocScan Toxi", "About DocScan Toxi"))
             .setMessage(tr("Pindai dan simpan dokumen sebagai PDF atau gambar, lalu bagikan bila diperlukan.\n\nDokumen disimpan di perangkat ini dan akan terhapus jika aplikasi dihapus. Simpan salinan melalui tombol ekspor.\n\nPemindai otomatis memerlukan Google Play Services; kamera biasa dan impor foto tersedia sebagai alternatif.", "Scan and save documents as PDF or images, then share them if needed.\n\nDocuments are stored on this device and will be deleted if the app is removed. Use an export button to save a copy.\n\nAutomatic scanning requires Google Play Services; the regular camera and photo import are available as alternatives."))
             .setNeutralButton(tr("Lisensi PDF", "PDF licenses")) { _, _ -> showPdfLicenses() }
+            .setNegativeButton(tr("Privasi dan data", "Privacy and data")) { _, _ -> showPrivacyOverview() }
             .setPositiveButton(tr("Mengerti", "OK"), null).show()
+    }
+
+    private fun showPrivacyOverview() {
+        val dialog = AlertDialog.Builder(this).setTitle(tr("Privasi dan data", "Privacy and data"))
+            .setMessage(tr(
+                "Dokumen dan salinan kerja disimpan di perangkat. Menghapus aplikasi menghapus dokumen lokal; ekspor salinan yang ingin dipertahankan. File yang diekspor atau dibagikan dapat diakses oleh lokasi atau aplikasi yang Anda pilih. Kamera dan penyedia file lain memiliki kebijakan masing-masing.\n\nPemindai otomatis dan OCR memakai Google ML Kit. Menurut Google, gambar dan teks diproses di perangkat, tetapi ML Kit dapat menghubungi server Google untuk pembaruan dan mengirim metrik penggunaan serta kinerja.\n\nIni adalah ringkasan, bukan pengganti kebijakan privasi lengkap penerbit.",
+                "Documents and working copies are stored on your device. Uninstalling removes local documents; export copies you want to keep. Exported or shared files can be accessed by the destination or app you choose. Camera apps and file providers have their own policies.\n\nAutomatic scanning and OCR use Google ML Kit. According to Google, images and text are processed on-device, but ML Kit may contact Google servers for updates and send usage and performance metrics.\n\nThis is an overview, not a substitute for the publisher's full privacy policy."
+            ))
+            .setPositiveButton(tr("Tutup", "Close"), null)
+        val url = getString(R.string.privacy_policy_url).trim()
+        if (url.isNotEmpty() && Uri.parse(url).scheme?.equals("https", ignoreCase = true) == true) {
+            dialog.setNeutralButton(tr("Kebijakan privasi", "Privacy policy")) { _, _ ->
+                try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+                catch (_: ActivityNotFoundException) { error(tr("Tidak ada aplikasi untuk membuka tautan.", "No app is available to open the link.")) }
+            }
+        }
+        dialog.show()
     }
 
     private fun showPdfLicenses() {

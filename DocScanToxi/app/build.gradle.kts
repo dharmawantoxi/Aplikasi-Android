@@ -3,6 +3,23 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// The release helper supplies version overrides and signing only via environment variables.
+val releaseVersionCode = providers.gradleProperty("docscanVersionCode").orNull ?: "1"
+val releaseVersionName = providers.gradleProperty("docscanVersionName").orNull ?: "1.0.0"
+val parsedVersionCode = releaseVersionCode.toIntOrNull()
+    ?: error("docscanVersionCode must be an integer from 1 to 2100000000")
+require(parsedVersionCode in 1..2_100_000_000) {
+    "docscanVersionCode must be an integer from 1 to 2100000000"
+}
+require(releaseVersionName.matches(Regex("[A-Za-z0-9][A-Za-z0-9._+\\-]{0,79}"))) {
+    "docscanVersionName must be 1-80 letters, digits, dots, dashes, underscores or plus signs"
+}
+val signingNames = listOf("DOCSCAN_KEYSTORE_PATH", "DOCSCAN_STORE_PASSWORD", "DOCSCAN_KEY_ALIAS", "DOCSCAN_KEY_PASSWORD")
+val signingValues = signingNames.map { providers.environmentVariable(it).orNull }
+require(signingValues.all { it.isNullOrBlank() } || signingValues.none { it.isNullOrBlank() }) {
+    "Set all DOCSCAN signing environment variables, or none of them"
+}
+
 android {
     namespace = "com.dharmawantoxi.docscan"
     compileSdk = 36
@@ -11,13 +28,24 @@ android {
         applicationId = "com.dharmawantoxi.docscan"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = parsedVersionCode
+        versionName = releaseVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    val releaseSigning = if (signingValues.all { !it.isNullOrBlank() }) {
+        signingConfigs.create("releaseFromEnvironment") {
+            storeFile = file(signingValues[0]!!)
+            require(storeFile!!.isFile) { "DOCSCAN_KEYSTORE_PATH must point to an existing keystore" }
+            storePassword = signingValues[1]
+            keyAlias = signingValues[2]
+            keyPassword = signingValues[3]
+        }
+    } else null
+
     buildTypes {
         release {
+            if (releaseSigning != null) signingConfig = releaseSigning
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
