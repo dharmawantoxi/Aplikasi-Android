@@ -4,6 +4,7 @@ Aplikasi Android berbahasa Indonesia untuk memindai, merapikan, menyimpan, dan b
 
 ## Fitur
 
+- **Splash screen** saat aplikasi dibuka, menggunakan logo `splash_logo.png` dan warna hitam-biru dari splash desktop yang sudah ada, lalu membuka beranda setelah sekitar 3 detik.
 - **Pindai otomatis** dengan pemindai dokumen ML Kit: mendeteksi tepi, mengoreksi perspektif, dan memindai beberapa halaman. Pengguna juga dapat mengambil foto dengan kamera sistem atau mengimpor foto.
 - Simpan maksimal **25 halaman per dokumen**, cari dan ubah nama dokumen, tambah, urutkan, atau hapus halaman.
 - **Edit teks PDF asli**: buka PDF yang didukung, cari segmen teks yang sudah ada pada halaman, lalu ganti operand teks tersebut memakai font dan pengaturan PDF asli. Hasilnya tetap PDF dengan konten asli, bukan halaman yang diraster menjadi JPEG. Simpan sebagai salinan atau, setelah mencadangkan dan mengonfirmasi, ganti file asli.
@@ -76,6 +77,10 @@ Aplikasi Android berbahasa Indonesia untuk memindai, merapikan, menyimpan, dan b
 4. Tekan **Simpan PDF** dan pilih nama/lokasi baru, atau **Bagikan** untuk mengirim salinan PDF.
 5. Tekan **Pindai teks** untuk membaca teks semua halaman. Koreksi hasilnya jika perlu, lalu salin, simpan sebagai TXT, atau ekspor ke **Word**, **Excel**, atau **PowerPoint** sesuai bagian sebelumnya.
 
+## Ikon aplikasi
+
+Ikon launcher DocScan Toxi tersedia untuk Android 7 dan ikon adaptif Android 8+, termasuk ikon monokrom untuk tema Android 13+. Berkas sumber ada di `design/docscan-icon.png`. Untuk membuat ulang aset bitmap setelah mengubah sumber, instal Pillow lalu jalankan `python tools/generate_launcher_icons.py` dari folder `DocScanToxi`.
+
 ## Membuat APK
 
 1. Buka folder `DocScanToxi` sebagai project di Android Studio terbaru yang mendukung Android Gradle Plugin 8.13.
@@ -104,6 +109,7 @@ Workflow GitHub Actions `Android CI` dijalankan **secara manual** melalui `workf
 - `edit/` — koreksi perspektif, filter, dan penambahan teks pada gambar.
 - `ocr/` — pengenalan dan penyuntingan teks.
 - `ui/` — komponen tampilan bersama.
+- `SplashActivity.kt` — splash Android dengan logo dan gaya dari `splash_screen.py` di root repositori.
 - `app/src/test/` dan `app/src/androidTest/` — unit test dan tes perangkat.
 
 Pemindaian otomatis dan OCR menggunakan Google ML Kit. Editor PDF menggunakan [PdfBox-Android](https://github.com/TomRoush/PdfBox-Android) berlisensi Apache-2.0, beserta dependensi Bouncy Castle dan font Liberation Sans. Lisensi dan pemberitahuan komponen PDF tersedia di `app/src/main/assets/licenses/` serta menu **Tentang aplikasi > Lisensi PDF**. Tidak diperlukan akun atau server backend untuk aplikasi ini.

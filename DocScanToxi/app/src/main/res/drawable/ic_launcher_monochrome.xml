@@ -1,0 +1,15 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- A D-shaped outline and folded page, matching the launcher artwork. -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M34,32 L52,32 C68,32 77,41 77,54 C77,67 68,76 52,76 L34,76 Z M40,38 L52,38 C64,38 71,45 71,54 C71,63 64,70 52,70 L40,70 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M44,43 L55,43 L64,52 L64,61 Q64,65 60,65 L44,65 Z M55,43 L55,52 L64,52 Z" />
+</vector>
