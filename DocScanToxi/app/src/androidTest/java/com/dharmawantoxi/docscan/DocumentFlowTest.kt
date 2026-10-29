@@ -109,6 +109,7 @@ class DocumentFlowTest {
             scenario.onActivity { activity ->
                 assertTrue(containsText(activity.window.decorView, "DocScan Toxi"))
                 assertTrue(containsText(activity.window.decorView, "Mulai pindai"))
+                assertTrue(containsText(activity.window.decorView, "Edit PDF"))
             }
         }
 
@@ -127,6 +128,7 @@ class DocumentFlowTest {
                 scenario.onActivity { activity ->
                     assertTrue(containsText(activity.window.decorView, "Tambah"))
                     assertTrue(containsText(activity.window.decorView, "Pindai teks"))
+                    assertTrue(containsText(activity.window.decorView, "Tambah teks"))
                 }
             }
             val editIntent = Intent(context, PageEditActivity::class.java)

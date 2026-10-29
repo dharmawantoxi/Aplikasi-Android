@@ -1,14 +1,7 @@
 name: Android CI
 
+# Only run when explicitly started from GitHub Actions or the CLI.
 on:
-  push:
-    paths:
-      - 'DocScanToxi/**'
-      - '.github/workflows/android.yml'
-  pull_request:
-    paths:
-      - 'DocScanToxi/**'
-      - '.github/workflows/android.yml'
   workflow_dispatch:
 
 permissions:

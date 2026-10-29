@@ -24,6 +24,18 @@
         <activity android:name=".DocumentActivity" android:exported="false" />
         <activity android:name=".edit.PageEditActivity" android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden" />
+        <activity android:name=".pdf.NativePdfActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
+        <activity android:name=".pdf.PdfMergeActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+        <activity android:name=".zip.ZipActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+        <activity android:name=".office.OfficeActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
+        <activity android:name=".edit.TextEditActivity" android:exported="false"
+            android:windowSoftInputMode="stateAlwaysHidden|adjustResize" />
         <activity android:name=".ocr.OcrActivity" android:exported="false"
             android:windowSoftInputMode="adjustResize" />
 

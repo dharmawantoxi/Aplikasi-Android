@@ -1,5 +1,8 @@
 package com.dharmawantoxi.docscan
 
+import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
@@ -16,10 +19,15 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.ScrollView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
 import com.dharmawantoxi.docscan.data.Document
 import com.dharmawantoxi.docscan.data.DocumentStore
+import com.dharmawantoxi.docscan.office.OfficeActivity
+import com.dharmawantoxi.docscan.zip.ZipActivity
+import com.dharmawantoxi.docscan.pdf.PdfMergeActivity
+import com.dharmawantoxi.docscan.pdf.NativePdfActivity
 import com.dharmawantoxi.docscan.scan.ScanHostActivity
 import com.dharmawantoxi.docscan.ui.DocumentDialogs
 import com.dharmawantoxi.docscan.ui.Ui
@@ -35,6 +43,38 @@ class MainActivity : ScanHostActivity() {
     private var documents: List<Document> = emptyList()
     private var query = ""
     private var refreshVersion = 0
+    private val openPdfLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) importPdf(uri)
+    }
+    private val openNativePdfLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val data = result.data
+        val uri = data?.data
+        if (result.resultCode == Activity.RESULT_OK && uri != null) {
+            val granted = data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            // Beberapa provider hanya memberikan izin sementara; menyimpan salinan tetap dapat digunakan.
+            if (granted != 0) runCatching { contentResolver.takePersistableUriPermission(uri, granted) }
+            startActivity(Intent(this, NativePdfActivity::class.java).apply {
+                this.data = uri
+                clipData = ClipData.newRawUri("PDF", uri)
+                addFlags(granted)
+                putExtra(NativePdfActivity.EXTRA_CAN_WRITE, granted and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0)
+            })
+        }
+    }
+    private val openOfficeLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val data = result.data
+        val uri = data?.data
+        if (result.resultCode == Activity.RESULT_OK && uri != null) {
+            val granted = data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            if (granted != 0) runCatching { contentResolver.takePersistableUriPermission(uri, granted) }
+            startActivity(Intent(this, OfficeActivity::class.java).apply {
+                this.data = uri
+                clipData = ClipData.newRawUri("Office", uri)
+                addFlags(granted)
+                putExtra(OfficeActivity.EXTRA_CAN_WRITE, granted and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0)
+            })
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,6 +100,67 @@ class MainActivity : ScanHostActivity() {
                 error("Dokumen tidak dapat disimpan. Pastikan foto dapat dibuka dan ruang penyimpanan cukup.", e)
             } finally {
                 cleanCameraInputs(uris)
+            }
+        }
+    }
+
+    private fun showPdfImportInfo() {
+        AlertDialog.Builder(this).setTitle("Edit teks PDF asli")
+            .setMessage("Ganti teks yang sudah ada tanpa mengubah halaman menjadi gambar. Teks pada hasil pindai/gambar, formulir, XObject, atau font tertentu mungkin tidak dapat diedit; tata letak tidak mengalir ulang otomatis. PDF bertanda tangan atau dilindungi tidak didukung.\n\nFile asli baru diganti setelah Anda menyimpan cadangan dan menyetujui penggantian. Anda juga dapat menyimpan salinan. Maksimal 25 halaman dan 100 MB.")
+            .setNegativeButton("Batal", null)
+            .setNeutralButton("Edit sebagai gambar") { _, _ -> showRasterPdfInfo() }
+            .setPositiveButton("Pilih PDF") { _, _ ->
+                val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "application/pdf"
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                        Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                }
+                try { openNativePdfLauncher.launch(picker) }
+                catch (_: ActivityNotFoundException) { error("Pemilih dokumen tidak tersedia di perangkat ini.") }
+            }.show()
+    }
+
+    private fun showRasterPdfInfo() {
+        AlertDialog.Builder(this).setTitle("Edit PDF sebagai gambar")
+            .setMessage("PDF akan diimpor sebagai salinan. Setiap halaman diubah menjadi gambar: teks asli tidak dapat diedit atau dicari, dan tautan, formulir serta tanda tangan digital tidak dipertahankan.\n\nFile sumber tidak diubah saat impor. Pilih nama atau lokasi baru saat mengekspor. Maksimal 25 halaman dan 100 MB; PDF dengan kata sandi tidak didukung.")
+            .setNegativeButton("Batal", null)
+            .setPositiveButton("Pilih PDF") { _, _ ->
+                try { openPdfLauncher.launch(arrayOf("application/pdf")) }
+                catch (_: ActivityNotFoundException) { error("Pemilih dokumen tidak tersedia di perangkat ini.") }
+            }.show()
+    }
+
+    private fun showOfficeInfo() {
+        AlertDialog.Builder(this).setTitle("Edit file Word, Excel, PowerPoint")
+            .setMessage("Ganti teks DOCX, isi sel XLSX, atau teks slide PPTX yang sudah ada tanpa menjadikannya gambar. Bagian lain file (gambar, lembar, slide, gaya, formula) dipertahankan, tetapi editor ini berupa daftar isi, bukan pratinjau tata letak. Formula, konten tersembunyi, dan beberapa jenis teks dilewati; teks panjang dapat mengubah tata letak.\n\nHanya format DOCX, XLSX, dan PPTX biasa yang didukung; format lama (.doc, .xls, .ppt), file dilindungi, bertanda tangan, atau bermakro ditolak. File asli baru diganti setelah Anda menyimpan cadangan dan menyetujui penggantian. Anda juga dapat menyimpan salinan. Maksimal 100 MB.")
+            .setNegativeButton("Batal", null)
+            .setPositiveButton("Pilih file") { _, _ ->
+                val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "*/*"
+                    putExtra(Intent.EXTRA_MIME_TYPES, arrayOf(
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        "application/vnd.openxmlformats-officedocument.presentationml.presentation"))
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                        Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                }
+                try { openOfficeLauncher.launch(picker) }
+                catch (_: ActivityNotFoundException) { error("Pemilih dokumen tidak tersedia di perangkat ini.") }
+            }.show()
+    }
+
+    private fun importPdf(uri: Uri) {
+        busy(true, "Mengimpor halaman PDF…")
+        lifecycleScope.launch {
+            try {
+                val doc = withContext(Dispatchers.IO) { DocumentStore.importPdf(applicationContext, uri) }
+                busy(false)
+                startActivity(Intent(this@MainActivity, DocumentActivity::class.java).putExtra(DocumentActivity.EXTRA_ID, doc.id))
+            } catch (e: Exception) {
+                busy(false)
+                error("PDF tidak dapat diimpor. Pastikan file valid, tidak memiliki kata sandi, dan ruang penyimpanan cukup.", e)
             }
         }
     }
@@ -123,6 +224,82 @@ class MainActivity : ScanHostActivity() {
         }, LinearLayout.LayoutParams(0, dp(50), 1f).apply { leftMargin = dp(8) })
         hero.addView(heroActions)
         content.addView(hero, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(22) })
+
+        val editPdf = Ui.row(c).apply {
+            background = Ui.bg(surface, dp(18).toFloat(), Ui.color(c, R.color.md_outline_variant), dp(1))
+            setPadding(dp(14), dp(12), dp(12), dp(12))
+            isClickable = true; isFocusable = true
+            contentDescription = "Edit PDF yang sudah ada"
+            setOnClickListener { showPdfImportInfo() }
+        }
+        editPdf.addView(Ui.image(c, R.drawable.ic_pdf, primary).apply {
+            background = Ui.bg(Ui.color(c, R.color.md_primary_container), dp(12).toFloat())
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+        }, LinearLayout.LayoutParams(dp(44), dp(44)))
+        val editPdfText = Ui.column(c).apply { setPadding(dp(12), 0, 0, 0) }
+        editPdfText.addView(Ui.text(c, "Edit PDF", 15f, onSurface, true))
+        editPdfText.addView(Ui.text(c, "Ganti teks PDF asli atau atur halaman", 12f, muted))
+        editPdf.addView(editPdfText, LinearLayout.LayoutParams(0, -2, 1f))
+        editPdf.addView(Ui.image(c, R.drawable.ic_arrow_back, muted).apply { rotation = 180f },
+            LinearLayout.LayoutParams(dp(24), dp(24)))
+        content.addView(editPdf, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
+
+        val mergePdf = Ui.row(c).apply {
+            background = Ui.bg(surface, dp(18).toFloat(), Ui.color(c, R.color.md_outline_variant), dp(1))
+            setPadding(dp(14), dp(12), dp(12), dp(12))
+            isClickable = true; isFocusable = true
+            contentDescription = "Gabungkan beberapa PDF"
+            setOnClickListener { startActivity(Intent(c, PdfMergeActivity::class.java)) }
+        }
+        mergePdf.addView(Ui.image(c, R.drawable.ic_pdf, primary).apply {
+            background = Ui.bg(Ui.color(c, R.color.md_primary_container), dp(12).toFloat())
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+        }, LinearLayout.LayoutParams(dp(44), dp(44)))
+        val mergeText = Ui.column(c).apply { setPadding(dp(12), 0, 0, 0) }
+        mergeText.addView(Ui.text(c, "Gabung PDF", 15f, onSurface, true))
+        mergeText.addView(Ui.text(c, "Satukan beberapa PDF sesuai urutan", 12f, muted))
+        mergePdf.addView(mergeText, LinearLayout.LayoutParams(0, -2, 1f))
+        mergePdf.addView(Ui.image(c, R.drawable.ic_arrow_back, muted).apply { rotation = 180f },
+            LinearLayout.LayoutParams(dp(24), dp(24)))
+        content.addView(mergePdf, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+
+        val zipCard = Ui.row(c).apply {
+            background = Ui.bg(surface, dp(18).toFloat(), Ui.color(c, R.color.md_outline_variant), dp(1))
+            setPadding(dp(14), dp(12), dp(12), dp(12))
+            isClickable = true; isFocusable = true
+            contentDescription = "Buat atau ekstrak ZIP"
+            setOnClickListener { startActivity(Intent(c, ZipActivity::class.java)) }
+        }
+        zipCard.addView(Ui.image(c, R.drawable.ic_zip, primary).apply {
+            background = Ui.bg(Ui.color(c, R.color.md_primary_container), dp(12).toFloat())
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+        }, LinearLayout.LayoutParams(dp(44), dp(44)))
+        val zipText = Ui.column(c).apply { setPadding(dp(12), 0, 0, 0) }
+        zipText.addView(Ui.text(c, "ZIP", 15f, onSurface, true))
+        zipText.addView(Ui.text(c, "Buat arsip atau ekstrak file ZIP", 12f, muted))
+        zipCard.addView(zipText, LinearLayout.LayoutParams(0, -2, 1f))
+        zipCard.addView(Ui.image(c, R.drawable.ic_arrow_back, muted).apply { rotation = 180f },
+            LinearLayout.LayoutParams(dp(24), dp(24)))
+        content.addView(zipCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+
+        val editOffice = Ui.row(c).apply {
+            background = Ui.bg(surface, dp(18).toFloat(), Ui.color(c, R.color.md_outline_variant), dp(1))
+            setPadding(dp(14), dp(12), dp(12), dp(12))
+            isClickable = true; isFocusable = true
+            contentDescription = "Edit file Word, Excel, atau PowerPoint"
+            setOnClickListener { showOfficeInfo() }
+        }
+        editOffice.addView(Ui.image(c, R.drawable.ic_office, primary).apply {
+            background = Ui.bg(Ui.color(c, R.color.md_primary_container), dp(12).toFloat())
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+        }, LinearLayout.LayoutParams(dp(44), dp(44)))
+        val editOfficeText = Ui.column(c).apply { setPadding(dp(12), 0, 0, 0) }
+        editOfficeText.addView(Ui.text(c, "Edit Office", 15f, onSurface, true))
+        editOfficeText.addView(Ui.text(c, "Word, Excel, dan PowerPoint (.docx/.xlsx/.pptx)", 12f, muted))
+        editOffice.addView(editOfficeText, LinearLayout.LayoutParams(0, -2, 1f))
+        editOffice.addView(Ui.image(c, R.drawable.ic_arrow_back, muted).apply { rotation = 180f },
+            LinearLayout.LayoutParams(dp(24), dp(24)))
+        content.addView(editOffice, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
 
         val stats = Ui.row(c).apply {
             background = Ui.bg(surface, dp(18).toFloat(), Ui.color(c, R.color.md_outline_variant), dp(1))
@@ -210,7 +387,20 @@ class MainActivity : ScanHostActivity() {
     private fun showAbout() {
         AlertDialog.Builder(this).setTitle("Tentang DocScan Toxi")
             .setMessage("Pindai dan simpan dokumen sebagai PDF atau gambar, lalu bagikan bila diperlukan.\n\nDokumen disimpan di perangkat ini dan akan terhapus jika aplikasi dihapus. Simpan salinan melalui tombol ekspor.\n\nPemindai otomatis memerlukan Google Play Services; kamera biasa dan impor foto tersedia sebagai alternatif.")
+            .setNeutralButton("Lisensi PDF") { _, _ -> showPdfLicenses() }
             .setPositiveButton("Mengerti", null).show()
+    }
+
+    private fun showPdfLicenses() {
+        val names = listOf("pdfbox-android-NOTICE.txt", "pdfbox-android-LICENSE.txt",
+            "bouncy-castle-LICENSE.txt", "liberation-font-LICENSE.txt")
+        val text = try {
+            names.joinToString("\n\n--------------------\n\n") { name ->
+                "$name\n\n" + assets.open("licenses/$name").bufferedReader().use { it.readText() }
+            }
+        } catch (_: Exception) { "Teks lisensi tidak dapat dibaca." }
+        AlertDialog.Builder(this).setTitle("Lisensi komponen PDF").setMessage(text)
+            .setPositiveButton("Tutup", null).show()
     }
 
     private fun refresh() {

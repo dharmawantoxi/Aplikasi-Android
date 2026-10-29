@@ -1,9 +1,11 @@
 package com.dharmawantoxi.docscan.ocr
 
+import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
@@ -19,8 +21,12 @@ import com.dharmawantoxi.docscan.DocumentActivity
 import com.dharmawantoxi.docscan.R
 import com.dharmawantoxi.docscan.data.DocumentNames
 import com.dharmawantoxi.docscan.data.DocumentStore
+import com.dharmawantoxi.docscan.office.OfficeExport
+import com.dharmawantoxi.docscan.office.OfficeFormat
+import com.dharmawantoxi.docscan.office.OfficePackage
 import com.dharmawantoxi.docscan.ui.BaseActivity
 import com.dharmawantoxi.docscan.ui.Ui
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
@@ -32,6 +38,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import java.io.File
 
 /** OCR Latin berjalan di perangkat; teks dapat disunting sebelum disalin/disimpan. */
 class OcrActivity : BaseActivity() {
@@ -43,9 +50,17 @@ class OcrActivity : BaseActivity() {
     private lateinit var saveButton: View
     private var completed = false
     private var title = "Dokumen"
+    private var pendingOfficeFormat: OfficeFormat? = null
+    private val officeButtons = mutableListOf<MaterialButton>()
 
     private val saveTextLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         if (uri != null) saveText(uri)
+    }
+    private val saveOfficeLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val format = pendingOfficeFormat
+        pendingOfficeFormat = null
+        val uri = result.data?.data
+        if (result.resultCode == Activity.RESULT_OK && uri != null && format != null) saveOffice(format, uri)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -134,6 +149,20 @@ class OcrActivity : BaseActivity() {
         }
         actions.addView(saveButton, LinearLayout.LayoutParams(0, dp(50), 1f).apply { leftMargin = dp(8) })
         content.addView(actions)
+
+        val officeRow = Ui.row(c).apply { setPadding(0, dp(8), 0, 0) }
+        OfficeFormat.entries.forEachIndexed { index, format ->
+            val button = Ui.button(c, format.displayName, null, outlined = true).apply {
+                contentDescription = "Ekspor teks OCR ke ${format.displayName}"
+                setOnClickListener { requestOfficeExport(format) }
+            }
+            officeButtons.add(button)
+            officeRow.addView(button, LinearLayout.LayoutParams(0, dp(46), 1f).apply { if (index > 0) leftMargin = dp(8) })
+        }
+        content.addView(officeRow)
+        content.addView(Ui.text(c, "Ekspor teks yang dikenali menjadi dokumen Office yang dapat diedit. Tata letak, foto, dan tabel tidak direkonstruksi; Excel memisahkan kolom pada tab atau beberapa spasi.", 12f, muted).apply {
+            setPadding(0, dp(8), 0, 0)
+        })
         root.addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
         setScreen(root)
         setResultEnabled(false)
@@ -143,6 +172,7 @@ class OcrActivity : BaseActivity() {
         editor.isEnabled = enabled
         copyButton.isEnabled = enabled
         saveButton.isEnabled = enabled
+        officeButtons.forEach { it.isEnabled = enabled }
     }
 
     private fun recognize() {
@@ -188,6 +218,50 @@ class OcrActivity : BaseActivity() {
                 .addOnFailureListener { e -> if (continuation.isActive) continuation.resumeWithException(e) }
         } catch (e: Exception) {
             if (continuation.isActive) continuation.resumeWithException(e)
+        }
+    }
+
+    private fun requestOfficeExport(format: OfficeFormat) {
+        val value = editor.text.toString()
+        if (value.isBlank()) { toast("Belum ada teks untuk diekspor."); return }
+        val pages = try { OfficeExport.splitPages(value) } catch (e: Exception) {
+            error("Teks tidak dapat diekspor.", e); return
+        }
+        if (pages.all { it.isBlank() }) { toast("Belum ada teks yang dikenali untuk diekspor."); return }
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = format.mime
+            putExtra(Intent.EXTRA_TITLE, "${DocumentNames.fileName(title)}.${format.extension}")
+        }
+        pendingOfficeFormat = format
+        try { saveOfficeLauncher.launch(intent) } catch (_: ActivityNotFoundException) {
+            pendingOfficeFormat = null
+            error("Pemilih lokasi penyimpanan tidak tersedia.")
+        }
+    }
+
+    private fun saveOffice(format: OfficeFormat, uri: Uri) {
+        val value = editor.text.toString()
+        busy(true, "Membuat ${format.displayName}…")
+        lifecycleScope.launch {
+            val temporary = File.createTempFile("export-", ".${format.extension}", cacheDir)
+            try {
+                withContext(Dispatchers.IO) {
+                    val pages = OfficeExport.splitPages(value)
+                    if (pages.all { it.isBlank() }) throw IllegalStateException("Belum ada teks yang dikenali")
+                    temporary.outputStream().use { OfficeExport.write(format, pages, it) }
+                    // Pastikan paket hasil dapat dibaca dan formatnya sesuai sebelum disalin.
+                    if (OfficePackage.inspect(temporary).format != format) {
+                        throw IllegalStateException("Hasil ${format.displayName} tidak valid")
+                    }
+                    val output = contentResolver.openOutputStream(uri, "w")
+                        ?: throw IllegalStateException("Lokasi penyimpanan tidak dapat dibuka")
+                    temporary.inputStream().use { input -> output.use { input.copyTo(it) } }
+                }
+                busy(false); toast("${format.displayName} berhasil disimpan.")
+            } catch (e: Exception) {
+                busy(false); error("${format.displayName} tidak dapat disimpan.", e)
+            } finally { temporary.delete() }
         }
     }
 
