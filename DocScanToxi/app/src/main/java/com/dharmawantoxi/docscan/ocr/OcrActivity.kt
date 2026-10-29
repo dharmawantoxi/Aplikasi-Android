@@ -197,14 +197,9 @@ class OcrActivity : BaseActivity() {
         lifecycleScope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    try {
-                        val output = contentResolver.openOutputStream(uri, "w")
-                            ?: throw IllegalStateException("Lokasi penyimpanan tidak dapat dibuka")
-                        output.bufferedWriter(Charsets.UTF_8).use { it.write(text) }
-                    } catch (e: Exception) {
-                        runCatching { contentResolver.delete(uri, null, null) }
-                        throw e
-                    }
+                    val output = contentResolver.openOutputStream(uri, "w")
+                        ?: throw IllegalStateException("Lokasi penyimpanan tidak dapat dibuka")
+                    output.bufferedWriter(Charsets.UTF_8).use { it.write(text) }
                 }
                 busy(false); toast("Teks berhasil disimpan.")
             } catch (e: Exception) { busy(false); error("Teks tidak dapat disimpan.", e) }

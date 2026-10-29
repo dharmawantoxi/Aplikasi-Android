@@ -44,28 +44,25 @@ object Exports {
     }
 
     fun savePdf(context: Context, doc: Document, uri: Uri) {
+        // Bangun dulu di cache supaya lokasi yang dipilih tidak ditimpa jika pembuatan PDF gagal.
+        val temporary = File.createTempFile("export-", ".pdf", context.cacheDir)
         try {
+            temporary.outputStream().use { writePdf(context, doc, it) }
             val output = context.contentResolver.openOutputStream(uri, "w")
                 ?: throw IOException("Lokasi penyimpanan tidak dapat dibuka")
-            output.use { writePdf(context, doc, it) }
-        } catch (e: Exception) {
-            // Sebisa mungkin jangan meninggalkan file PDF tidak lengkap.
-            runCatching { context.contentResolver.delete(uri, null, null) }
-            throw e
+            temporary.inputStream().use { input -> output.use { input.copyTo(it) } }
+        } finally {
+            temporary.delete()
         }
     }
 
     fun saveJpeg(context: Context, doc: Document, page: String, uri: Uri) {
         require(page in doc.pages)
-        try {
+        val input = DocumentStore.pageFile(context, doc.id, page).inputStream()
+        input.use {
             val output = context.contentResolver.openOutputStream(uri, "w")
                 ?: throw IOException("Lokasi penyimpanan tidak dapat dibuka")
-            DocumentStore.pageFile(context, doc.id, page).inputStream().use { input ->
-                output.use { input.copyTo(it) }
-            }
-        } catch (e: Exception) {
-            runCatching { context.contentResolver.delete(uri, null, null) }
-            throw e
+            output.use { stream -> it.copyTo(stream) }
         }
     }
 

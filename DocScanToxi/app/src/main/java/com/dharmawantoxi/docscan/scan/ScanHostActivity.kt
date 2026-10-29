@@ -111,17 +111,18 @@ abstract class ScanHostActivity : BaseActivity() {
                 .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
                 .build()
             GmsDocumentScanning.getClient(options).getStartScanIntent(this)
-                .addOnSuccessListener(this) { sender ->
+                .addOnSuccessListener { sender ->
                     startingScanner = false
                     busy(false)
+                    if (isFinishing || isDestroyed || !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) return@addOnSuccessListener
                     try {
                         scannerLauncher.launch(IntentSenderRequest.Builder(sender).build())
-                    } catch (e: Exception) { scannerUnavailable() }
+                    } catch (_: Exception) { scannerUnavailable() }
                 }
-                .addOnFailureListener(this) {
+                .addOnFailureListener {
                     startingScanner = false
                     busy(false)
-                    scannerUnavailable()
+                    if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) scannerUnavailable()
                 }
         } catch (_: Exception) {
             startingScanner = false
