@@ -22,6 +22,7 @@ import com.dharmawantoxi.docscan.data.DocumentNames
 import com.dharmawantoxi.docscan.data.DocumentStore
 import com.dharmawantoxi.docscan.data.Exports
 import com.dharmawantoxi.docscan.edit.PageEditActivity
+import com.dharmawantoxi.docscan.edit.TextEditActivity
 import com.dharmawantoxi.docscan.ocr.OcrActivity
 import com.dharmawantoxi.docscan.scan.ScanHostActivity
 import com.dharmawantoxi.docscan.ui.DocumentDialogs
@@ -184,7 +185,7 @@ class DocumentActivity : ScanHostActivity() {
         listHeader.addView(Ui.text(c, "Halaman", 19f, onSurface, true), LinearLayout.LayoutParams(0, -2, 1f))
         listHeader.addView(Ui.text(c, "${doc.pages.size} / ${DocumentStore.MAX_PAGES}", 12f, muted))
         content.addView(listHeader)
-        content.addView(Ui.text(c, "Ketuk halaman untuk memotong, memutar, atau memberi filter.", 13f, muted).apply {
+        content.addView(Ui.text(c, "Ketuk halaman untuk memotong, memutar, atau memberi filter. Tambahkan teks melalui tombol pada halaman.", 13f, muted).apply {
             setPadding(0, 0, 0, dp(12))
         })
         doc.pages.forEachIndexed { index, page ->
@@ -204,7 +205,12 @@ class DocumentActivity : ScanHostActivity() {
             loadThumbnail(preview, DocumentStore.pageFile(c, doc.id, page))
             val pageText = Ui.column(c).apply { setPadding(dp(14), 0, 0, 0) }
             pageText.addView(Ui.text(c, "Halaman ${index + 1}", 15f, onSurface, true))
-            pageText.addView(Ui.text(c, "Ketuk untuk edit", 12f, muted).apply { setPadding(0, dp(6), 0, 0) })
+            pageText.addView(Ui.text(c, "Tambah teks", 13f, primary, true).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                isClickable = true; isFocusable = true
+                contentDescription = "Tambah teks pada halaman ${index + 1}"
+                setOnClickListener { addText(page) }
+            }, LinearLayout.LayoutParams(-1, dp(44)))
             card.addView(pageText, LinearLayout.LayoutParams(0, -2, 1f))
             val more = Ui.iconButton(c, R.drawable.ic_more_vert, "Opsi halaman ${index + 1}")
             more.setOnClickListener { showPageMenu(more, doc, page, index) }
@@ -215,6 +221,11 @@ class DocumentActivity : ScanHostActivity() {
 
     private fun editPage(page: String) {
         startActivity(Intent(this, PageEditActivity::class.java)
+            .putExtra(EXTRA_ID, documentId).putExtra(PageEditActivity.EXTRA_PAGE, page))
+    }
+
+    private fun addText(page: String) {
+        startActivity(Intent(this, TextEditActivity::class.java)
             .putExtra(EXTRA_ID, documentId).putExtra(PageEditActivity.EXTRA_PAGE, page))
     }
 
@@ -246,14 +257,16 @@ class DocumentActivity : ScanHostActivity() {
     private fun showPageMenu(anchor: View, doc: Document, page: String, index: Int) {
         PopupMenu(this, anchor).apply {
             menu.add(0, 1, 0, "Edit halaman")
-            menu.add(0, 2, 1, "Simpan sebagai JPG")
-            menu.add(0, 3, 2, "Bagikan JPG")
-            menu.add(0, 4, 3, "Pindahkan ke atas").isEnabled = index > 0
-            menu.add(0, 5, 4, "Pindahkan ke bawah").isEnabled = index < doc.pages.lastIndex
-            menu.add(0, 6, 5, "Hapus halaman")
+            menu.add(0, 7, 1, "Tambah teks")
+            menu.add(0, 2, 2, "Simpan sebagai JPG")
+            menu.add(0, 3, 3, "Bagikan JPG")
+            menu.add(0, 4, 4, "Pindahkan ke atas").isEnabled = index > 0
+            menu.add(0, 5, 5, "Pindahkan ke bawah").isEnabled = index < doc.pages.lastIndex
+            menu.add(0, 6, 6, "Hapus halaman")
             setOnMenuItemClickListener {
                 when (it.itemId) {
                     1 -> editPage(page)
+                    7 -> addText(page)
                     2 -> {
                         pendingJpegPage = page
                         try { saveJpegLauncher.launch("${DocumentNames.fileName(doc.title)} - ${index + 1}.jpg") }

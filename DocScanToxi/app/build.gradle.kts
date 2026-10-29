@@ -47,6 +47,8 @@ dependencies {
     implementation("androidx.exifinterface:exifinterface:1.3.7")
     implementation("com.google.android.material:material:1.13.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    // Memodifikasi objek teks PDF asli tanpa meraster seluruh halaman.
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
 
     // Pemindai otomatis memerlukan Google Play Services; kamera bawaan tersedia
     // sebagai alternatif. OCR Latin dibundel dan bekerja di perangkat.
