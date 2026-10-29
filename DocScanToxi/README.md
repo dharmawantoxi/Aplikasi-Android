@@ -42,7 +42,7 @@ cd DocScanToxi
 
 APK debug ditandatangani dengan kunci debug dan cocok untuk pengujian, bukan untuk distribusi produksi. Untuk rilis gunakan **Build > Generate Signed Bundle / APK** dan keystore milik Anda sendiri; simpan keystore dengan aman.
 
-Workflow GitHub Actions `Android CI` membangun APK debug dan menjalankan unit test. Setelah workflow berhasil, APK dapat diunduh dari artifact **DocScanToxi-debug-apk** di halaman run Actions.
+Workflow GitHub Actions `Android CI` membangun APK debug, menjalankan unit test, dan menguji alur dasar pada emulator Android. Setelah build berhasil, APK dapat diunduh dari artifact **DocScanToxi-debug-apk** di halaman run Actions. Untuk menjalankan tes perangkat sendiri, sambungkan perangkat atau nyalakan emulator lalu jalankan `./gradlew connectedDebugAndroidTest`.
 
 ## Struktur
 
