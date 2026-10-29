@@ -126,6 +126,9 @@ open class BaseActivity : AppCompatActivity() {
 
     /** Menghindari konten tertutup status/navigation bar, termasuk Android 15+. */
     protected fun setScreen(root: View) {
+        // Pastikan decor view sudah dibuat sebelum meminta WindowInsetsController
+        // (PhoneWindow.getInsetsController dapat crash pada Android 11+ jika belum ada).
+        setContentView(root)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
@@ -145,7 +148,6 @@ open class BaseActivity : AppCompatActivity() {
                 initialRight + bars.right, initialBottom + max(bars.bottom, ime.bottom))
             insets
         }
-        setContentView(root)
         ViewCompat.requestApplyInsets(root)
     }
 

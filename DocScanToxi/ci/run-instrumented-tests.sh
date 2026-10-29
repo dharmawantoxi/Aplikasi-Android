@@ -10,7 +10,7 @@ if [ "$result" -ne 0 ]; then
 import sys
 lines = open(sys.argv[1], errors="replace").read().splitlines()
 primary = [s for s in lines if s.startswith("e: ") or " error:" in s.lower() or " FAILED" in s or "FATAL EXCEPTION" in s]
-fallback = [s for s in lines if s.strip().startswith(("java.lang.", "android.", "Execution failed", "Caused by:", "FAILURE:"))]
+fallback = [s for s in lines if s.strip().startswith(("java.lang.", "android.", "Execution failed", "Caused by:", "FAILURE:", "at com.dharmawantoxi.docscan."))]
 seen = set()
 for line in primary + fallback:
     line = line.strip()[:2000]

@@ -4,7 +4,9 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
@@ -18,6 +20,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.dharmawantoxi.docscan.data.DocumentStore
 import com.dharmawantoxi.docscan.data.Exports
 import com.dharmawantoxi.docscan.edit.ImageEditor
+import com.dharmawantoxi.docscan.edit.PageEditActivity
+import com.dharmawantoxi.docscan.ocr.OcrActivity
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -31,6 +35,7 @@ class DocumentFlowTest {
         val file = File.createTempFile("test-photo-", ".jpg", context.cacheDir)
         val image = Bitmap.createBitmap(64, 128, Bitmap.Config.ARGB_8888)
         image.eraseColor(Color.WHITE)
+        Canvas(image).drawRect(16f, 32f, 48f, 96f, Paint().apply { color = Color.BLACK })
         file.outputStream().use { assertTrue(image.compress(Bitmap.CompressFormat.JPEG, 90, it)) }
         image.recycle()
         if (rotateExif) {
@@ -76,6 +81,12 @@ class DocumentFlowTest {
                 renderer.openPage(0).use { page ->
                     assertEquals(595, page.width)
                     assertEquals(842, page.height)
+                    val rendered = Bitmap.createBitmap(page.width, page.height, Bitmap.Config.ARGB_8888)
+                    try {
+                        page.render(rendered, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        // Tanda hitam di tengah foto harus benar-benar muncul pada PDF.
+                        assertTrue(Color.red(rendered.getPixel(page.width / 2, page.height / 2)) < 100)
+                    } finally { rendered.recycle() }
                 }
             }
             Exports.saveJpeg(context, renamed, renamed.pages.first(), Uri.fromFile(jpg))
@@ -107,16 +118,35 @@ class DocumentFlowTest {
             val intent = Intent(context, DocumentActivity::class.java).putExtra(DocumentActivity.EXTRA_ID, doc.id)
             ActivityScenario.launch<DocumentActivity>(intent).use { scenario ->
                 var loaded = false
-                repeat(50) {
+                var attempts = 0
+                while (!loaded && attempts++ < 50) {
                     scenario.onActivity { loaded = containsText(it.window.decorView, "Simpan PDF") }
-                    if (loaded) return@repeat
-                    Thread.sleep(100)
+                    if (!loaded) Thread.sleep(100)
                 }
                 assertTrue("Layar dokumen tidak selesai dimuat", loaded)
                 scenario.onActivity { activity ->
                     assertTrue(containsText(activity.window.decorView, "Tambah"))
                     assertTrue(containsText(activity.window.decorView, "Pindai teks"))
                 }
+            }
+            val editIntent = Intent(context, PageEditActivity::class.java)
+                .putExtra(DocumentActivity.EXTRA_ID, doc.id)
+                .putExtra(PageEditActivity.EXTRA_PAGE, doc.pages.first())
+            ActivityScenario.launch<PageEditActivity>(editIntent).use { scenario ->
+                scenario.onActivity { assertTrue(containsText(it.window.decorView, "Edit halaman")) }
+            }
+            val ocrIntent = Intent(context, OcrActivity::class.java).putExtra(DocumentActivity.EXTRA_ID, doc.id)
+            ActivityScenario.launch<OcrActivity>(ocrIntent).use { scenario ->
+                var done = false
+                var attempts = 0
+                while (!done && attempts++ < 120) {
+                    scenario.onActivity { activity ->
+                        done = containsTextPrefix(activity.window.decorView, "Tidak ada teks yang dikenali.") ||
+                            containsTextPrefix(activity.window.decorView, "Selesai. Anda dapat memperbaiki teks")
+                    }
+                    if (!done) Thread.sleep(500)
+                }
+                assertTrue("OCR tidak selesai pada emulator", done)
             }
         } finally {
             DocumentStore.delete(context, doc.id)
@@ -128,6 +158,14 @@ class DocumentFlowTest {
         if (view is TextView && view.text.toString() == text) return true
         if (view is ViewGroup) {
             for (i in 0 until view.childCount) if (containsText(view.getChildAt(i), text)) return true
+        }
+        return false
+    }
+
+    private fun containsTextPrefix(view: View, text: String): Boolean {
+        if (view is TextView && view.text.toString().startsWith(text)) return true
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) if (containsTextPrefix(view.getChildAt(i), text)) return true
         }
         return false
     }
