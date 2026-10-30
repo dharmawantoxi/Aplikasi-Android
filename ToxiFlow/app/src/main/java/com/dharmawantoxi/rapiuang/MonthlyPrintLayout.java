@@ -27,11 +27,23 @@ import java.util.List;
 /** Lays out text and optional photo pages using the selected paper and printable margins. */
 final class MonthlyPrintLayout {
     static final int MAX_PAGES = 500;
-    private static final float HEADER_HEIGHT = 34;
-    private static final float FOOTER_HEIGHT = 25;
+    private static final float HEADER_HEIGHT = 48;
+    private static final float FOOTER_HEIGHT = 30;
+    private static final float SECTION_ROW_HEIGHT = 28;
+    private static final float METRIC_ROW_HEIGHT = 32;
+    private static final float CATEGORY_ROW_HEIGHT = 24;
+    private static final float TRANSACTION_ROW_HEIGHT = 24;
     private static final float MIN_PHOTO_HEIGHT = 60;
     private static final int MIN_CONTENT_WIDTH = 220;
-    private static final int MIN_CONTENT_HEIGHT = 170;
+    private static final int MIN_CONTENT_HEIGHT = 190;
+    private static final int NAVY = 0xff17324d;
+    private static final int TEAL = 0xff15806f;
+    private static final int INK = 0xff263746;
+    private static final int MUTED = 0xff687985;
+    private static final int PALE_BLUE = 0xffeef3f7;
+    private static final int PALE_GREEN = 0xffedf6f2;
+    private static final int PALE_RED = 0xfff8f0f0;
+    private static final int BORDER = 0xffdce5e9;
 
     static final class PageTooSmallException extends IllegalArgumentException { }
     static final class TooManyPhotoPagesException extends IOException { }
@@ -41,12 +53,19 @@ final class MonthlyPrintLayout {
         final int line;
         final float top;
         final float height;
+        final MonthlyReport.Style style;
+        final boolean firstInParagraph;
+        final boolean alternateRow;
 
-        Line(StaticLayout layout, int line, float top, float height) {
+        Line(StaticLayout layout, int line, float top, float height, MonthlyReport.Style style,
+             boolean firstInParagraph, boolean alternateRow) {
             this.layout = layout;
             this.line = line;
             this.top = top;
             this.height = height;
+            this.style = style;
+            this.firstInParagraph = firstInParagraph;
+            this.alternateRow = alternateRow;
         }
     }
 
@@ -94,25 +113,37 @@ final class MonthlyPrintLayout {
             int height = content.height();
             canvas.clipRect(0, 0, width, height);
 
-            TextPaint brand = paint(10, true, Color.BLACK);
-            TextPaint small = paint(9, false, 0xff444444);
-            canvas.drawText("TOXIFLOW", 0, 12, brand);
-            canvas.drawText(period, width - small.measureText(period), 12, small);
             Paint rule = new Paint(Paint.ANTI_ALIAS_FLAG);
-            rule.setColor(0xff999999);
-            rule.setStrokeWidth(.5f);
-            canvas.drawLine(0, 23, width, 23, rule);
+            rule.setColor(BORDER);
+            rule.setStrokeWidth(.8f);
+            Paint block = new Paint(Paint.ANTI_ALIAS_FLAG);
+            block.setColor(NAVY);
+            canvas.drawRoundRect(new RectF(0, 3, 30, 33), 7, 7, block);
+            canvas.drawText("TF", 6, 23, paint(12, true, Color.WHITE));
+            canvas.drawText("TOXIFLOW", 39, 15, paint(10, true, NAVY));
+            canvas.drawText(language.text("LAPORAN KEUANGAN PRIBADI", "PERSONAL FINANCE REPORT"),
+                    39, 29, paint(6.5f, true, MUTED));
+            TextPaint periodPaint = paint(10, true, INK);
+            canvas.drawText(period, width - periodPaint.measureText(period), 22, periodPaint);
+            canvas.drawLine(0, 41, width, 41, rule);
+            block.setColor(TEAL);
+            canvas.drawRoundRect(new RectF(0, 40, width, 42), 1, 1, block);
 
             if (!isPhotoPage(pageIndex)) {
                 for (Line line : pages.get(pageIndex)) {
                     cancellation.throwIfCanceled();
                     float y = HEADER_HEIGHT + line.top;
-                    int lineSave = canvas.save();
-                    // Drawing a clipped line preserves text shaping, wrapping and RTL.
-                    canvas.clipRect(0, y, width, y + line.height);
-                    canvas.translate(0, y - line.layout.getLineTop(line.line));
-                    line.layout.draw(canvas);
-                    canvas.restoreToCount(lineSave);
+                    if (line.style == MonthlyReport.Style.SECTION && line.firstInParagraph) {
+                        drawSection(canvas, line, y, width);
+                    } else if (isMetric(line.style) && line.layout.getLineCount() == 1) {
+                        drawMetric(canvas, line, y, width);
+                    } else if (line.style == MonthlyReport.Style.CATEGORY && line.layout.getLineCount() == 1) {
+                        drawCategory(canvas, line, y, width);
+                    } else if (line.style == MonthlyReport.Style.TRANSACTION_HEADER) {
+                        drawTransactionHeader(canvas, line, y, width);
+                    } else {
+                        drawTextLine(canvas, line, y, width);
+                    }
                 }
             } else {
                 PhotoPage attachment = photoPage(pageIndex);
@@ -134,12 +165,121 @@ final class MonthlyPrintLayout {
                 canvas.drawBitmap(photo, null, target, imagePaint);
             }
 
-            canvas.drawLine(0, height - 20, width, height - 20, rule);
+            canvas.drawLine(0, height - 23, width, height - 23, rule);
+            TextPaint footer = paint(7.5f, false, MUTED);
             String pageNumber = language.text("Halaman ", "Page ") + (pageIndex + 1) + " / " + pageCount();
-            canvas.drawText(language.text("Dokumen pribadi", "Private document"), 0, height - 6, small);
-            canvas.drawText(pageNumber, width - small.measureText(pageNumber), height - 6, small);
+            canvas.drawText(language.text("ToxiFlow · Dokumen pribadi", "ToxiFlow · Private report"), 0, height - 8, footer);
+            canvas.drawText(pageNumber, width - footer.measureText(pageNumber), height - 8, footer);
             canvas.restoreToCount(save);
         }
+    }
+
+    private static float rowHeight(MonthlyReport.Style style, float textHeight) {
+        switch (style) {
+            case SECTION: return Math.max(textHeight, SECTION_ROW_HEIGHT);
+            case METRIC_INCOME:
+            case METRIC_EXPENSE:
+            case METRIC_BALANCE: return Math.max(textHeight, METRIC_ROW_HEIGHT);
+            case CATEGORY: return Math.max(textHeight, CATEGORY_ROW_HEIGHT);
+            case TRANSACTION_HEADER: return Math.max(textHeight, TRANSACTION_ROW_HEIGHT);
+            default: return textHeight;
+        }
+    }
+
+    private static boolean isMetric(MonthlyReport.Style style) {
+        return style == MonthlyReport.Style.METRIC_INCOME || style == MonthlyReport.Style.METRIC_EXPENSE
+                || style == MonthlyReport.Style.METRIC_BALANCE;
+    }
+
+    private static void drawTextLine(Canvas canvas, Line line, float y, int width) {
+        float top = y;
+        if (line.style == MonthlyReport.Style.TITLE) top += 1;
+        int save = canvas.save();
+        canvas.clipRect(0, top, width, y + line.height);
+        canvas.translate(0, top - line.layout.getLineTop(line.line));
+        line.layout.draw(canvas);
+        canvas.restoreToCount(save);
+    }
+
+    private static void drawSection(Canvas canvas, Line line, float y, int width) {
+        Paint background = new Paint(Paint.ANTI_ALIAS_FLAG);
+        background.setColor(PALE_BLUE);
+        canvas.drawRoundRect(new RectF(0, y + 2, width, y + line.height - 1), 5, 5, background);
+        background.setColor(TEAL);
+        canvas.drawRoundRect(new RectF(0, y + 5, 3, y + line.height - 4), 1.5f, 1.5f, background);
+        int save = canvas.save();
+        canvas.clipRect(8, y, width - 4, y + line.height);
+        float textHeight = line.layout.getLineBottom(line.line) - line.layout.getLineTop(line.line);
+        canvas.translate(8, y + (line.height - textHeight) / 2f - line.layout.getLineTop(line.line));
+        line.layout.draw(canvas);
+        canvas.restoreToCount(save);
+    }
+
+    private static void drawMetric(Canvas canvas, Line line, float y, int width) {
+        String text = line.layout.getText().toString();
+        int split = text.indexOf(": ");
+        if (split < 0) { drawTextLine(canvas, line, y, width); return; }
+        boolean balance = line.style == MonthlyReport.Style.METRIC_BALANCE;
+        int bg = line.style == MonthlyReport.Style.METRIC_INCOME ? PALE_GREEN
+                : line.style == MonthlyReport.Style.METRIC_EXPENSE ? PALE_RED : NAVY;
+        int fg = balance ? Color.WHITE : INK;
+        Paint background = new Paint(Paint.ANTI_ALIAS_FLAG);
+        background.setColor(bg);
+        RectF rect = new RectF(0, y + 2, width, y + line.height - 1);
+        canvas.drawRoundRect(rect, 6, 6, background);
+        if (!balance) {
+            background.setStyle(Paint.Style.STROKE);
+            background.setStrokeWidth(.7f);
+            background.setColor(BORDER);
+            canvas.drawRoundRect(rect, 6, 6, background);
+        }
+        TextPaint label = paint(9.5f, true, balance ? 0xffdce9ef : MUTED);
+        TextPaint amount = paint(balance ? 13 : 11, true, fg);
+        String left = text.substring(0, split);
+        String right = text.substring(split + 2);
+        float baseline = centeredBaseline(y + 2, line.height - 3, amount);
+        canvas.drawText(left, 12, baseline, label);
+        float valueWidth = amount.measureText(right);
+        if (valueWidth + label.measureText(left) + 30 > width) amount.setTextSize(9.5f);
+        canvas.drawText(right, width - 12 - amount.measureText(right), baseline, amount);
+    }
+
+    private static void drawCategory(Canvas canvas, Line line, float y, int width) {
+        String text = line.layout.getText().toString();
+        int split = text.indexOf(": ");
+        if (split < 0) { drawTextLine(canvas, line, y, width); return; }
+        Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
+        if (line.alternateRow) {
+            fill.setColor(0xfff5f8fa);
+            canvas.drawRect(0, y, width, y + line.height, fill);
+        }
+        TextPaint label = paint(9.5f, false, INK);
+        TextPaint value = paint(9.5f, true, INK);
+        float baseline = centeredBaseline(y, line.height, value);
+        canvas.drawText(text.substring(0, split), 10, baseline, label);
+        canvas.drawText(text.substring(split + 2), width - 10 - value.measureText(text.substring(split + 2)), baseline, value);
+        fill.setColor(BORDER);
+        fill.setStrokeWidth(.45f);
+        canvas.drawLine(8, y + line.height, width - 8, y + line.height, fill);
+    }
+
+    private static void drawTransactionHeader(Canvas canvas, Line line, float y, int width) {
+        Paint background = new Paint(Paint.ANTI_ALIAS_FLAG);
+        background.setColor(PALE_BLUE);
+        canvas.drawRoundRect(new RectF(0, y + 1, width, y + line.height), 4, 4, background);
+        background.setColor(TEAL);
+        canvas.drawRoundRect(new RectF(0, y + 4, 3, y + line.height - 3), 1.5f, 1.5f, background);
+        int save = canvas.save();
+        canvas.clipRect(10, y, width - 5, y + line.height);
+        float textHeight = line.layout.getLineBottom(line.line) - line.layout.getLineTop(line.line);
+        canvas.translate(10, y + (line.height - textHeight) / 2f - line.layout.getLineTop(line.line));
+        line.layout.draw(canvas);
+        canvas.restoreToCount(save);
+    }
+
+    private static float centeredBaseline(float top, float height, TextPaint paint) {
+        Paint.FontMetrics metrics = paint.getFontMetrics();
+        return top + (height - metrics.descent - metrics.ascent) / 2f;
     }
 
     static Plan create(Context context, PrintAttributes attributes, MonthlyReport report,
@@ -166,20 +306,24 @@ final class MonthlyPrintLayout {
         PrintPagination.Cursor cursor = new PrintPagination.Cursor(availableHeight, MAX_PAGES);
         List<List<Line>> pages = new ArrayList<>();
         EnumMap<MonthlyReport.Style, TextPaint> paints = paints();
+        int categoryRow = 0;
 
         for (MonthlyReport.Paragraph paragraph : report.paragraphs(includePhotos)) {
             cancellation.throwIfCanceled();
             StaticLayout layout = textLayout(paragraph.text, paints.get(paragraph.style), content.width());
             if (layout.getLineCount() == 0) continue;
-            float firstHeight = layout.getLineBottom(0) - layout.getLineTop(0);
+            float firstHeight = rowHeight(paragraph.style,
+                    layout.getLineBottom(0) - layout.getLineTop(0));
             cursor.gap(paragraph.spaceBefore);
             cursor.ensure(firstHeight * (paragraph.keepWithNext ? 2 : 1));
             for (int i = 0; i < layout.getLineCount(); i++) {
                 cancellation.throwIfCanceled();
-                float height = layout.getLineBottom(i) - layout.getLineTop(i);
+                float textHeight = layout.getLineBottom(i) - layout.getLineTop(i);
+                float height = rowHeight(paragraph.style, textHeight);
                 PrintPagination.Position pos = cursor.place(height);
                 while (pages.size() <= pos.page) pages.add(new ArrayList<>());
-                pages.get(pos.page).add(new Line(layout, i, pos.top, height));
+                boolean alternate = paragraph.style == MonthlyReport.Style.CATEGORY && (categoryRow++ % 2 == 0);
+                pages.get(pos.page).add(new Line(layout, i, pos.top, height, paragraph.style, i == 0, alternate));
             }
         }
         List<PhotoPage> photos = new ArrayList<>();
@@ -295,12 +439,18 @@ final class MonthlyPrintLayout {
 
     private static EnumMap<MonthlyReport.Style, TextPaint> paints() {
         EnumMap<MonthlyReport.Style, TextPaint> result = new EnumMap<>(MonthlyReport.Style.class);
-        result.put(MonthlyReport.Style.TITLE, paint(19, true, Color.BLACK));
-        result.put(MonthlyReport.Style.SUBTITLE, paint(11, false, 0xff333333));
-        result.put(MonthlyReport.Style.SECTION, paint(12, true, Color.BLACK));
-        result.put(MonthlyReport.Style.STRONG, paint(10, true, Color.BLACK));
-        result.put(MonthlyReport.Style.BODY, paint(10, false, Color.BLACK));
-        result.put(MonthlyReport.Style.CAPTION, paint(9, false, 0xff444444));
+        result.put(MonthlyReport.Style.TITLE, paint(22, true, NAVY));
+        result.put(MonthlyReport.Style.SUBTITLE, paint(11, false, MUTED));
+        result.put(MonthlyReport.Style.SECTION, paint(11, true, NAVY));
+        result.put(MonthlyReport.Style.METRIC_INCOME, paint(10, true, INK));
+        result.put(MonthlyReport.Style.METRIC_EXPENSE, paint(10, true, INK));
+        result.put(MonthlyReport.Style.METRIC_BALANCE, paint(12, true, Color.WHITE));
+        result.put(MonthlyReport.Style.META, paint(9, false, MUTED));
+        result.put(MonthlyReport.Style.CATEGORY, paint(9.5f, false, INK));
+        result.put(MonthlyReport.Style.TRANSACTION_HEADER, paint(10, true, NAVY));
+        result.put(MonthlyReport.Style.STRONG, paint(10, true, NAVY));
+        result.put(MonthlyReport.Style.BODY, paint(9.5f, false, INK));
+        result.put(MonthlyReport.Style.CAPTION, paint(8.5f, false, MUTED));
         return result;
     }
 

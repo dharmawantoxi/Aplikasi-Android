@@ -7,7 +7,10 @@ import java.util.List;
 
 /** Immutable snapshot and printable content for exactly one calendar month. */
 final class MonthlyReport {
-    enum Style { TITLE, SUBTITLE, SECTION, STRONG, BODY, CAPTION }
+    enum Style {
+        TITLE, SUBTITLE, SECTION, METRIC_INCOME, METRIC_EXPENSE, METRIC_BALANCE,
+        META, CATEGORY, TRANSACTION_HEADER, STRONG, BODY, CAPTION
+    }
 
     static final class Paragraph {
         final String text;
@@ -79,10 +82,10 @@ final class MonthlyReport {
         add(lines, tr("Laporan bulanan", "Monthly report"), Style.TITLE, 0, true);
         add(lines, tr("Periode: ", "Period: ") + period(), Style.SUBTITLE, 2, false);
         add(lines, tr("Ringkasan periode", "Period summary"), Style.SECTION, 16, true);
-        add(lines, tr("Pemasukan: ", "Income: ") + Money.format(summary.income), Style.BODY, 3, false);
-        add(lines, tr("Pengeluaran: ", "Expenses: ") + Money.format(summary.expense), Style.BODY, 2, false);
-        add(lines, tr("Selisih periode: ", "Period balance: ") + Money.format(summary.balance), Style.STRONG, 2, false);
-        add(lines, tr("Jumlah transaksi: ", "Number of transactions: ") + transactions.size(), Style.BODY, 2, false);
+        add(lines, tr("Pemasukan", "Income") + ": " + Money.format(summary.income), Style.METRIC_INCOME, 3, false);
+        add(lines, tr("Pengeluaran", "Expenses") + ": " + Money.format(summary.expense), Style.METRIC_EXPENSE, 2, false);
+        add(lines, tr("Selisih periode", "Period balance") + ": " + Money.format(summary.balance), Style.METRIC_BALANCE, 2, false);
+        add(lines, tr("Jumlah transaksi", "Transactions") + ": " + transactions.size(), Style.META, 3, false);
         add(lines, tr("Selisih hanya menghitung bulan ini, tanpa saldo awal atau transaksi bulan lain.", "The period balance includes only this month, without an opening balance or transactions from other months."),
                 Style.CAPTION, 4, false);
 
@@ -91,7 +94,7 @@ final class MonthlyReport {
             add(lines, tr("Belum ada pengeluaran pada periode ini.", "No expenses in this period."), Style.CAPTION, 3, false);
         } else {
             for (FinanceMath.CategoryTotal category : categories)
-                add(lines, Categories.label(category.category, language) + ": " + Money.format(category.amount), Style.BODY, 3, false);
+                add(lines, Categories.label(category.category, language) + ": " + Money.format(category.amount), Style.CATEGORY, 2, false);
         }
 
         add(lines, tr("Sorotan bulanan", "Monthly insights"), Style.SECTION, 16, true);
@@ -153,7 +156,7 @@ final class MonthlyReport {
             for (Transaction t : transactions) {
                 boolean income = Transaction.INCOME.equals(t.type);
                 add(lines, Dates.display(t.date, language) + " · " + (income ? tr("Pemasukan", "Income") : tr("Pengeluaran", "Expense")),
-                        Style.STRONG, 10, true);
+                        Style.TRANSACTION_HEADER, 9, true);
                 add(lines, tr("Nama: ", "Name: ") + t.title, Style.BODY, 2, false);
                 add(lines, tr("Kategori: ", "Category: ") + Categories.label(t.category, language), Style.BODY, 1, false);
                 add(lines, tr("Nominal: ", "Amount: ") + Money.signed(t.amount, income), Style.BODY, 1, false);
