@@ -38,9 +38,11 @@ Buka folder `ToxiFlow/` di Android Studio dengan JDK 17, Android SDK Platform 35
 
 ```bash
 cd ToxiFlow
-./gradlew testDebugUnitTest assembleDebug
-# Windows: gradlew.bat testDebugUnitTest assembleDebug
+./gradlew testDebugUnitTest assembleDebug assembleDebugAndroidTest
+# Windows: gradlew.bat testDebugUnitTest assembleDebug assembleDebugAndroidTest
 ```
+
+Perintah tersebut juga mengompilasi APK tes Android (`assembleDebugAndroidTest`), tanpa menjalankan emulator.
 
 APK debug ada di `app/build/outputs/apk/debug/app-debug.apk`. APK debug dapat di-debug dan hanya cocok untuk pengujian, bukan distribusi produksi atau data keuangan sensitif. Kunci debug berbeda antar lingkungan; APK yang ditandatangani dengan kunci berbeda tidak dapat memperbarui instalasi lama. Menghapus instalasi lama juga menghapus data lokalnya.
 
