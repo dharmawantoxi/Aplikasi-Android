@@ -1,0 +1,381 @@
+package com.dharmawantoxi.rapiuang;
+
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.DatePickerDialog;
+import android.content.Intent;
+import android.graphics.Color;
+import android.os.Bundle;
+import android.text.InputFilter;
+import android.text.InputType;
+import android.text.method.TextKeyListener;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
+import android.widget.ArrayAdapter;
+import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.Spinner;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import java.util.Arrays;
+import java.util.Calendar;
+
+public final class TransactionFormActivity extends Activity {
+    private FinanceStore store;
+    private long transactionId;
+    private Transaction original;
+    private String type = Transaction.EXPENSE;
+    private String selectedDate;
+    private String initialDate;
+    private EditText amountInput, titleInput, noteInput;
+    private Spinner categoryInput;
+    private TextView dateText, expenseTab, incomeTab, saveButton;
+
+    @Override protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        store = new FinanceStore(this);
+        transactionId = getIntent().getLongExtra("transaction_id", 0);
+        if (transactionId > 0) {
+            try { original = store.get(transactionId); }
+            catch (RuntimeException e) {
+                showFatalError("Data transaksi belum bisa dibuka. Coba lagi.");
+                return;
+            }
+            if (original == null) {
+                showFatalError("Transaksi tidak ditemukan atau sudah dihapus.");
+                return;
+            }
+        }
+        String requestedDate = getIntent().getStringExtra("default_date");
+        initialDate = original == null ? (Dates.isValid(requestedDate) ? requestedDate : Dates.today()) : original.date;
+        if (savedInstanceState != null) initialDate = savedInstanceState.getString("initial_date", initialDate);
+        type = original == null ? Transaction.EXPENSE : original.type;
+        selectedDate = initialDate;
+        String initialAmount = original == null ? "" : Long.toString(original.amount);
+        String initialTitle = original == null ? "" : original.title;
+        String initialNote = original == null ? "" : original.note;
+        String initialCategory = original == null ? Categories.forType(type)[0] : original.category;
+        if (savedInstanceState != null) {
+            type = savedInstanceState.getString("type", type);
+            selectedDate = savedInstanceState.getString("date", selectedDate);
+            initialAmount = savedInstanceState.getString("amount", initialAmount);
+            initialTitle = savedInstanceState.getString("title", initialTitle);
+            initialNote = savedInstanceState.getString("note", initialNote);
+            initialCategory = savedInstanceState.getString("category", initialCategory);
+        }
+        buildForm(initialAmount, initialTitle, initialCategory, initialNote);
+    }
+
+    private void showFatalError(String message) {
+        new AlertDialog.Builder(this).setTitle("Tidak dapat membuka transaksi")
+                .setMessage(message).setPositiveButton("Tutup", (d, w) -> finish())
+                .setOnCancelListener(d -> finish()).show();
+    }
+
+    private void buildForm(String amount, String title, String category, String note) {
+        LinearLayout root = Ui.column(this);
+        root.setBackgroundColor(Ui.BG);
+        Ui.setupWindow(this, root);
+        setContentView(root);
+
+        LinearLayout header = Ui.row(this);
+        Ui.pad(header, 18, 13, 22, 12);
+        FrameLayout back = Ui.iconBox(this, "back", Ui.GREEN, Ui.WHITE, 48, 20, 14);
+        back.setContentDescription("Kembali");
+        Ui.clickable(back, Ui.outlined(this, Ui.WHITE, Ui.LINE, 14), v -> onBackPressed());
+        header.addView(back);
+        LinearLayout headerText = Ui.column(this);
+        LinearLayout.LayoutParams headerParams = Ui.weighted(0, -2, 1);
+        headerParams.leftMargin = Ui.dp(this, 14);
+        headerText.addView(Ui.text(this, original == null ? "Catat transaksi" : "Ubah transaksi", 17, Ui.INK, true));
+        headerText.addView(Ui.text(this, "SATU LANGKAH LEBIH RAPI", 9, Ui.MUTED, true));
+        header.addView(headerText, headerParams);
+        root.addView(header);
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.setFillViewport(false);
+        LinearLayout content = Ui.column(this);
+        Ui.pad(content, 22, 10, 22, 24);
+        scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
+        root.addView(scroll, Ui.weighted(-1, 0, 1));
+
+        content.addView(Ui.display(this, original == null ? "Buat catatan baru." : "Perbarui catatan.", 26));
+        content.addView(Ui.gap(this, 4));
+        content.addView(Ui.text(this, "Setiap transaksi kecil berarti.", 13, Ui.MUTED, false));
+        content.addView(Ui.gap(this, 19));
+        LinearLayout tabs = Ui.row(this);
+        tabs.setBackground(Ui.shape(this, 0xffe9eee7, 16));
+        Ui.pad(tabs, 4, 4, 4, 4);
+        expenseTab = typeTab("Pengeluaran");
+        incomeTab = typeTab("Pemasukan");
+        tabs.addView(expenseTab, Ui.weighted(0, Ui.dp(this, 42), 1));
+        tabs.addView(incomeTab, Ui.weighted(0, Ui.dp(this, 42), 1));
+        expenseTab.setOnClickListener(v -> changeType(Transaction.EXPENSE));
+        incomeTab.setOnClickListener(v -> changeType(Transaction.INCOME));
+        content.addView(tabs);
+        content.addView(Ui.gap(this, 21));
+
+        content.addView(fieldLabel("NOMINAL TRANSAKSI", false));
+        content.addView(Ui.gap(this, 7));
+        LinearLayout amountBox = Ui.row(this);
+        amountBox.setBackground(Ui.outlined(this, Ui.PALE, 0xffdbe9d9, 18));
+        Ui.pad(amountBox, 17, 5, 17, 5);
+        amountBox.addView(Ui.text(this, "Rp", 24, Ui.GREEN, true));
+        amountInput = new EditText(this);
+        amountInput.setTextSize(27);
+        amountInput.setTextColor(Ui.INK);
+        amountInput.setHintTextColor(0xffa7b9a9);
+        amountInput.setHint("0");
+        amountInput.setContentDescription("Nominal transaksi dalam rupiah");
+        amountInput.setSingleLine(true);
+        amountInput.setBackgroundColor(Color.TRANSPARENT);
+        // Show a numeric keyboard but keep pasted punctuation visible so validation can reject it.
+        // Do not truncate at 12 digits: that could silently turn a pasted amount into a different one.
+        amountInput.setKeyListener(TextKeyListener.getInstance());
+        amountInput.setRawInputType(InputType.TYPE_CLASS_NUMBER);
+        amountInput.setFilters(new InputFilter[]{new InputFilter.LengthFilter(100)});
+        amountInput.setImeOptions(EditorInfo.IME_ACTION_NEXT);
+        amountInput.setPadding(Ui.dp(this, 10), 0, 0, 0);
+        amountInput.setText(amount);
+        amountBox.addView(amountInput, Ui.weighted(0, Ui.dp(this, 55), 1));
+        content.addView(amountBox);
+        content.addView(Ui.gap(this, 5));
+        content.addView(Ui.text(this, "Rupiah penuh, maksimal 12 digit, tanpa titik atau koma.", 11, Ui.MUTED, false));
+        content.addView(Ui.gap(this, 19));
+
+        content.addView(fieldLabel("NAMA TRANSAKSI", false));
+        content.addView(Ui.gap(this, 7));
+        titleInput = input("Contoh: Makan siang", true, 80);
+        titleInput.setContentDescription("Nama transaksi");
+        titleInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        titleInput.setImeOptions(EditorInfo.IME_ACTION_NEXT);
+        titleInput.setText(title);
+        content.addView(inputBox(titleInput, 49));
+        content.addView(Ui.gap(this, 17));
+
+        content.addView(fieldLabel("KATEGORI", false));
+        content.addView(Ui.gap(this, 7));
+        LinearLayout categoryBox = Ui.row(this);
+        categoryBox.setBackground(Ui.outlined(this, Ui.WHITE, Ui.LINE, 15));
+        Ui.pad(categoryBox, 15, 0, 14, 0);
+        categoryInput = new Spinner(this);
+        categoryInput.setBackgroundColor(Color.TRANSPARENT);
+        categoryInput.setContentDescription("Kategori transaksi");
+        categoryBox.addView(categoryInput, Ui.weighted(0, Ui.dp(this, 49), 1));
+        categoryBox.addView(new IconView(this, "down", Ui.GREEN), Ui.lp(Ui.dp(this, 18), Ui.dp(this, 18)));
+        categoryBox.setOnClickListener(v -> categoryInput.performClick());
+        content.addView(categoryBox);
+        content.addView(Ui.gap(this, 17));
+
+        content.addView(fieldLabel("TANGGAL", false));
+        content.addView(Ui.gap(this, 7));
+        LinearLayout dateBox = Ui.row(this);
+        Ui.pad(dateBox, 15, 0, 15, 0);
+        Ui.clickable(dateBox, Ui.outlined(this, Ui.WHITE, Ui.LINE, 15), v -> chooseDate());
+        dateBox.setMinimumHeight(Ui.dp(this, 49));
+        dateBox.addView(new IconView(this, "calendar", Ui.GREEN), Ui.lp(Ui.dp(this, 20), Ui.dp(this, 20)));
+        dateText = Ui.text(this, Dates.display(selectedDate), 14, Ui.INK, true);
+        LinearLayout.LayoutParams dateParams = Ui.weighted(0, -2, 1);
+        dateParams.leftMargin = Ui.dp(this, 11);
+        dateBox.addView(dateText, dateParams);
+        dateBox.addView(new IconView(this, "down", Ui.GREEN), Ui.lp(Ui.dp(this, 18), Ui.dp(this, 18)));
+        dateBox.setContentDescription("Pilih tanggal, " + Dates.display(selectedDate));
+        dateText.setTag(dateBox);
+        content.addView(dateBox);
+        content.addView(Ui.gap(this, 17));
+
+        content.addView(fieldLabel("CATATAN", true));
+        content.addView(Ui.gap(this, 7));
+        noteInput = input("Tambahkan catatan jika perlu", false, 300);
+        noteInput.setContentDescription("Catatan tambahan, opsional");
+        noteInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        noteInput.setGravity(Gravity.TOP | Gravity.START);
+        noteInput.setText(note);
+        LinearLayout noteBox = Ui.column(this);
+        noteBox.setBackground(Ui.outlined(this, Ui.WHITE, Ui.LINE, 15));
+        Ui.pad(noteBox, 15, 12, 15, 12);
+        noteBox.addView(noteInput, Ui.lp(-1, Ui.dp(this, 62)));
+        content.addView(noteBox);
+        content.addView(Ui.gap(this, 10));
+        content.addView(Ui.text(this, "Data hanya tersimpan di perangkat ini.", 11, Ui.MUTED, false));
+
+        LinearLayout footer = Ui.column(this);
+        footer.setBackgroundColor(Ui.WHITE);
+        Ui.pad(footer, 22, 12, 22, 14);
+        saveButton = Ui.text(this, "Simpan transaksi", 15, Ui.WHITE, true);
+        saveButton.setGravity(Gravity.CENTER);
+        Ui.clickable(saveButton, Ui.shape(this, Ui.GREEN, 16), v -> save());
+        footer.addView(saveButton, Ui.lp(-1, Ui.dp(this, 52)));
+        root.addView(footer);
+
+        updateTabs();
+        setCategories(category);
+    }
+
+    private TextView typeTab(String label) {
+        TextView tab = Ui.text(this, label, 13, Ui.INK, true);
+        tab.setGravity(Gravity.CENTER);
+        tab.setFocusable(true);
+        return tab;
+    }
+
+    private View fieldLabel(String title, boolean optional) {
+        LinearLayout label = Ui.row(this);
+        label.addView(Ui.overline(this, title, Ui.INK), Ui.weighted(0, -2, 1));
+        if (optional) label.addView(Ui.text(this, "Opsional", 11, Ui.MUTED, false));
+        return label;
+    }
+
+    private EditText input(String hint, boolean singleLine, int maxLength) {
+        EditText input = new EditText(this);
+        input.setTextSize(14);
+        input.setTextColor(Ui.INK);
+        input.setHintTextColor(0xffa0ada2);
+        input.setHint(hint);
+        input.setSingleLine(singleLine);
+        input.setBackgroundColor(Color.TRANSPARENT);
+        input.setPadding(0, 0, 0, 0);
+        input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(maxLength)});
+        return input;
+    }
+
+    private View inputBox(EditText input, int height) {
+        LinearLayout box = Ui.row(this);
+        box.setBackground(Ui.outlined(this, Ui.WHITE, Ui.LINE, 15));
+        Ui.pad(box, 15, 0, 15, 0);
+        box.addView(input, Ui.weighted(0, Ui.dp(this, height), 1));
+        return box;
+    }
+
+    private void updateTabs() {
+        boolean expense = Transaction.EXPENSE.equals(type);
+        expenseTab.setTextColor(expense ? Ui.WHITE : Ui.MUTED);
+        expenseTab.setBackground(Ui.shape(this, expense ? Ui.GREEN : 0x00000000, 13));
+        expenseTab.setContentDescription("Pengeluaran" + (expense ? ", dipilih" : ""));
+        incomeTab.setTextColor(expense ? Ui.MUTED : Ui.WHITE);
+        incomeTab.setBackground(Ui.shape(this, expense ? 0x00000000 : Ui.GREEN, 13));
+        incomeTab.setContentDescription("Pemasukan" + (!expense ? ", dipilih" : ""));
+        if (titleInput != null) titleInput.setHint(expense ? "Contoh: Makan siang" : "Contoh: Gaji bulanan");
+    }
+
+    private void changeType(String newType) {
+        if (type.equals(newType)) return;
+        String oldCategory = categoryInput.getSelectedItem() == null ? "" : categoryInput.getSelectedItem().toString();
+        type = newType;
+        updateTabs();
+        setCategories(Categories.validForType(type, oldCategory) ? oldCategory : Categories.forType(type)[0]);
+    }
+
+    private void setCategories(String selected) {
+        String[] categories = Categories.forType(type);
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, categories) {
+            @Override public View getView(int position, View convertView, ViewGroup parent) {
+                TextView text = Ui.text(TransactionFormActivity.this, getItem(position), 14, Ui.INK, true);
+                text.setGravity(Gravity.CENTER_VERTICAL);
+                return text;
+            }
+            @Override public View getDropDownView(int position, View convertView, ViewGroup parent) {
+                TextView text = Ui.text(TransactionFormActivity.this, getItem(position), 15, Ui.INK, false);
+                Ui.pad(text, 18, 13, 18, 13);
+                return text;
+            }
+        };
+        categoryInput.setAdapter(adapter);
+        int index = Arrays.asList(categories).indexOf(selected);
+        categoryInput.setSelection(index < 0 ? 0 : index);
+    }
+
+    private String selectedCategory() {
+        return categoryInput == null || categoryInput.getSelectedItem() == null ? "" : categoryInput.getSelectedItem().toString();
+    }
+
+    private void chooseDate() {
+        Calendar selected = Dates.calendarFor(selectedDate);
+        DatePickerDialog dialog = new DatePickerDialog(this, (view, year, month, day) -> {
+            selectedDate = Dates.iso(year, month, day);
+            dateText.setText(Dates.display(selectedDate));
+            View parent = (View) dateText.getTag();
+            parent.setContentDescription("Pilih tanggal, " + Dates.display(selectedDate));
+        }, selected.get(Calendar.YEAR), selected.get(Calendar.MONTH), selected.get(Calendar.DAY_OF_MONTH));
+        dialog.setTitle("Pilih tanggal transaksi");
+        dialog.getDatePicker().setMinDate(Dates.calendarFor("1900-01-01").getTimeInMillis());
+        dialog.getDatePicker().setMaxDate(Dates.calendarFor("2100-12-31").getTimeInMillis());
+        dialog.show();
+    }
+
+    private void save() {
+        String rawAmount = amountInput.getText().toString();
+        String title = titleInput.getText().toString();
+        String note = noteInput.getText().toString();
+        String category = selectedCategory();
+        FinanceMath.ValidationError error = FinanceMath.validate(type, rawAmount, title, category, selectedDate, note);
+        if (error != null) {
+            if ("amount".equals(error.field)) { amountInput.setError(error.message); amountInput.requestFocus(); }
+            else if ("title".equals(error.field)) { titleInput.setError(error.message); titleInput.requestFocus(); }
+            else if ("note".equals(error.field)) { noteInput.setError(error.message); noteInput.requestFocus(); }
+            else Toast.makeText(this, error.message, Toast.LENGTH_LONG).show();
+            return;
+        }
+        saveButton.setEnabled(false);
+        try {
+            Transaction transaction = new Transaction(transactionId, type, Money.parseAmount(rawAmount),
+                    title.trim(), category, selectedDate, note.trim());
+            store.save(transaction);
+            Intent result = new Intent();
+            result.putExtra("saved_date", selectedDate);
+            setResult(RESULT_OK, result);
+            Toast.makeText(this, original == null ? "Transaksi tersimpan" : "Transaksi diperbarui", Toast.LENGTH_SHORT).show();
+            finish();
+        } catch (RuntimeException e) {
+            saveButton.setEnabled(true);
+            new AlertDialog.Builder(this).setTitle("Belum bisa menyimpan")
+                    .setMessage("Transaksi belum tersimpan. Periksa ruang penyimpanan dan coba lagi.")
+                    .setPositiveButton("Tutup", null).show();
+        }
+    }
+
+    @Override protected void onSaveInstanceState(Bundle out) {
+        super.onSaveInstanceState(out);
+        if (amountInput == null) return;
+        out.putString("initial_date", initialDate);
+        out.putString("type", type);
+        out.putString("date", selectedDate);
+        out.putString("amount", amountInput.getText().toString());
+        out.putString("title", titleInput.getText().toString());
+        out.putString("note", noteInput.getText().toString());
+        out.putString("category", selectedCategory());
+    }
+
+    private boolean hasChanges() {
+        if (amountInput == null) return false;
+        String originalAmount = original == null ? "" : Long.toString(original.amount);
+        String originalTitle = original == null ? "" : original.title;
+        String originalNote = original == null ? "" : original.note;
+        String originalType = original == null ? Transaction.EXPENSE : original.type;
+        String originalCategory = original == null ? Categories.forType(originalType)[0] : original.category;
+        return !amountInput.getText().toString().equals(originalAmount)
+                || !titleInput.getText().toString().equals(originalTitle)
+                || !noteInput.getText().toString().equals(originalNote)
+                || !type.equals(originalType) || !selectedDate.equals(initialDate)
+                || !selectedCategory().equals(originalCategory);
+    }
+
+    @Override public void onBackPressed() {
+        if (!hasChanges()) { super.onBackPressed(); return; }
+        new AlertDialog.Builder(this).setTitle("Buang perubahan?")
+                .setMessage("Perubahan yang belum disimpan akan hilang.")
+                .setPositiveButton("Buang", (dialog, which) -> finish())
+                .setNegativeButton("Lanjutkan mengisi", null).show();
+    }
+
+    @Override protected void onDestroy() {
+        if (store != null) store.close();
+        super.onDestroy();
+    }
+}
