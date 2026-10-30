@@ -70,3 +70,5 @@ cd ToxiFlow
 ```
 
 Untuk tes penyimpanan dan migrasi database, pemrosesan dan privasi foto, alur layar, serta pembuatan PDF (termasuk teks panjang, halaman foto, dan rentang halaman) di perangkat/emulator yang terhubung, jalankan `./gradlew connectedDebugAndroidTest`. Tes menggunakan database khusus yang terpisah dari transaksi pengguna; tetap disarankan memakai emulator khusus pengujian. Workflow GitHub Actions **ToxiFlow Android CI** dapat dijalankan secara manual untuk membuat APK debug, menjalankan tes unit, dan menguji alur di emulator; unduh artifact `ToxiFlow-debug-apk` setelah job build berhasil.
+
+Jika tes emulator di workflow gagal dan hasil XML tersedia, nama tes beserta cuplikan kesalahan muncul sebagai anotasi GitHub Actions. Laporan lengkap HTML dan XML tersedia di artifact `ToxiFlow-device-test-report`. Pemeriksaan pembuat anotasi dapat dijalankan tanpa Android SDK melalui `python3 tools/test_device_test_failures.py` dari folder `ToxiFlow`.

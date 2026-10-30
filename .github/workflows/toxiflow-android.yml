@@ -18,6 +18,8 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
+      - name: Test device-test failure reporting
+        run: python3 ToxiFlow/tools/test_device_test_failures.py
       - name: Ensure Android SDK 35
         run: |
           if [ ! -f "$ANDROID_HOME/platforms/android-35/android.jar" ] || [ ! -d "$ANDROID_HOME/build-tools/35.0.0" ]; then
@@ -76,11 +78,16 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: cd ToxiFlow && ./gradlew connectedDebugAndroidTest --no-daemon --stacktrace
+      - name: Summarize failed device tests
+        if: failure()
+        run: python3 ToxiFlow/tools/report-device-test-failures.py
       - name: Upload device test report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ToxiFlow-device-test-report
-          path: ToxiFlow/app/build/reports/androidTests/connected/
+          path: |
+            ToxiFlow/app/build/reports/androidTests/connected/
+            ToxiFlow/app/build/outputs/androidTest-results/connected/
           if-no-files-found: ignore
           retention-days: 30

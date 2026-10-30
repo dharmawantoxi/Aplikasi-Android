@@ -59,31 +59,97 @@ public final class PhotoProcessorTest {
             exif.setAttribute(ExifInterface.TAG_GPS_LATITUDE, "1/1,2/1,3/1");
             exif.setAttribute(ExifInterface.TAG_GPS_LATITUDE_REF, "N");
             exif.saveAttributes();
+            ExifInterface tagged = new ExifInterface(source.getAbsolutePath());
+            assertEquals("Fixture has a rotation", ExifInterface.ORIENTATION_ROTATE_90,
+                    tagged.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_UNDEFINED));
+            assertNotNull("Fixture has a timestamp", tagged.getAttribute(ExifInterface.TAG_DATETIME));
+            assertNotNull("Fixture has GPS data", tagged.getAttribute(ExifInterface.TAG_GPS_LATITUDE));
+            try (InputStream input = new FileInputStream(source); ByteArrayOutputStream originalBytes = new ByteArrayOutputStream()) {
+                byte[] chunk = new byte[8192];
+                int count;
+                while ((count = input.read(chunk)) != -1) originalBytes.write(chunk, 0, count);
+                assertTrue("Fixture contains an EXIF segment", containsExifApp1(originalBytes.toByteArray()));
+            }
             try (InputStream input = new FileInputStream(source)) { draft = PhotoProcessor.createDraft(context, input); }
             byte[] jpeg = PhotoProcessor.readDraft(context, draft);
-            assertTrue(PhotoPolicy.validStoredJpeg(jpeg));
-            assertTrue(jpeg.length <= PhotoPolicy.MAX_STORED_BYTES);
+            assertTrue("Output is a valid bounded JPEG", PhotoPolicy.validStoredJpeg(jpeg));
+            assertTrue("Output fits the storage limit", jpeg.length <= PhotoPolicy.MAX_STORED_BYTES);
+            assertFalse("Re-encoded JPEG must not contain EXIF", containsExifApp1(jpeg));
             Bitmap normalized = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.length);
             assertNotNull(normalized);
             try {
-                assertEquals(800, normalized.getWidth());
-                assertEquals(1600, normalized.getHeight());
+                assertEquals("Rotated width", 800, normalized.getWidth());
+                assertEquals("Rotated height", 1600, normalized.getHeight());
                 int top = normalized.getPixel(normalized.getWidth() / 2, 100);
                 int bottom = normalized.getPixel(normalized.getWidth() / 2, normalized.getHeight() - 100);
-                assertTrue(Color.red(top) > Color.blue(top));
-                assertTrue(Color.blue(bottom) > Color.red(bottom));
+                assertTrue("Red half is at the top after rotation", Color.red(top) > Color.blue(top));
+                assertTrue("Blue half is at the bottom after rotation", Color.blue(bottom) > Color.red(bottom));
             } finally { normalized.recycle(); }
             try (FileOutputStream stream = new FileOutputStream(output)) { stream.write(jpeg); }
             ExifInterface cleaned = new ExifInterface(output.getAbsolutePath());
-            assertNull(cleaned.getAttribute(ExifInterface.TAG_DATETIME));
-            assertNull(cleaned.getAttribute(ExifInterface.TAG_GPS_LATITUDE));
-            assertTrue(cleaned.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
-                    == ExifInterface.ORIENTATION_NORMAL);
+            assertNull("Timestamp removed", cleaned.getAttribute(ExifInterface.TAG_DATETIME));
+            assertNull("GPS removed", cleaned.getAttribute(ExifInterface.TAG_GPS_LATITUDE));
+            // Android's ExifInterface may synthesize UNDEFINED (0) when no orientation tag exists;
+            // some implementations can report NORMAL (1). Neither requests another rotation.
+            int orientation = cleaned.getAttributeInt(ExifInterface.TAG_ORIENTATION,
+                    ExifInterface.ORIENTATION_UNDEFINED);
+            assertTrue("Output must not request another rotation: " + orientation,
+                    orientation == ExifInterface.ORIENTATION_UNDEFINED
+                            || orientation == ExifInterface.ORIENTATION_NORMAL);
         } finally {
             original.recycle();
             PhotoFiles.delete(context, draft, "draft");
             source.delete(); output.delete();
         }
+    }
+
+    @Test public void exifApp1CheckDistinguishesRealSegmentsFromImageBytes() {
+        byte[] exif = {(byte) 0xff, (byte) 0xd8, (byte) 0xff, (byte) 0xe1, 0, 8,
+                'E', 'x', 'i', 'f', 0, 0, (byte) 0xff, (byte) 0xd9};
+        byte[] otherAppSegment = {(byte) 0xff, (byte) 0xd8, (byte) 0xff, (byte) 0xe2, 0, 12,
+                (byte) 0xff, (byte) 0xe1, 0, 8, 'E', 'x', 'i', 'f', 0, 0, (byte) 0xff, (byte) 0xd9};
+        byte[] stuffedScan = {(byte) 0xff, (byte) 0xd8, (byte) 0xff, (byte) 0xda, 0, 2,
+                (byte) 0xff, 0, (byte) 0xe1, 0, 8, 'E', 'x', 'i', 'f', 0, 0, (byte) 0xff, (byte) 0xd9};
+        byte[] exifAfterScan = {(byte) 0xff, (byte) 0xd8, (byte) 0xff, (byte) 0xda, 0, 2, 42,
+                (byte) 0xff, (byte) 0xe1, 0, 8, 'E', 'x', 'i', 'f', 0, 0, (byte) 0xff, (byte) 0xd9};
+        byte[] truncated = {(byte) 0xff, (byte) 0xd8, (byte) 0xff, (byte) 0xe1, 0, 16, (byte) 0xff, (byte) 0xd9};
+        assertTrue("An EXIF APP1 segment must be detected", containsExifApp1(exif));
+        assertFalse("A signature inside another segment is not EXIF", containsExifApp1(otherAppSegment));
+        assertFalse("Stuffed image bytes are not an EXIF segment", containsExifApp1(stuffedScan));
+        assertTrue("EXIF between scans must be detected", containsExifApp1(exifAfterScan));
+        try { containsExifApp1(truncated); fail("A truncated JPEG must not pass the metadata check"); }
+        catch (IllegalArgumentException expected) { }
+    }
+
+    /** Scan JPEG markers, including markers between scans, without mistaking stuffed bytes for EXIF. */
+    static boolean containsExifApp1(byte[] jpeg) {
+        if (jpeg == null || jpeg.length < 4 || (jpeg[0] & 0xff) != 0xff || (jpeg[1] & 0xff) != 0xd8)
+            throw new IllegalArgumentException("Not a JPEG");
+        int pos = 2;
+        boolean inScan = false;
+        while (pos < jpeg.length) {
+            if ((jpeg[pos++] & 0xff) != 0xff) {
+                if (!inScan) throw new IllegalArgumentException("Invalid JPEG marker");
+                continue;
+            }
+            while (pos < jpeg.length && (jpeg[pos] & 0xff) == 0xff) pos++;
+            if (pos >= jpeg.length) throw new IllegalArgumentException("Truncated JPEG marker");
+            int marker = jpeg[pos++] & 0xff;
+            if (marker == 0x00 && inScan) continue; // A literal 0xff in compressed data.
+            if (marker == 0xd9) return false;
+            if (marker == 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
+            if (marker == 0x00 || marker == 0xd8 || pos + 2 > jpeg.length)
+                throw new IllegalArgumentException("Invalid JPEG marker");
+            int length = ((jpeg[pos] & 0xff) << 8) | (jpeg[pos + 1] & 0xff);
+            if (length < 2 || pos + length > jpeg.length) throw new IllegalArgumentException("Truncated JPEG segment");
+            if (marker == 0xe1 && length >= 8
+                    && jpeg[pos + 2] == 'E' && jpeg[pos + 3] == 'x'
+                    && jpeg[pos + 4] == 'i' && jpeg[pos + 5] == 'f'
+                    && jpeg[pos + 6] == 0 && jpeg[pos + 7] == 0) return true;
+            pos += length;
+            if (marker == 0xda) inScan = true;
+        }
+        throw new IllegalArgumentException("JPEG end marker missing");
     }
 
     @Test public void allEightExifOrientationsKeepTheCorrectCorners() throws Exception {
