@@ -18,6 +18,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
@@ -273,6 +274,29 @@ public final class FinanceFlowTest {
             assertTrue(reader.all().isEmpty());
             assertEquals("0", reader.availableFunds().toString());
             assertEquals("50000", reader.savingsBalance().toString());
+            assertEquals("0", FinanceMath.summarize(reader.all()).income.toString());
+        } finally { reader.close(); }
+    }
+
+    @Test public void openingCashBalanceIsAvailableWithoutCountingAsIncome() {
+        try (ActivityScenario<MainActivity> scenario = launchHome()) {
+            onView(withContentDescription("Dana")).perform(click());
+            onView(withText("Catat saldo awal dana tersedia")).perform(scrollTo(), click());
+            onView(withContentDescription("Saldo awal dana tersedia dalam rupiah")).inRoot(isDialog())
+                    .perform(typeText("80000"), closeSoftKeyboard());
+            onView(withText("Simpan")).inRoot(isDialog()).perform(click());
+            onView(withContentDescription("Dana siap pakai Rp80.000")).check(matches(isDisplayed()));
+            onView(withContentDescription("Saldo tabungan Rp0")).check(matches(isDisplayed()));
+            onView(withText("Laporan")).perform(click());
+            onView(withText("DANA TERSEDIA BULAN INI")).perform(scrollTo()).check(matches(isDisplayed()));
+            onView(withText(containsString("Saldo awal dicatat"))).perform(scrollTo()).check(matches(isDisplayed()));
+        }
+        FinanceStore reader = new FinanceStore(context);
+        try {
+            assertTrue(reader.all().isEmpty());
+            assertEquals("80000", reader.availableFunds().toString());
+            assertEquals("0", reader.savingsBalance().toString());
+            assertNotNull(reader.getCashOpeningBalance());
             assertEquals("0", FinanceMath.summarize(reader.all()).income.toString());
         } finally { reader.close(); }
     }

@@ -56,7 +56,7 @@ final class PrintSnapshot implements PhotoPrintSource, AutoCloseable {
             try {
                 cancellation.throwIfCanceled();
                 report = MonthlyReport.forMonth(year, month, reader.all(), reader.allSavingsMovements(),
-                        reader.getSavingsOpeningBalance(), language);
+                        reader.getSavingsOpeningBalance(), reader.getCashOpeningBalance(), language);
                 List<Transaction> attached = report.photoTransactions();
                 if (includePhotos && attached.size() >= MonthlyPrintLayout.MAX_PAGES)
                     throw new PrintPagination.TooManyPagesException(); // At least one page is needed for text.

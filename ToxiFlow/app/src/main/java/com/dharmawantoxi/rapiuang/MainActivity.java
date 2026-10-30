@@ -57,6 +57,7 @@ public final class MainActivity extends Activity {
     private BigInteger availableFunds = BigInteger.ZERO;
     private BigInteger savingsBalance = BigInteger.ZERO;
     private SavingsOpeningBalance openingSavingsBalance;
+    private CashOpeningBalance openingCashBalance;
     private int page = HOME;
     private int year, monthIndex;
     private String filter = "";
@@ -147,6 +148,7 @@ public final class MainActivity extends Activity {
             availableFunds = store.availableFunds();
             savingsBalance = store.savingsBalance();
             openingSavingsBalance = store.getSavingsOpeningBalance();
+            openingCashBalance = store.getCashOpeningBalance();
             loadFailed = false;
         } catch (RuntimeException e) {
             loadFailed = true;
@@ -423,6 +425,44 @@ public final class MainActivity extends Activity {
         dialog.show();
     }
 
+    private void openCashOpeningBalance() {
+        LinearLayout content = Ui.column(this);
+        Ui.pad(content, 24, 5, 24, 8);
+        content.addView(Ui.text(this, tr("Catat uang tunai/dana tersedia yang sudah dimiliki sebelum mulai memakai aplikasi. Jumlah ini bukan pemasukan dan tidak mengurangi tabungan.",
+                "Enter cash/available funds you already had before using the app. This amount is not income and does not reduce savings."),
+                12, Ui.MUTED, false));
+        content.addView(Ui.gap(this, 12));
+        EditText amount = debtTextField(tr("Saldo awal dalam rupiah", "Opening balance in rupiah"),
+                tr("Saldo awal dana tersedia dalam rupiah", "Opening available-funds balance in rupiah"), 20,
+                android.text.InputType.TYPE_CLASS_NUMBER);
+        if (openingCashBalance != null) amount.setText(Long.toString(openingCashBalance.amount));
+        content.addView(amount, Ui.lp(-1, Ui.dp(this, 50)));
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(openingCashBalance == null ? tr("Catat saldo awal dana", "Enter opening cash balance")
+                        : tr("Ubah saldo awal dana", "Edit opening cash balance"))
+                .setView(content).setNegativeButton(tr("Batal", "Cancel"), null)
+                .setPositiveButton(tr("Simpan", "Save"), null).create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            final long value;
+            try { value = Money.parseAmount(amount.getText().toString(), language); }
+            catch (IllegalArgumentException error) { amount.setError(error.getMessage()); amount.requestFocus(); return; }
+            try {
+                store.setCashOpeningBalance(value);
+                dialog.dismiss();
+                Toast.makeText(this, tr("Saldo awal dana tersimpan", "Opening cash balance saved"), Toast.LENGTH_SHORT).show();
+                refresh();
+            } catch (IllegalArgumentException error) {
+                String message = error.getMessage() != null && error.getMessage().startsWith("Saldo awal baru")
+                        ? tr("Saldo awal baru membuat dana tersedia negatif.", "The new opening balance would make available funds negative.")
+                        : tr("Saldo awal harus lebih dari Rp0 dan maksimal Rp999.999.999.999.",
+                                "Opening balance must be greater than Rp0 and no more than Rp999,999,999,999.");
+                amount.setError(message);
+                amount.requestFocus();
+            } catch (RuntimeException error) { showDebtStorageError(); }
+        }));
+        dialog.show();
+    }
+
     private View cashBalanceCard() {
         DecorCard card = new DecorCard(this);
         LinearLayout inside = Ui.column(this);
@@ -434,6 +474,22 @@ public final class MainActivity extends Activity {
         amount.setContentDescription(tr("Dana siap pakai ", "Available funds ") + Money.format(total));
         amount.setTag("cash_balance");
         inside.addView(amount);
+        if (openingCashBalance != null) {
+            inside.addView(Ui.gap(this, 4));
+            inside.addView(Ui.text(this, tr("Saldo awal dicatat pada ", "Starting balance entered on ")
+                    + Dates.display(openingCashBalance.date, language) + " · " + Money.format(openingCashBalance.amount),
+                    10, 0xffbed1c2, false));
+        }
+        inside.addView(Ui.gap(this, 8));
+        TextView openingButton = Ui.text(this, openingCashBalance == null
+                ? tr("Catat saldo awal dana tersedia", "Enter opening available-funds balance")
+                : tr("Ubah saldo awal dana tersedia", "Edit opening available-funds balance"), 12, Ui.WHITE, true);
+        openingButton.setGravity(Gravity.CENTER);
+        openingButton.setMinHeight(Ui.dp(this, 40));
+        Ui.clickable(openingButton, Ui.shape(this, 0xff445c50, 12), v -> openCashOpeningBalance());
+        inside.addView(openingButton);
+        inside.addView(Ui.gap(this, 2));
+        inside.addView(Ui.text(this, tr("Saldo awal ini bukan pemasukan.", "This opening balance is not income."), 10, 0xffbed1c2, false));
         inside.addView(Ui.gap(this, 15));
         FinanceMath.Summary period = FinanceMath.summarize(month);
         LinearLayout flows = Ui.row(this);
@@ -1010,6 +1066,8 @@ public final class MainActivity extends Activity {
         flow.addView(balance);
         content.addView(flow);
         content.addView(Ui.gap(this, 12));
+        content.addView(cashActivityCard());
+        content.addView(Ui.gap(this, 12));
         content.addView(savingsActivityCard());
         FinanceInsights insights = FinanceInsights.forMonth(year, monthIndex, all, language);
         content.addView(Ui.gap(this, 24));
@@ -1063,8 +1121,31 @@ public final class MainActivity extends Activity {
         content.addView(addTransactionCallout());
     }
 
+    private View cashActivityCard() {
+        MonthlyReport report = MonthlyReport.forMonth(year, monthIndex, all, savingsMovements,
+                openingSavingsBalance, openingCashBalance, language);
+        LinearLayout card = Ui.column(this);
+        card.setBackground(Ui.shape(this, Ui.WHITE, 20));
+        Ui.pad(card, 17, 16, 17, 16);
+        card.addView(Ui.overline(this, tr("DANA TERSEDIA BULAN INI", "AVAILABLE FUNDS THIS MONTH"), Ui.GREEN));
+        card.addView(Ui.gap(this, 7));
+        card.addView(reportAmountRow(tr("Saldo awal dana", "Opening available funds"), report.cashOpeningBalance, Ui.MUTED));
+        if (report.cashOpeningEntry.signum() > 0)
+            card.addView(reportAmountRow(tr("Saldo awal dicatat", "Opening balance entered"), report.cashOpeningEntry, Ui.GREEN));
+        card.addView(reportAmountRow(tr("Masuk ke dana tersedia", "Added to available funds"), report.cashAdded, 0xff6ca984));
+        card.addView(reportAmountRow(tr("Keluar dari dana tersedia", "Spent from available funds"), report.cashSpent, 0xffe9ae9b));
+        LinearLayout closing = Ui.row(this);
+        closing.addView(Ui.text(this, tr("Saldo akhir dana", "Closing available funds"), 12, Ui.INK, true), Ui.weighted(0, -2, 1));
+        closing.addView(Ui.text(this, Money.format(report.cashClosingBalance), 13, Ui.GREEN, true));
+        card.addView(Ui.gap(this, 5));
+        card.addView(closing);
+        card.addView(Ui.gap(this, 4));
+        card.addView(Ui.text(this, tr("Tidak termasuk pokok hutang/piutang.", "Excludes debt/receivable principal."), 10, Ui.MUTED, false));
+        return card;
+    }
+
     private View savingsActivityCard() {
-        MonthlyReport report = MonthlyReport.forMonth(year, monthIndex, all, savingsMovements, openingSavingsBalance, language);
+        MonthlyReport report = MonthlyReport.forMonth(year, monthIndex, all, savingsMovements, openingSavingsBalance, openingCashBalance, language);
         LinearLayout card = Ui.column(this);
         card.setBackground(Ui.shape(this, Ui.WHITE, 20));
         Ui.pad(card, 17, 16, 17, 16);
@@ -1227,12 +1308,12 @@ public final class MainActivity extends Activity {
 
     private void confirmMonthlyPrint() {
         // Fix the selected month; a consistent snapshot is captured when printing is prepared.
-        MonthlyReport report = MonthlyReport.forMonth(year, monthIndex, all, savingsMovements, openingSavingsBalance, language);
+        MonthlyReport report = MonthlyReport.forMonth(year, monthIndex, all, savingsMovements, openingSavingsBalance, openingCashBalance, language);
         CheckBox includePhotos = new CheckBox(this);
         includePhotos.setText(tr("Sertakan foto sebagai lampiran", "Include photos as appendices"));
         includePhotos.setChecked(true);
-        String disclosure = tr("Laporan memuat seluruh transaksi, alokasi dan perpindahan tabungan, saldo awal/akhir tabungan, nominal, waktu pembuatan, dan catatan pada periode ini, ",
-                        "The report includes all transactions, savings allocations and transfers, opening/closing savings balances, amounts, creation times, and notes in this period, ")
+        String disclosure = tr("Laporan memuat seluruh transaksi, alokasi dan perpindahan tabungan, saldo awal/akhir dana dan tabungan, nominal, waktu pembuatan, dan catatan pada periode ini, ",
+                        "The report includes all transactions, savings allocations and transfers, opening/closing cash and savings balances, amounts, creation times, and notes in this period, ")
                 + tr("termasuk nominal yang disembunyikan di beranda.\n\n", "including amounts hidden on the home screen.\n\n")
                 + tr("Jika dipilih, foto ikut dicetak atau disimpan sebagai halaman lampiran di PDF. ", "If selected, photos are printed or saved as appendix pages in the PDF. ")
                 + tr("Foto dan data diberikan kepada layanan cetak yang dipilih. CSV tidak memuat gambar.\n\n", "Photos and data are provided to the selected print service. CSV does not include images.\n\n")

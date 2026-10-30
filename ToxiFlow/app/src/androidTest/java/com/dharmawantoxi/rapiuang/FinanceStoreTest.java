@@ -106,7 +106,7 @@ public final class FinanceStoreTest {
             legacy.close();
         }
         store = new FinanceStore(context, TEST_DB, () -> "2026-11-10 11:22:33");
-        assertEquals(7, store.getReadableDatabase().getVersion());
+        assertEquals(8, store.getReadableDatabase().getVersion());
         assertEquals(2, store.all().size());
         Transaction oldExpense = store.get(1);
         assertEquals("Makan", oldExpense.title);
@@ -147,7 +147,7 @@ public final class FinanceStoreTest {
             legacy.setVersion(2);
         } finally { legacy.close(); }
         store = new FinanceStore(context, TEST_DB);
-        assertEquals(7, store.getReadableDatabase().getVersion());
+        assertEquals(8, store.getReadableDatabase().getVersion());
         assertEquals(2, store.all().size());
         assertEquals("2026-10-02 08:12:00", store.get(1).createdAt);
         assertNull(store.get(2).createdAt);
@@ -277,6 +277,37 @@ public final class FinanceStoreTest {
         assertEquals("100000", FinanceMath.summarize(store.all()).income.toString());
     }
 
+    @Test public void openingCashBalanceIsSeparateFromSavingsAndIncomeReports() {
+        String today = Dates.today();
+        store.save(new Transaction(0, Transaction.INCOME, 100000,
+                "Gaji", "Gaji", today, ""));
+        store.setCashOpeningBalance(60000);
+        assertEquals("160000", store.availableFunds().toString());
+        assertEquals("0", store.savingsBalance().toString());
+        assertEquals("100000", FinanceMath.summarize(store.all()).income.toString());
+        CashOpeningBalance opening = store.getCashOpeningBalance();
+        assertNotNull(opening);
+        assertEquals(60000, opening.amount);
+        assertEquals(today, opening.date);
+
+        store.saveSavingsMovement(SavingsMovement.DEPOSIT, 50000, today);
+        assertEquals("110000", store.availableFunds().toString());
+        assertEquals("50000", store.savingsBalance().toString());
+        store.setCashOpeningBalance(70000); // Baseline correction replaces, rather than duplicates, the amount.
+        assertEquals("120000", store.availableFunds().toString());
+        assertEquals("50000", store.savingsBalance().toString());
+        assertEquals(today, store.getCashOpeningBalance().date);
+        assertEquals("100000", FinanceMath.summarize(store.all()).income.toString());
+
+        MonthlyReport report = MonthlyReport.forMonth(Integer.parseInt(today.substring(0, 4)),
+                Integer.parseInt(today.substring(5, 7)) - 1, store.all(), store.allSavingsMovements(),
+                store.getSavingsOpeningBalance(), store.getCashOpeningBalance(), AppLanguage.INDONESIAN);
+        assertEquals("70000", report.cashOpeningEntry.toString());
+        assertEquals("100000", report.cashAdded.toString());
+        assertEquals("50000", report.cashSpent.toString());
+        assertEquals("120000", report.cashClosingBalance.toString());
+    }
+
     @Test public void upgradingVersionThreeAddsDebtTablesWithoutChangingTransactions() {
         store.close();
         SQLiteDatabase legacy = context.openOrCreateDatabase(TEST_DB, Context.MODE_PRIVATE, null);
@@ -291,7 +322,7 @@ public final class FinanceStoreTest {
             legacy.setVersion(3);
         } finally { legacy.close(); }
         store = new FinanceStore(context, TEST_DB);
-        assertEquals(7, store.getReadableDatabase().getVersion());
+        assertEquals(8, store.getReadableDatabase().getVersion());
         assertEquals(1, store.all().size());
         assertEquals("tetap", store.get(1).note);
         assertTrue(store.allDebtRecords().isEmpty());
