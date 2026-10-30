@@ -7,6 +7,7 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -14,7 +15,7 @@ import java.util.List;
 public final class FinanceStore extends SQLiteOpenHelper {
     private static final String DATABASE_NAME = "rapiuang.db";
     private static final String TABLE = "transactions";
-    private static final int DATABASE_VERSION = 3;
+    private static final int DATABASE_VERSION = 4;
     private static final String[] COLUMNS = {"_id", "type", "amount", "title", "category", "date", "note", "created_at",
             "photo IS NOT NULL AS has_photo"};
     enum PhotoAction { KEEP, REPLACE, REMOVE }
@@ -51,6 +52,28 @@ public final class FinanceStore extends SQLiteOpenHelper {
                 + "note TEXT NOT NULL DEFAULT '' CHECK(length(note) <= 300), "
                 + "created_at TEXT, photo BLOB)");
         db.execSQL("CREATE INDEX transactions_date ON transactions(date DESC, _id DESC)");
+        createDebtTables(db);
+    }
+
+    private static void createDebtTables(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE debt_records ("
+                + "_id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                + "type TEXT NOT NULL CHECK(type IN ('debt','receivable')), "
+                + "person TEXT NOT NULL CHECK(length(trim(person)) BETWEEN 1 AND 80), "
+                + "amount INTEGER NOT NULL CHECK(amount > 0 AND amount <= 999999999999), "
+                + "remaining INTEGER NOT NULL CHECK(remaining >= 0 AND remaining <= amount), "
+                + "date TEXT NOT NULL CHECK(length(date) = 10), "
+                + "note TEXT NOT NULL DEFAULT '' CHECK(length(note) <= 300), "
+                + "created_at TEXT NOT NULL)");
+        db.execSQL("CREATE INDEX debt_records_date ON debt_records(date DESC, _id DESC)");
+        db.execSQL("CREATE TABLE debt_payments ("
+                + "_id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                + "record_id INTEGER NOT NULL, "
+                + "amount INTEGER NOT NULL CHECK(amount > 0 AND amount <= 999999999999), "
+                + "date TEXT NOT NULL CHECK(length(date) = 10), "
+                + "note TEXT NOT NULL DEFAULT '' CHECK(length(note) <= 300), "
+                + "created_at TEXT NOT NULL)");
+        db.execSQL("CREATE INDEX debt_payments_record ON debt_payments(record_id, _id)");
     }
 
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
@@ -62,6 +85,10 @@ public final class FinanceStore extends SQLiteOpenHelper {
         if (oldVersion == 2 && newVersion >= 3) {
             db.execSQL("ALTER TABLE transactions ADD COLUMN photo BLOB");
             oldVersion = 3;
+        }
+        if (oldVersion == 3 && newVersion >= 4) {
+            createDebtTables(db); // Preserve transactions while adding the separate debt ledger.
+            oldVersion = 4;
         }
         if (oldVersion != newVersion) throw new IllegalStateException("Migrasi basis data belum tersedia.");
     }
@@ -96,6 +123,102 @@ public final class FinanceStore extends SQLiteOpenHelper {
         int changed = db.update(TABLE, values, "_id = ?", new String[]{Long.toString(t.id)});
         if (changed != 1) throw new IllegalStateException("Transaksi tidak ditemukan. Muat ulang dan coba lagi.");
         return t.id;
+    }
+
+    /** Create debt received (adds cash) or receivable lent (uses cash), outside income/expense. */
+    long saveDebtRecord(String type, String person, long amount, String date, String note) {
+        if (note == null) note = "";
+        DebtMath.validateNew(type, person, amount, date, note);
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        try {
+            String createdAt = timeSource.now();
+            if (!CreationTime.isValid(createdAt)) throw new IllegalStateException("Jam perangkat tidak valid.");
+            ContentValues values = new ContentValues();
+            values.put("type", type);
+            values.put("person", person.trim());
+            values.put("amount", amount);
+            values.put("remaining", amount);
+            values.put("date", date);
+            values.put("note", note.trim());
+            values.put("created_at", createdAt);
+            long id = db.insertOrThrow("debt_records", null, values);
+            db.setTransactionSuccessful();
+            return id;
+        } finally { db.endTransaction(); }
+    }
+
+    /** Record a partial or final repayment/collection atomically with the outstanding amount. */
+    long saveDebtPayment(long recordId, long amount, String date, String note) {
+        if (note == null) note = "";
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        try {
+            String type;
+            long remaining;
+            try (Cursor cursor = db.query("debt_records", new String[]{"type", "remaining"},
+                    "_id = ?", new String[]{Long.toString(recordId)}, null, null, null)) {
+                if (!cursor.moveToFirst()) throw new IllegalArgumentException("Catatan hutang/piutang tidak ditemukan.");
+                type = cursor.getString(0);
+                remaining = cursor.getLong(1);
+            }
+            DebtMath.validatePayment(amount, remaining, date, note);
+            String createdAt = timeSource.now();
+            if (!CreationTime.isValid(createdAt)) throw new IllegalStateException("Jam perangkat tidak valid.");
+            ContentValues update = new ContentValues();
+            update.put("remaining", remaining - amount);
+            if (db.update("debt_records", update, "_id = ? AND remaining = ?",
+                    new String[]{Long.toString(recordId), Long.toString(remaining)}) != 1)
+                throw new IllegalStateException("Catatan berubah. Muat ulang lalu coba lagi.");
+            ContentValues payment = new ContentValues();
+            payment.put("record_id", recordId);
+            payment.put("amount", amount);
+            payment.put("date", date);
+            payment.put("note", note.trim());
+            payment.put("created_at", createdAt);
+            long id = db.insertOrThrow("debt_payments", null, payment);
+            db.setTransactionSuccessful();
+            return id;
+        } finally { db.endTransaction(); }
+    }
+
+    List<DebtRecord> allDebtRecords() {
+        List<DebtRecord> records = new ArrayList<>();
+        try (Cursor cursor = getReadableDatabase().query("debt_records",
+                new String[]{"_id", "type", "person", "amount", "remaining", "date", "note", "created_at"},
+                null, null, null, null, "date DESC, _id DESC")) {
+            while (cursor.moveToNext()) records.add(new DebtRecord(cursor.getLong(0), cursor.getString(1),
+                    cursor.getString(2), cursor.getLong(3), cursor.getLong(4), cursor.getString(5),
+                    cursor.getString(6), cursor.getString(7)));
+        }
+        return records;
+    }
+
+    List<DebtPayment> paymentsForDebt(long recordId) {
+        List<DebtPayment> payments = new ArrayList<>();
+        try (Cursor cursor = getReadableDatabase().query("debt_payments",
+                new String[]{"_id", "record_id", "amount", "date", "note", "created_at"},
+                "record_id = ?", new String[]{Long.toString(recordId)}, null, null, "date DESC, _id DESC")) {
+            while (cursor.moveToNext()) payments.add(new DebtPayment(cursor.getLong(0), cursor.getLong(1),
+                    cursor.getLong(2), cursor.getString(3), cursor.getString(4), cursor.getString(5)));
+        }
+        return payments;
+    }
+
+    /** Ordinary transaction reports remain unchanged; principal debt flows adjust only available cash. */
+    BigInteger availableFunds() {
+        BigInteger balance = BigInteger.ZERO;
+        String sql = "SELECT type, amount AS value FROM transactions "
+                + "UNION ALL SELECT type, remaining AS value FROM debt_records";
+        try (Cursor cursor = getReadableDatabase().rawQuery(sql, null)) {
+            while (cursor.moveToNext()) {
+                String type = cursor.getString(0);
+                BigInteger amount = BigInteger.valueOf(cursor.getLong(1));
+                boolean increasesCash = Transaction.INCOME.equals(type) || DebtRecord.DEBT.equals(type);
+                balance = increasesCash ? balance.add(amount) : balance.subtract(amount);
+            }
+        }
+        return balance;
     }
 
     public boolean delete(long id) {
