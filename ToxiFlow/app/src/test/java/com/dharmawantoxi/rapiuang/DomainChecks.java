@@ -567,7 +567,7 @@ public final class DomainChecks {
         eq(en, AppLanguage.fromCode("en"), "English preference code");
 
         String[] expenseLabels = {"Food & drink", "Shopping", "Transport", "Bills", "Health",
-                "Entertainment", "Education", "Other"};
+                "Entertainment", "Education", "Installments", "Other"};
         String[] incomeLabels = {"Salary", "Business", "Gift", "Investment", "Other"};
         eq(expenseLabels.length, Categories.EXPENSE.length, "all expense categories translated");
         eq(incomeLabels.length, Categories.INCOME.length, "all income categories translated");
@@ -666,8 +666,46 @@ public final class DomainChecks {
         eq(100, SplashTiming.progress(-1), "opening progress clamps negative remaining time");
     }
 
+    private static void testDebtMath() {
+        eq(new BigInteger("100000"), DebtMath.openingCashEffect(DebtRecord.DEBT, 100000),
+                "borrowed debt increases available cash");
+        eq(new BigInteger("-25000"), DebtMath.openingCashEffect(DebtRecord.RECEIVABLE, 25000),
+                "lending receivable reduces available cash");
+        eq(new BigInteger("-10000"), DebtMath.paymentCashEffect(DebtRecord.DEBT, 10000),
+                "debt repayment reduces available cash");
+        eq(new BigInteger("10000"), DebtMath.paymentCashEffect(DebtRecord.RECEIVABLE, 10000),
+                "receivable collection increases available cash");
+        List<DebtRecord> records = Arrays.asList(
+                new DebtRecord(1, DebtRecord.DEBT, "Rina", 100000, 75000, "2026-10-01", "", "2026-10-01 08:00:00"),
+                new DebtRecord(2, DebtRecord.RECEIVABLE, "Budi", 20000, 15000, "2026-10-02", "", "2026-10-02 08:00:00"));
+        List<DebtPayment> payments = Arrays.asList(
+                new DebtPayment(1, 1, 25000, "2026-10-03", "", "2026-10-03 08:00:00"),
+                new DebtPayment(2, 2, 5000, "2026-10-04", "", "2026-10-04 08:00:00"));
+        eq(new BigInteger("60000"), DebtMath.cashAdjustment(records, payments),
+                "debt and receivable principal net cash effect");
+        DebtMath.validateNew(DebtRecord.DEBT, " Rina ", 1000, "2026-10-30", "ok");
+        DebtMath.validatePayment(75000, 75000, "2026-10-30", "lunas");
+        rejectsDebt(null, 1000, "2026-10-30", "", "");
+        rejectsDebt(DebtRecord.RECEIVABLE, 0, "2026-10-30", "Budi", "");
+        rejectsDebt(DebtRecord.DEBT, 1000, "2026-10-30", " ", "");
+        rejectsDebt(DebtRecord.DEBT, 1000, "2026-02-30", "Rina", "");
+        rejectsDebtPayment(75001, 75000);
+        rejectsDebtPayment(1, 0);
+    }
+
+    private static void rejectsDebt(String type, long amount, String date, String person, String note) {
+        try { DebtMath.validateNew(type, person, amount, date, note); throw new AssertionError("Expected invalid debt record"); }
+        catch (IllegalArgumentException expected) { checks++; }
+    }
+
+    private static void rejectsDebtPayment(long amount, long remaining) {
+        try { DebtMath.validatePayment(amount, remaining, "2026-10-30", ""); throw new AssertionError("Expected invalid debt payment"); }
+        catch (IllegalArgumentException expected) { checks++; }
+    }
+
     public static void main(String[] args) throws Exception {
         testSplashTiming();
+        testDebtMath();
         testAmountInput();
         testLanguage();
         eq("Rp0", Money.format(0), "format zero");

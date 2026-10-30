@@ -17,6 +17,7 @@ import android.print.PrintAttributes;
 import android.print.PrintJob;
 import android.print.PrintManager;
 import android.text.Editable;
+import android.text.InputFilter;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.Gravity;
@@ -45,12 +46,14 @@ import java.util.concurrent.Executors;
 public final class MainActivity extends Activity {
     private static final int FORM_REQUEST = 20;
     private static final int EXPORT_REQUEST = 21;
-    private static final int HOME = 0, TRANSACTIONS = 1, REPORTS = 2;
+    private static final int HOME = 0, TRANSACTIONS = 1, CASH = 2, REPORTS = 3;
     private FinanceStore store;
     private LinearLayout root;
     private LinearLayout transactionList;
     private List<Transaction> all = new ArrayList<>();
     private List<Transaction> month = new ArrayList<>();
+    private List<DebtRecord> debtRecords = new ArrayList<>();
+    private BigInteger availableFunds = BigInteger.ZERO;
     private int page = HOME;
     private int year, monthIndex;
     private String filter = "";
@@ -136,6 +139,8 @@ public final class MainActivity extends Activity {
         try {
             all = store.all();
             month = FinanceMath.forMonth(all, year, monthIndex);
+            debtRecords = store.allDebtRecords();
+            availableFunds = store.availableFunds();
             loadFailed = false;
         } catch (RuntimeException e) {
             loadFailed = true;
@@ -173,6 +178,7 @@ public final class MainActivity extends Activity {
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
         if (page == HOME) buildHome(content);
         else if (page == TRANSACTIONS) buildTransactions(content);
+        else if (page == CASH) buildCash(content);
         else buildReports(content);
         root.addView(scroll, Ui.weighted(-1, 0, 1));
         root.addView(bottomNavigation(), Ui.lp(-1, Ui.dp(this, 76)));
@@ -237,6 +243,264 @@ public final class MainActivity extends Activity {
         wordmark.addView(Ui.text(this, tr("CATATAN KEUANGAN PRIBADI", "PERSONAL FINANCE JOURNAL"), 9, Ui.MUTED, true));
         addHeaderActions(row);
         return row;
+    }
+
+    private void buildCash(LinearLayout content) {
+        content.addView(pageHeader(tr("Dana siap pakai", "Available funds"),
+                tr("Cash dan tabungan menggunakan satu saldo.", "Cash and savings share one balance.")));
+        content.addView(Ui.gap(this, 20));
+        content.addView(Ui.text(this,
+                tr("Pemasukan menambah saldo dan pengeluaran menguranginya. Terima hutang menambah cash; piutang yang dipinjamkan menguranginya. Pokok hutang/piutang tidak masuk laporan pemasukan/pengeluaran.",
+                        "Income adds to this balance and expenses reduce it. Debt received adds cash; lending a receivable reduces it. Principal is excluded from income/expense reports."),
+                12, Ui.MUTED, false));
+        content.addView(Ui.gap(this, 16));
+        content.addView(monthSelector());
+        content.addView(Ui.gap(this, 12));
+        content.addView(cashBalanceCard());
+        content.addView(Ui.gap(this, 24));
+        content.addView(debtSection(DebtRecord.DEBT));
+        content.addView(Ui.gap(this, 14));
+        content.addView(debtSection(DebtRecord.RECEIVABLE));
+        content.addView(Ui.gap(this, 24));
+        content.addView(sectionHeading(tr("Pergerakan dana", "Cash activity"), null, null));
+        content.addView(Ui.gap(this, 10));
+        if (month.isEmpty()) {
+            LinearLayout empty = Ui.column(this);
+            empty.setBackground(Ui.shape(this, Ui.WHITE, 18));
+            Ui.pad(empty, 18, 18, 18, 18);
+            empty.addView(Ui.text(this, tr("Belum ada transaksi pada periode ini", "No transactions in this period"), 14, Ui.INK, true));
+            empty.addView(Ui.gap(this, 4));
+            empty.addView(Ui.text(this, tr("Pemasukan dan pengeluaran yang dicatat akan memperbarui saldo cash/tabungan.",
+                    "Recorded income and expenses will update your cash/savings balance."), 12, Ui.MUTED, false));
+            content.addView(empty);
+            content.addView(Ui.gap(this, 14));
+            content.addView(addTransactionCallout());
+        } else {
+            LinearLayout list = Ui.column(this);
+            list.setBackground(Ui.shape(this, Ui.WHITE, 18));
+            Ui.pad(list, 14, 2, 14, 2);
+            for (int i = 0; i < month.size(); i++) {
+                if (i > 0) list.addView(insetDivider());
+                list.addView(transactionRow(month.get(i), true));
+            }
+            content.addView(list);
+        }
+    }
+
+    private View cashBalanceCard() {
+        DecorCard card = new DecorCard(this);
+        LinearLayout inside = Ui.column(this);
+        Ui.pad(inside, 20, 17, 20, 18);
+        inside.addView(Ui.overline(this, tr("SALDO CASH / TABUNGAN", "CASH / SAVINGS BALANCE"), 0xffc6ddca));
+        inside.addView(Ui.gap(this, 5));
+        BigInteger total = availableFunds;
+        TextView amount = Ui.text(this, Money.format(total), 29, Ui.WHITE, true);
+        amount.setContentDescription(tr("Dana siap pakai ", "Available funds ") + Money.format(total));
+        amount.setTag("cash_balance");
+        inside.addView(amount);
+        inside.addView(Ui.gap(this, 15));
+        FinanceMath.Summary period = FinanceMath.summarize(month);
+        LinearLayout flows = Ui.row(this);
+        flows.addView(cashPeriodAmount(tr("Pemasukan bulan ini", "Income this month"), period.income, Ui.MINT), Ui.weighted(0, -2, 1));
+        flows.addView(cashPeriodAmount(tr("Pengeluaran bulan ini", "Expenses this month"), period.expense, 0xffffcbbc), Ui.weighted(0, -2, 1));
+        inside.addView(flows);
+        card.addView(inside, new FrameLayout.LayoutParams(-1, -2));
+        return card;
+    }
+
+    private LinearLayout cashPeriodAmount(String label, BigInteger amount, int color) {
+        LinearLayout item = Ui.column(this);
+        item.addView(Ui.text(this, label, 10, 0xffc9d9d0, false));
+        item.addView(Ui.gap(this, 3));
+        item.addView(Ui.text(this, Money.format(amount), 13, color, true));
+        return item;
+    }
+
+    private View debtSection(String type) {
+        boolean debt = DebtRecord.DEBT.equals(type);
+        LinearLayout section = Ui.column(this);
+        section.addView(sectionHeading(debt ? tr("Hutang", "Debt") : tr("Piutang", "Receivable"),
+                debt ? tr("Tambah hutang", "Add debt") : tr("Tambah piutang", "Add receivable"), () -> openDebtForm(type)));
+        section.addView(Ui.gap(this, 9));
+        List<DebtRecord> matching = new ArrayList<>();
+        for (DebtRecord record : debtRecords) if (type.equals(record.type)) matching.add(record);
+        if (matching.isEmpty()) {
+            LinearLayout empty = Ui.column(this);
+            empty.setBackground(Ui.shape(this, Ui.WHITE, 16));
+            Ui.pad(empty, 15, 13, 15, 13);
+            empty.addView(Ui.text(this, debt ? tr("Belum ada hutang", "No debts yet") : tr("Belum ada piutang", "No receivables yet"), 12, Ui.MUTED, false));
+            section.addView(empty);
+        } else {
+            LinearLayout list = Ui.column(this);
+            list.setBackground(Ui.shape(this, Ui.WHITE, 18));
+            Ui.pad(list, 13, 2, 13, 2);
+            for (int i = 0; i < matching.size(); i++) {
+                if (i > 0) list.addView(insetDivider());
+                list.addView(debtRow(matching.get(i)));
+            }
+            section.addView(list);
+        }
+        return section;
+    }
+
+    private View debtRow(DebtRecord record) {
+        boolean debt = DebtRecord.DEBT.equals(record.type);
+        LinearLayout row = Ui.row(this);
+        row.setMinimumHeight(Ui.dp(this, 66));
+        Ui.pad(row, 3, 9, 3, 9);
+        LinearLayout labels = Ui.column(this);
+        LinearLayout.LayoutParams labelParams = Ui.weighted(0, -2, 1);
+        labelParams.rightMargin = Ui.dp(this, 8);
+        labels.addView(Ui.text(this, record.person, 13, Ui.INK, true));
+        labels.addView(Ui.text(this, Dates.display(record.date, language)
+                + (record.note.isEmpty() ? "" : " · " + record.note), 10, Ui.MUTED, false));
+        String remaining = tr("Sisa ", "Remaining ") + Money.format(record.remaining)
+                + tr(" dari ", " of ") + Money.format(record.amount);
+        labels.addView(Ui.text(this, remaining, 11, record.isSettled() ? Ui.MUTED : (debt ? Ui.CORAL : Ui.GREEN), true));
+        row.addView(labels, labelParams);
+        TextView action = Ui.text(this, record.isSettled() ? tr("Lunas", "Settled")
+                : debt ? tr("Bayar", "Pay") : tr("Terima", "Collect"), 11,
+                record.isSettled() ? Ui.MUTED : Ui.GREEN, true);
+        action.setGravity(Gravity.CENTER);
+        Ui.pad(action, 10, 9, 10, 9);
+        if (!record.isSettled()) {
+            action.setBackground(Ui.shape(this, Ui.PALE, 10));
+            action.setOnClickListener(v -> openDebtPayment(record));
+            action.setFocusable(true);
+        }
+        row.addView(action);
+        row.setContentDescription((debt ? tr("Hutang kepada ", "Debt owed to ") : tr("Piutang dari ", "Receivable from "))
+                + record.person + ", " + remaining + (record.isSettled() ? tr(", lunas", ", settled") : ""));
+        row.setOnClickListener(v -> showDebtRecord(record));
+        row.setFocusable(true);
+        return row;
+    }
+
+    private void openDebtForm(String type) {
+        boolean debt = DebtRecord.DEBT.equals(type);
+        LinearLayout content = Ui.column(this);
+        Ui.pad(content, 24, 5, 24, 8);
+        content.addView(Ui.text(this, debt
+                ? tr("Uang yang diterima menambah Dana Siap Pakai.", "Money received increases available funds.")
+                : tr("Uang yang dipinjamkan mengurangi Dana Siap Pakai.", "Money lent reduces available funds."), 12, Ui.MUTED, false));
+        content.addView(Ui.gap(this, 12));
+        EditText person = debtTextField(debt ? tr("Nama pemberi hutang", "Lender's name") : tr("Nama peminjam", "Borrower's name"),
+                debt ? tr("Nama pemberi hutang", "Lender's name") : tr("Nama peminjam", "Borrower's name"),
+                80, android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        content.addView(person, Ui.lp(-1, Ui.dp(this, 50)));
+        content.addView(Ui.gap(this, 10));
+        EditText amount = debtTextField(tr("Nominal rupiah", "Amount in rupiah"),
+                tr("Nominal hutang/piutang dalam rupiah", "Debt/receivable amount in rupiah"), 20, android.text.InputType.TYPE_CLASS_NUMBER);
+        content.addView(amount, Ui.lp(-1, Ui.dp(this, 50)));
+        content.addView(Ui.gap(this, 10));
+        EditText note = debtTextField(tr("Keterangan (opsional)", "Description (optional)"),
+                tr("Keterangan hutang/piutang, opsional", "Optional debt/receivable description"), 300,
+                android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        content.addView(note, Ui.lp(-1, -2));
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(debt ? tr("Catat hutang", "Record debt") : tr("Catat piutang", "Record receivable"))
+                .setView(content).setNegativeButton(tr("Batal", "Cancel"), null)
+                .setPositiveButton(tr("Simpan", "Save"), null).create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            final long value;
+            try { value = Money.parseAmount(amount.getText().toString(), language); }
+            catch (IllegalArgumentException error) { amount.setError(error.getMessage()); amount.requestFocus(); return; }
+            try {
+                store.saveDebtRecord(type, person.getText().toString(), value, Dates.today(), note.getText().toString());
+                dialog.dismiss();
+                Toast.makeText(this, debt ? tr("Hutang tersimpan", "Debt saved") : tr("Piutang tersimpan", "Receivable saved"), Toast.LENGTH_SHORT).show();
+                refresh();
+            } catch (IllegalArgumentException error) {
+                if (person.getText().toString().trim().isEmpty())
+                    person.setError(tr("Nama wajib diisi.", "Name is required."));
+                else amount.setError(tr("Data hutang/piutang tidak valid. Periksa kembali nominal dan catatan.",
+                        "Invalid debt/receivable details. Check the amount and description."));
+            } catch (RuntimeException error) {
+                showDebtStorageError();
+            }
+        }));
+        dialog.show();
+    }
+
+    private EditText debtTextField(String hint, String description, int maxLength, int inputType) {
+        EditText field = new EditText(this);
+        field.setHint(hint);
+        field.setContentDescription(description);
+        field.setSingleLine(maxLength != 300);
+        if (maxLength == 300) { field.setMinLines(1); field.setMaxLines(3); }
+        field.setFilters(new InputFilter[]{new InputFilter.LengthFilter(maxLength)});
+        field.setInputType(inputType);
+        field.setTextSize(15);
+        field.setPadding(Ui.dp(this, 12), Ui.dp(this, 9), Ui.dp(this, 12), Ui.dp(this, 9));
+        field.setBackground(Ui.outlined(this, Ui.WHITE, Ui.LINE, 12));
+        return field;
+    }
+
+    private void openDebtPayment(DebtRecord record) {
+        boolean debt = DebtRecord.DEBT.equals(record.type);
+        LinearLayout content = Ui.column(this);
+        Ui.pad(content, 24, 5, 24, 8);
+        content.addView(Ui.text(this, tr("Sisa saat ini: ", "Current remaining: ") + Money.format(record.remaining), 12, Ui.MUTED, false));
+        content.addView(Ui.gap(this, 10));
+        EditText amount = debtTextField(tr("Nominal pembayaran", "Payment amount"),
+                tr("Nominal pembayaran dalam rupiah", "Payment amount in rupiah"), 20, android.text.InputType.TYPE_CLASS_NUMBER);
+        content.addView(amount, Ui.lp(-1, Ui.dp(this, 50)));
+        content.addView(Ui.gap(this, 10));
+        EditText note = debtTextField(tr("Keterangan (opsional)", "Description (optional)"),
+                tr("Keterangan pembayaran, opsional", "Optional payment description"), 300,
+                android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        content.addView(note, Ui.lp(-1, -2));
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(debt ? tr("Bayar hutang", "Repay debt") : tr("Terima pembayaran", "Collect receivable"))
+                .setView(content).setNegativeButton(tr("Batal", "Cancel"), null)
+                .setPositiveButton(debt ? tr("Bayar", "Pay") : tr("Terima", "Collect"), null).create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            final long value;
+            try { value = Money.parseAmount(amount.getText().toString(), language); }
+            catch (IllegalArgumentException error) { amount.setError(error.getMessage()); amount.requestFocus(); return; }
+            try {
+                store.saveDebtPayment(record.id, value, Dates.today(), note.getText().toString());
+                dialog.dismiss();
+                Toast.makeText(this, debt ? tr("Pembayaran hutang tersimpan", "Debt payment saved")
+                        : tr("Penerimaan piutang tersimpan", "Receivable collection saved"), Toast.LENGTH_SHORT).show();
+                refresh();
+            } catch (IllegalArgumentException error) {
+                amount.setError(tr("Pembayaran melebihi sisa hutang/piutang.",
+                        "Payment exceeds the remaining debt/receivable balance."));
+                amount.requestFocus();
+            } catch (RuntimeException error) { showDebtStorageError(); }
+        }));
+        dialog.show();
+    }
+
+    private void showDebtRecord(DebtRecord record) {
+        boolean debt = DebtRecord.DEBT.equals(record.type);
+        StringBuilder details = new StringBuilder();
+        details.append(tr("Nama: ", "Person: ")).append(record.person)
+                .append("\n").append(tr("Pokok: ", "Original amount: ")).append(Money.format(record.amount))
+                .append("\n").append(tr("Sisa: ", "Remaining: ")).append(Money.format(record.remaining))
+                .append("\n").append(tr("Tanggal: ", "Date: ")).append(Dates.display(record.date, language));
+        if (!record.note.isEmpty()) details.append("\n").append(tr("Catatan: ", "Note: ")).append(record.note);
+        List<DebtPayment> payments = store.paymentsForDebt(record.id);
+        details.append("\n\n").append(tr("Riwayat pembayaran", "Payment history"));
+        if (payments.isEmpty()) details.append("\n").append(tr("Belum ada pembayaran.", "No payments yet."));
+        else for (DebtPayment payment : payments)
+            details.append("\n").append(Dates.display(payment.date, language)).append(" · ")
+                    .append(Money.format(payment.amount)).append(payment.note.isEmpty() ? "" : " · " + payment.note);
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
+                .setTitle((debt ? tr("Hutang · ", "Debt · ") : tr("Piutang · ", "Receivable · ")) + record.person)
+                .setMessage(details.toString())
+                .setNegativeButton(tr("Tutup", "Close"), null);
+        if (!record.isSettled()) builder.setPositiveButton(debt ? tr("Bayar", "Pay") : tr("Terima", "Collect"),
+                (dialog, which) -> openDebtPayment(record));
+        builder.show();
+    }
+
+    private void showDebtStorageError() {
+        new AlertDialog.Builder(this).setTitle(tr("Belum bisa menyimpan", "Unable to save"))
+                .setMessage(tr("Catatan hutang/piutang belum tersimpan. Periksa ruang penyimpanan dan coba lagi.",
+                        "The debt/receivable entry was not saved. Check storage and try again."))
+                .setPositiveButton(tr("Tutup", "Close"), null).show();
     }
 
     private View pageHeader(String title, String subtitle) {
@@ -332,13 +596,12 @@ public final class MainActivity extends Activity {
     }
 
     private View balanceCard() {
-        FinanceMath.Summary total = FinanceMath.summarize(all);
         FinanceMath.Summary selected = FinanceMath.summarize(month);
         DecorCard card = new DecorCard(this);
         LinearLayout inside = Ui.column(this);
         Ui.pad(inside, 21, 18, 21, 19);
         LinearLayout top = Ui.row(this);
-        top.addView(Ui.overline(this, tr("SALDO KESELURUHAN", "OVERALL BALANCE"), 0xffc6ddca), Ui.weighted(0, -2, 1));
+        top.addView(Ui.overline(this, tr("DANA SIAP PAKAI", "AVAILABLE FUNDS"), 0xffc6ddca), Ui.weighted(0, -2, 1));
         FrameLayout eye = Ui.iconBox(this, hideAmounts ? "eyeoff" : "eye", 0xffd5e9d8, 0x22ffffff, 36, 19, 12);
         eye.setContentDescription(hideAmounts ? tr("Tampilkan nominal di beranda", "Show amounts on the home screen") : tr("Sembunyikan nominal di beranda", "Hide amounts on the home screen"));
         Ui.clickable(eye, Ui.shape(this, 0x22ffffff, 12), v -> {
@@ -348,11 +611,11 @@ public final class MainActivity extends Activity {
         });
         top.addView(eye);
         inside.addView(top);
-        TextView amount = Ui.text(this, hideAmounts ? "Rp ••••••" : Money.format(total.balance), 30, Ui.WHITE, true);
-        amount.setContentDescription(hideAmounts ? tr("Saldo disembunyikan", "Balance hidden") : tr("Saldo keseluruhan ", "Overall balance ") + Money.format(total.balance));
+        TextView amount = Ui.text(this, hideAmounts ? "Rp ••••••" : Money.format(availableFunds), 30, Ui.WHITE, true);
+        amount.setContentDescription(hideAmounts ? tr("Saldo disembunyikan", "Balance hidden") : tr("Dana siap pakai ", "Available funds ") + Money.format(availableFunds));
         inside.addView(amount);
         inside.addView(Ui.gap(this, 2));
-        inside.addView(Ui.text(this, tr("Dari semua transaksi yang dicatat", "From all recorded transactions"), 11, 0xffbed1c2, false));
+        inside.addView(Ui.text(this, tr("Cash/tabungan satu saldo; pokok hutang/piutang tidak masuk laporan", "Cash/savings share a balance; debt principal is outside reports"), 11, 0xffbed1c2, false));
         inside.addView(Ui.gap(this, 17));
         View line = new View(this);
         line.setBackgroundColor(0x38d5ead8);
@@ -879,6 +1142,7 @@ public final class MainActivity extends Activity {
         nav.addView(navItem("home", tr("Beranda", "Home"), page == HOME, () -> { page = HOME; render(); }), Ui.weighted(0, -1, 1));
         nav.addView(navItem("list", tr("Transaksi", "Transactions"), page == TRANSACTIONS, () -> { page = TRANSACTIONS; render(); }), Ui.weighted(0, -1, 1));
         nav.addView(navItem("plus", tr("Catat", "Add"), false, () -> openForm(null)), Ui.weighted(0, -1, 1));
+        nav.addView(navItem("wallet", tr("Dana", "Cash"), page == CASH, () -> { page = CASH; render(); }), Ui.weighted(0, -1, 1));
         nav.addView(navItem("chart", tr("Laporan", "Reports"), page == REPORTS, () -> { page = REPORTS; render(); }), Ui.weighted(0, -1, 1));
         container.addView(nav, Ui.weighted(-1, 0, 1));
         return container;
@@ -1066,7 +1330,7 @@ public final class MainActivity extends Activity {
                 .setMessage(tr("Catatan sederhana untuk pemasukan dan pengeluaran.\n\n", "A simple record of income and expenses.\n\n")
                         + tr("Data disimpan hanya di perangkat ini, tanpa akun atau koneksi internet. ", "Data is stored only on this device, without an account or internet connection. ")
                         + tr("Database dan foto tidak dienkripsi. Data akan hilang jika aplikasi dihapus atau datanya dibersihkan.\n\n", "The database and photos are not encrypted. Data is lost if the app is uninstalled or its data is cleared.\n\n")
-                        + tr("Saldo keseluruhan menghitung semua transaksi yang dicatat, termasuk tanggal mendatang. ", "The overall balance includes all recorded transactions, including future dates. ")
+                        + tr("Dana siap pakai menghitung semua transaksi, termasuk tanggal mendatang. Hutang yang diterima dan piutang yang dipinjamkan mengubah cash; pokoknya tidak masuk laporan pemasukan/pengeluaran. ", "Available funds include all transactions, including future dates. Debt received and receivables lent affect cash; their principal is excluded from income/expense reports. ")
                         + tr("Ringkasan dan laporan mengikuti periode yang dipilih.\n\n", "Summaries and reports follow the selected period.\n\n")
                         + tr("Jam pembuatan transaksi dicatat sesuai waktu perangkat saat disimpan dan tidak berubah saat diedit. ", "Creation time is recorded using the device time when a transaction is saved and does not change when edited. ")
                         + tr("Jam transaksi lama tidak tersedia.\n\n", "Creation time is unavailable for older transactions.\n\n")

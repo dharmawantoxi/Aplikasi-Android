@@ -106,7 +106,7 @@ public final class FinanceStoreTest {
             legacy.close();
         }
         store = new FinanceStore(context, TEST_DB, () -> "2026-11-10 11:22:33");
-        assertEquals(3, store.getReadableDatabase().getVersion());
+        assertEquals(4, store.getReadableDatabase().getVersion());
         assertEquals(2, store.all().size());
         Transaction oldExpense = store.get(1);
         assertEquals("Makan", oldExpense.title);
@@ -147,7 +147,7 @@ public final class FinanceStoreTest {
             legacy.setVersion(2);
         } finally { legacy.close(); }
         store = new FinanceStore(context, TEST_DB);
-        assertEquals(3, store.getReadableDatabase().getVersion());
+        assertEquals(4, store.getReadableDatabase().getVersion());
         assertEquals(2, store.all().size());
         assertEquals("2026-10-02 08:12:00", store.get(1).createdAt);
         assertNull(store.get(2).createdAt);
@@ -164,6 +164,60 @@ public final class FinanceStoreTest {
         store = new FinanceStore(context, TEST_DB);
         assertTrue(store.get(1).hasPhoto);
         assertArrayEquals(image, store.getPhoto(1));
+    }
+
+    @Test public void debtAndReceivableFlowsChangeCashButNotIncomeExpenseReports() {
+        long regularIncome = store.save(new Transaction(0, Transaction.INCOME, 50000,
+                "Gaji", "Gaji", "2026-10-01", ""));
+        long debt = store.saveDebtRecord(DebtRecord.DEBT, "Rina", 100000, "2026-10-02", "Pinjaman diterima");
+        assertEquals("150000", store.availableFunds().toString());
+        long receivable = store.saveDebtRecord(DebtRecord.RECEIVABLE, "Budi", 20000, "2026-10-03", "Dipinjamkan");
+        assertEquals("130000", store.availableFunds().toString());
+        store.saveDebtPayment(debt, 25000, "2026-10-04", "Cicilan");
+        assertEquals("105000", store.availableFunds().toString());
+        store.saveDebtPayment(receivable, 5000, "2026-10-05", "Dikembalikan");
+        assertEquals("110000", store.availableFunds().toString());
+        assertEquals(50000, store.get(regularIncome).amount);
+        assertEquals("50000", FinanceMath.summarize(store.all()).balance.toString());
+        assertEquals(2, store.allDebtRecords().size());
+        assertEquals(1, store.paymentsForDebt(debt).size());
+        assertEquals(75000, store.allDebtRecords().get(1).remaining);
+        assertEquals(15000, store.allDebtRecords().get(0).remaining);
+        try {
+            store.saveDebtPayment(debt, 75001, "2026-10-06", "kelebihan");
+            fail("Payment exceeding remaining amount accepted");
+        } catch (IllegalArgumentException expected) { }
+        assertEquals("110000", store.availableFunds().toString());
+        assertEquals("50000", FinanceMath.summarize(store.all()).balance.toString());
+        store.close();
+        store = new FinanceStore(context, TEST_DB);
+        assertEquals("110000", store.availableFunds().toString());
+        assertEquals(1, store.paymentsForDebt(debt).size());
+        assertEquals(1, store.paymentsForDebt(receivable).size());
+    }
+
+    @Test public void upgradingVersionThreeAddsDebtTablesWithoutChangingTransactions() {
+        store.close();
+        SQLiteDatabase legacy = context.openOrCreateDatabase(TEST_DB, Context.MODE_PRIVATE, null);
+        try {
+            legacy.execSQL("CREATE TABLE transactions (_id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    + "type TEXT NOT NULL CHECK(type IN ('income','expense')), amount INTEGER NOT NULL, "
+                    + "title TEXT NOT NULL, category TEXT NOT NULL, date TEXT NOT NULL, "
+                    + "note TEXT NOT NULL DEFAULT '', created_at TEXT, photo BLOB)");
+            legacy.execSQL("CREATE INDEX transactions_date ON transactions(date DESC, _id DESC)");
+            legacy.execSQL("INSERT INTO transactions (type,amount,title,category,date,note,created_at) "
+                    + "VALUES ('income',50000,'Lama','Gaji','2026-10-01','tetap','2026-10-01 10:00:00')");
+            legacy.setVersion(3);
+        } finally { legacy.close(); }
+        store = new FinanceStore(context, TEST_DB);
+        assertEquals(4, store.getReadableDatabase().getVersion());
+        assertEquals(1, store.all().size());
+        assertEquals("tetap", store.get(1).note);
+        assertTrue(store.allDebtRecords().isEmpty());
+        assertEquals("50000", store.availableFunds().toString());
+        store.saveDebtRecord(DebtRecord.DEBT, "Rina", 10000, "2026-10-02", "baru");
+        assertEquals("60000", store.availableFunds().toString());
+        assertEquals("50000", FinanceMath.summarize(store.all()).balance.toString());
     }
 
     private static byte[] jpeg(int marker) {

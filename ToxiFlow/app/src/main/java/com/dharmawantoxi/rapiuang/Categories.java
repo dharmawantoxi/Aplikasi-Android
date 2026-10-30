@@ -6,7 +6,7 @@ import java.util.List;
 public final class Categories {
     public static final String[] EXPENSE = {
             "Makan & minum", "Belanja", "Transportasi", "Tagihan", "Kesehatan",
-            "Hiburan", "Pendidikan", "Lainnya"
+            "Hiburan", "Pendidikan", "Cicilan", "Lainnya"
     };
     public static final String[] INCOME = {"Gaji", "Usaha", "Hadiah", "Investasi", "Lainnya"};
 
@@ -27,6 +27,7 @@ public final class Categories {
             case "Kesehatan": return "Health";
             case "Hiburan": return "Entertainment";
             case "Pendidikan": return "Education";
+            case "Cicilan": return "Installments";
             case "Lainnya": return "Other";
             case "Gaji": return "Salary";
             case "Usaha": return "Business";

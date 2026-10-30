@@ -12,6 +12,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.hasErrorText;
 import static androidx.test.espresso.matcher.ViewMatchers.isChecked;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.isNotChecked;
+import static androidx.test.espresso.matcher.RootMatchers.isDialog;
 import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
@@ -190,6 +191,86 @@ public final class FinanceFlowTest {
             onView(withText("Belum ada pengeluaran berulang yang terdeteksi pada periode ini."))
                     .perform(scrollTo()).check(matches(isDisplayed()));
         }
+    }
+
+    @Test public void installmentCategoryIsARegularReportableExpense() {
+        try (ActivityScenario<MainActivity> scenario = launchHome()) {
+            onView(withText("Catat transaksi")).perform(scrollTo(), click());
+            onView(withContentDescription("Nominal transaksi dalam rupiah"))
+                    .perform(typeText("450000"), closeSoftKeyboard());
+            onView(withHint("Contoh: Makan siang"))
+                    .perform(replaceText("Cicilan motor"), closeSoftKeyboard());
+            onView(withContentDescription("Kategori transaksi")).perform(scrollTo(), click());
+            onView(withText("Cicilan")).perform(click());
+            onView(withText("Simpan transaksi")).perform(scrollTo(), click());
+            Transaction saved = onlySavedTransaction();
+            assertEquals(Transaction.EXPENSE, saved.type);
+            assertEquals("Cicilan", saved.category);
+            assertEquals(450000L, saved.amount);
+            assertEquals("-450000", FinanceMath.summarize(java.util.Collections.singletonList(saved)).balance.toString());
+            onView(withText("Cicilan motor")).perform(scrollTo()).check(matches(isDisplayed()));
+        }
+    }
+
+    @Test public void cashAndSavingsShareOneBalanceUpdatedByRegularTransactions() {
+        String today = Dates.today();
+        FinanceStore seed = new FinanceStore(context);
+        try {
+            seed.save(new Transaction(0, Transaction.INCOME, 100000, "Gaji cash", "Gaji", today, ""));
+            seed.save(new Transaction(0, Transaction.EXPENSE, 25000, "Belanja cash", "Belanja", today, ""));
+            assertEquals("75000", FinanceMath.summarize(seed.all()).balance.toString());
+        } finally { seed.close(); }
+
+        try (ActivityScenario<MainActivity> scenario = launchHome()) {
+            onView(withContentDescription("Dana")).perform(click());
+            onView(withText("Cash dan tabungan menggunakan satu saldo.")).check(matches(isDisplayed()));
+            onView(withContentDescription("Dana siap pakai Rp75.000")).check(matches(isDisplayed()));
+            onView(withText("Pemasukan bulan ini")).check(matches(isDisplayed()));
+            onView(withText("Pengeluaran bulan ini")).check(matches(isDisplayed()));
+            onView(withText("Gaji cash")).perform(scrollTo()).check(matches(isDisplayed()));
+            onView(withText("Belanja cash")).perform(scrollTo()).check(matches(isDisplayed()));
+        }
+    }
+
+    @Test public void debtAndReceivablePaymentsUpdateCashWithoutBecomingTransactions() {
+        try (ActivityScenario<MainActivity> scenario = launchHome()) {
+            onView(withContentDescription("Dana")).perform(click());
+            onView(withText("Tambah hutang  ›")).perform(scrollTo(), click());
+            onView(withContentDescription("Nama pemberi hutang")).inRoot(isDialog())
+                    .perform(replaceText("Rina"), closeSoftKeyboard());
+            onView(withContentDescription("Nominal hutang/piutang dalam rupiah")).inRoot(isDialog())
+                    .perform(replaceText("100000"), closeSoftKeyboard());
+            onView(withText("Simpan")).inRoot(isDialog()).perform(click());
+            onView(withContentDescription("Dana siap pakai Rp100.000")).check(matches(isDisplayed()));
+
+            onView(withText("Bayar")).perform(scrollTo(), click());
+            onView(withContentDescription("Nominal pembayaran dalam rupiah")).inRoot(isDialog())
+                    .perform(replaceText("25000"), closeSoftKeyboard());
+            onView(withText("Bayar")).inRoot(isDialog()).perform(click());
+            onView(withContentDescription("Dana siap pakai Rp75.000")).check(matches(isDisplayed()));
+            onView(withText("Sisa Rp75.000 dari Rp100.000")).perform(scrollTo()).check(matches(isDisplayed()));
+
+            onView(withText("Tambah piutang  ›")).perform(scrollTo(), click());
+            onView(withContentDescription("Nama peminjam")).inRoot(isDialog())
+                    .perform(replaceText("Budi"), closeSoftKeyboard());
+            onView(withContentDescription("Nominal hutang/piutang dalam rupiah")).inRoot(isDialog())
+                    .perform(replaceText("20000"), closeSoftKeyboard());
+            onView(withText("Simpan")).inRoot(isDialog()).perform(click());
+            onView(withContentDescription("Dana siap pakai Rp55.000")).check(matches(isDisplayed()));
+
+            onView(withText("Terima")).perform(scrollTo(), click());
+            onView(withContentDescription("Nominal pembayaran dalam rupiah")).inRoot(isDialog())
+                    .perform(replaceText("5000"), closeSoftKeyboard());
+            onView(withText("Terima")).inRoot(isDialog()).perform(click());
+            onView(withContentDescription("Dana siap pakai Rp60.000")).check(matches(isDisplayed()));
+        }
+        FinanceStore reader = new FinanceStore(context);
+        try {
+            assertTrue(reader.all().isEmpty());
+            assertEquals(2, reader.allDebtRecords().size());
+            assertEquals("60000", reader.availableFunds().toString());
+            assertEquals("0", FinanceMath.summarize(reader.all()).balance.toString());
+        } finally { reader.close(); }
     }
 
     @Test public void printActionConfirmsSelectedMonthAndCanBeCancelled() {
