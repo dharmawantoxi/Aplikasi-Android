@@ -72,7 +72,8 @@ public final class FinanceFlowTest {
             onView(withText("ToxiFlow")).check(matches(isDisplayed()));
             onView(withText("Catat transaksi")).perform(scrollTo(), click());
             onView(withText("Pemasukan")).perform(click());
-            onView(withContentDescription("Nominal transaksi dalam rupiah")).perform(typeText("1000000"), closeSoftKeyboard());
+            onView(withContentDescription("Nominal transaksi dalam rupiah")).perform(typeText("1000000"), closeSoftKeyboard())
+                    .check(matches(withText("1.000.000")));
             onView(withHint("Contoh: Gaji bulanan")).perform(typeText("Gaji bulanan"), closeSoftKeyboard());
             onView(withText("Jam pembuatan dicatat otomatis saat disimpan, sesuai jam perangkat."))
                     .perform(scrollTo()).check(matches(isDisplayed()));
@@ -95,7 +96,8 @@ public final class FinanceFlowTest {
     @Test public void expenseCanBeEditedAndAppearsInReport() {
         try (ActivityScenario<MainActivity> scenario = launchHome()) {
             onView(withText("Catat transaksi")).perform(scrollTo(), click());
-            onView(withContentDescription("Nominal transaksi dalam rupiah")).perform(typeText("25000"), closeSoftKeyboard());
+            onView(withContentDescription("Nominal transaksi dalam rupiah")).perform(typeText("25000"), closeSoftKeyboard())
+                    .check(matches(withText("25.000")));
             onView(withHint("Contoh: Makan siang")).perform(typeText("Makan malam"), closeSoftKeyboard());
             onView(withText("Simpan transaksi")).perform(click());
             String createdAt = onlySavedTransaction().createdAt;
@@ -105,7 +107,8 @@ public final class FinanceFlowTest {
             onView(withText("Transaksi")).perform(click());
             onView(withText("Makan malam")).perform(scrollTo(), click());
             onView(withText("Ubah")).perform(click());
-            onView(withContentDescription("Nominal transaksi dalam rupiah")).perform(replaceText("40000"), closeSoftKeyboard());
+            onView(withContentDescription("Nominal transaksi dalam rupiah")).check(matches(withText("25.000")))
+                    .perform(replaceText("40000"), closeSoftKeyboard()).check(matches(withText("40.000")));
             onView(withText("Simpan transaksi")).perform(click());
             assertEquals(createdAt, onlySavedTransaction().createdAt);
             onView(withText("− Rp40.000")).perform(scrollTo()).check(matches(isDisplayed()));
@@ -118,11 +121,12 @@ public final class FinanceFlowTest {
     @Test public void invalidPastedNominalIsNotSilentlySaved() {
         try (ActivityScenario<MainActivity> scenario = launchHome()) {
             onView(withText("Catat transaksi")).perform(scrollTo(), click());
-            onView(withContentDescription("Nominal transaksi dalam rupiah")).perform(replaceText("12.500"), closeSoftKeyboard());
+            onView(withContentDescription("Nominal transaksi dalam rupiah")).perform(replaceText("12,50"), closeSoftKeyboard());
             onView(withHint("Contoh: Makan siang")).perform(typeText("Makan"), closeSoftKeyboard());
             onView(withText("Simpan transaksi")).perform(click());
             onView(withContentDescription("Nominal transaksi dalam rupiah"))
-                    .check(matches(hasErrorText("Masukkan nominal rupiah tanpa titik atau koma (maksimal 12 digit).")));
+                    .check(matches(withText("12,50")))
+                    .check(matches(hasErrorText("Masukkan rupiah utuh (maksimal 12 digit); gunakan titik hanya sebagai pemisah ribuan, tanpa koma atau desimal.")));
             onView(withText("Simpan transaksi")).check(matches(isDisplayed()));
             pressBack();
             onView(withText("Buang")).perform(click());

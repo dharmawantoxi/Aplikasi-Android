@@ -12,12 +12,22 @@ import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import static org.junit.Assert.*;
+import static org.junit.Assume.assumeTrue;
 
 import android.content.Context;
+import android.content.ContextWrapper;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.os.Bundle;
+import android.os.CancellationSignal;
+import android.os.ParcelFileDescriptor;
+import android.print.PageRange;
+import android.print.PrintAttributes;
+import android.print.PrintDocumentAdapter;
+import android.print.PrintManager;
 import android.view.View;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -132,12 +142,14 @@ public final class LanguageFlowTest {
         assertTrue(LanguageSettings.save(context, AppLanguage.ENGLISH));
         try (ActivityScenario<TransactionFormActivity> scenario = ActivityScenario.launch(
                 new Intent(context, TransactionFormActivity.class))) {
-            onView(withContentDescription("Transaction amount in rupiah")).perform(replaceText("12.500"), closeSoftKeyboard());
+            onView(withContentDescription("Transaction amount in rupiah")).perform(replaceText("12,50"), closeSoftKeyboard());
             onView(withHint("Example: Lunch")).perform(replaceText("Nasi uduk"), closeSoftKeyboard());
             onView(withText("Save transaction")).perform(click());
             onView(withContentDescription("Transaction amount in rupiah"))
-                    .check(matches(hasErrorText("Enter a whole rupiah amount without dots or commas (maximum 12 digits).")));
-            onView(withContentDescription("Transaction amount in rupiah")).perform(scrollTo(), replaceText("25000"), closeSoftKeyboard());
+                    .check(matches(withText("12,50")))
+                    .check(matches(hasErrorText("Enter whole rupiah (up to 12 digits); use dots only as thousands separators, without commas or decimals.")));
+            onView(withContentDescription("Transaction amount in rupiah")).perform(scrollTo(), replaceText("25000"), closeSoftKeyboard())
+                    .check(matches(withText("25.000")));
             onView(withContentDescription("Transaction category")).perform(scrollTo(), click());
             onView(withText("Shopping")).perform(click());
             onView(withContentDescription("Additional note, optional")).perform(scrollTo(), replaceText("Tidak diubah"), closeSoftKeyboard());
@@ -171,10 +183,52 @@ public final class LanguageFlowTest {
         simulatedSystem.setLocale(Locale.FRENCH);
         Context base = context.createConfigurationContext(simulatedSystem);
         assertTrue(LanguageSettings.save(context, AppLanguage.ENGLISH));
-        Context english = LanguageSettings.wrap(base);
+        Object printService = new Object();
+        Context recordingBase = new ContextWrapper(base) {
+            @Override public Object getSystemService(String name) {
+                return Context.PRINT_SERVICE.equals(name) ? printService : super.getSystemService(name);
+            }
+        };
+        Context english = LanguageSettings.wrap(recordingBase);
         assertEquals("en", english.getResources().getConfiguration().getLocales().get(0).getLanguage());
         assertEquals("en", Locale.getDefault().getLanguage());
         assertEquals("fr", base.getResources().getConfiguration().getLocales().get(0).getLanguage());
+        assertSame("The print service must come from the original activity base",
+                printService, english.getSystemService(Context.PRINT_SERVICE));
+    }
+
+    @Test public void localizedActivityProvidesAnActivityBoundPrintManager() {
+        assumeTrue("Android printing is not available on this device",
+                context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_PRINTING));
+        // An empty job name is rejected after the framework checks the Activity context, before
+        // a print job or system dialog can be created. This exercises the real PrintManager guard.
+        PrintDocumentAdapter unused = new PrintDocumentAdapter() {
+            @Override public void onLayout(PrintAttributes oldAttributes, PrintAttributes newAttributes,
+                                           CancellationSignal signal, LayoutResultCallback callback, Bundle extras) {
+                fail("No print job should be started");
+            }
+            @Override public void onWrite(PageRange[] pages, ParcelFileDescriptor destination,
+                                         CancellationSignal signal, WriteResultCallback callback) {
+                fail("No print job should be started");
+            }
+        };
+        for (AppLanguage selected : new AppLanguage[]{AppLanguage.INDONESIAN, AppLanguage.ENGLISH}) {
+            assertTrue(LanguageSettings.save(context, selected));
+            try (ActivityScenario<MainActivity> scenario = launchHome()) {
+                scenario.onActivity(activity -> {
+                    assertEquals(selected.locale.getLanguage(),
+                            activity.getResources().getConfiguration().getLocales().get(0).getLanguage());
+                    PrintManager manager = (PrintManager) activity.getSystemService(Context.PRINT_SERVICE);
+                    assertNotNull(manager);
+                    try {
+                        manager.print("", unused, null);
+                        fail("An empty print job name must be rejected");
+                    } catch (IllegalArgumentException expected) {
+                        assertTrue(expected.getMessage().contains("printJobName"));
+                    }
+                });
+            }
+        }
     }
 
     @Test public void splashUsesPersistedLanguage() {

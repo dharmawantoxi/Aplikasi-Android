@@ -14,8 +14,11 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.MediaStore;
+import android.text.Editable;
 import android.text.InputFilter;
 import android.text.InputType;
+import android.text.Selection;
+import android.text.TextWatcher;
 import android.text.method.TextKeyListener;
 import android.view.Gravity;
 import android.view.View;
@@ -110,6 +113,14 @@ public final class TransactionFormActivity extends Activity {
             pendingRechooseMessage = savedInstanceState.getBoolean("photo_importing", false);
         }
         buildForm(initialAmount, initialTitle, initialCategory, initialNote);
+        if (savedInstanceState != null) {
+            int start = savedInstanceState.getInt("amount_selection_start", -1);
+            int end = savedInstanceState.getInt("amount_selection_end", -1);
+            if (start >= 0 && end >= 0) {
+                int length = amountInput.length();
+                amountInput.setSelection(Math.min(start, length), Math.min(end, length));
+            }
+        }
         updatePhotoUi();
         requestPhotoPreview();
     }
@@ -178,18 +189,21 @@ public final class TransactionFormActivity extends Activity {
         amountInput.setContentDescription(tr("Nominal transaksi dalam rupiah", "Transaction amount in rupiah"));
         amountInput.setSingleLine(true);
         amountInput.setBackgroundColor(Color.TRANSPARENT);
-        // Show a numeric keyboard but keep pasted punctuation visible so validation can reject it.
-        // Do not truncate at 12 digits: that could silently turn a pasted amount into a different one.
+        // Use a numeric keyboard; retain invalid pasted text so validation can reject it.
+        // Do not truncate at 12 digits: an oversized amount must never silently become smaller.
         amountInput.setKeyListener(TextKeyListener.getInstance());
         amountInput.setRawInputType(InputType.TYPE_CLASS_NUMBER);
-        amountInput.setFilters(new InputFilter[]{new InputFilter.LengthFilter(100)});
+        amountInput.setFilters(new InputFilter[]{new InputFilter.LengthFilter(AmountInput.MAX_TEXT_LENGTH)});
         amountInput.setImeOptions(EditorInfo.IME_ACTION_NEXT);
         amountInput.setPadding(Ui.dp(this, 10), 0, 0, 0);
-        amountInput.setText(amount);
+        amountInput.setText(AmountInput.forDisplay(amount));
+        amountInput.setSelection(amountInput.length());
+        installAmountFormatting();
         amountBox.addView(amountInput, Ui.weighted(0, Ui.dp(this, 55), 1));
         content.addView(amountBox);
         content.addView(Ui.gap(this, 5));
-        content.addView(Ui.text(this, tr("Rupiah penuh, maksimal 12 digit, tanpa titik atau koma.", "Whole rupiah only, up to 12 digits, without dots or commas."), 11, Ui.MUTED, false));
+        content.addView(Ui.text(this, tr("Rupiah penuh, maksimal 12 digit. Titik ribuan otomatis; tanpa koma atau desimal.",
+                "Whole rupiah, up to 12 digits. Thousands dots appear automatically; no commas or decimals."), 11, Ui.MUTED, false));
         content.addView(Ui.gap(this, 19));
 
         content.addView(fieldLabel(tr("NAMA TRANSAKSI", "TRANSACTION NAME"), false));
@@ -295,6 +309,45 @@ public final class TransactionFormActivity extends Activity {
 
         updateTabs();
         setCategories(category);
+    }
+
+    private void installAmountFormatting() {
+        amountInput.addTextChangedListener(new TextWatcher() {
+            private boolean formatting;
+            private String before = "";
+            private int start, removed, inserted, oldStart, oldEnd;
+
+            @Override public void beforeTextChanged(CharSequence text, int start, int count, int after) {
+                if (formatting) return;
+                before = text.toString();
+                this.start = start;
+                removed = count;
+                inserted = after;
+                oldStart = amountInput.getSelectionStart();
+                oldEnd = amountInput.getSelectionEnd();
+            }
+
+            @Override public void onTextChanged(CharSequence text, int start, int before, int count) { }
+
+            @Override public void afterTextChanged(Editable editable) {
+                if (formatting) return;
+                int selectionStart = Selection.getSelectionStart(editable);
+                int selectionEnd = Selection.getSelectionEnd(editable);
+                if (selectionStart < 0) selectionStart = start + inserted;
+                if (selectionEnd < 0) selectionEnd = selectionStart;
+                AmountInput.Edit edit = AmountInput.afterEdit(before, editable.toString(), start, removed, inserted,
+                        oldStart, oldEnd, selectionStart, selectionEnd);
+                if (edit.text.contentEquals(editable)) return;
+                formatting = true;
+                try {
+                    editable.replace(0, editable.length(), edit.text);
+                    Selection.setSelection(editable, Math.min(edit.selectionStart, editable.length()),
+                            Math.min(edit.selectionEnd, editable.length()));
+                } finally {
+                    formatting = false;
+                }
+            }
+        });
     }
 
     private TextView typeTab(String label) {
@@ -676,6 +729,8 @@ public final class TransactionFormActivity extends Activity {
         out.putString("type", type);
         out.putString("date", selectedDate);
         out.putString("amount", amountInput.getText().toString());
+        out.putInt("amount_selection_start", amountInput.getSelectionStart());
+        out.putInt("amount_selection_end", amountInput.getSelectionEnd());
         out.putString("title", titleInput.getText().toString());
         out.putString("note", noteInput.getText().toString());
         out.putString("category", selectedCategory());
@@ -688,7 +743,7 @@ public final class TransactionFormActivity extends Activity {
 
     private boolean hasChanges() {
         if (amountInput == null) return false;
-        String originalAmount = original == null ? "" : Long.toString(original.amount);
+        String originalAmount = original == null ? "" : AmountInput.forDisplay(Long.toString(original.amount));
         String originalTitle = original == null ? "" : original.title;
         String originalNote = original == null ? "" : original.note;
         String originalType = original == null ? Transaction.EXPENSE : original.type;

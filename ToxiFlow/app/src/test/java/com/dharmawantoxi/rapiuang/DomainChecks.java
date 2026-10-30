@@ -8,6 +8,7 @@ import java.util.Collections;
 import java.util.GregorianCalendar;
 import java.util.List;
 import java.util.Locale;
+import java.util.Random;
 import java.util.TimeZone;
 
 /** Can run both as a JUnit test (via DomainTest) and with plain javac. */
@@ -412,6 +413,141 @@ public final class DomainChecks {
         eq(0, PrintPagination.normalizeRanges(2, Collections.singletonList(new int[]{3, 5})).size(), "out-of-range selection");
     }
 
+    private static AmountInput.Edit editAmount(String before, int start, int end, String replacement,
+                                               int oldStart, int oldEnd) {
+        String after = before.substring(0, start) + replacement + before.substring(end);
+        int cursor = start + replacement.length();
+        return AmountInput.afterEdit(before, after, start, end - start, replacement.length(),
+                oldStart, oldEnd, cursor, cursor);
+    }
+
+    private static String independentlyGrouped(String digits) {
+        StringBuilder grouped = new StringBuilder();
+        for (int i = digits.length() - 1; i >= 0; i--) {
+            if (grouped.length() > 0 && (digits.length() - i - 1) % 3 == 0) grouped.append('.');
+            grouped.append(digits.charAt(i));
+        }
+        return grouped.reverse().toString();
+    }
+
+    private static void testAmountInput() {
+        eq("", AmountInput.forDisplay(""), "empty amount stays empty");
+        eq("1.000", AmountInput.forDisplay("1000"), "thousands appear while typing");
+        eq("1.234.567", AmountInput.forDisplay("1234567"), "millions appear while typing");
+        eq("0.001", AmountInput.forDisplay("0001"), "leading zeroes are not silently discarded");
+        eq("12.500", AmountInput.forDisplay("12.500"), "valid grouped paste remains grouped");
+        eq("12,50", AmountInput.forDisplay("12,50"), "invalid comma stays visible");
+        eq("12.34", AmountInput.forDisplay("12.34"), "malformed group stays visible");
+        String hundredDigits = new String(new char[100]).replace('\0', '7');
+        eq(hundredDigits, AmountInput.forDisplay(hundredDigits), "oversized input is not truncated by formatting");
+        String nearFilterLimit = AmountInput.forDisplay(new String(new char[75]).replace('\0', '7'));
+        AmountInput.Edit largeEdit = editAmount(nearFilterLimit, nearFilterLimit.length(), nearFilterLimit.length(), "8",
+                nearFilterLimit.length(), nearFilterLimit.length());
+        eq(100, largeEdit.text.length(), "formatting never overflows the 100-character input filter");
+        eq(76, largeEdit.text.replace(".", "").length(), "filter boundary retains all entered digits");
+
+        String text = "";
+        int cursor = 0;
+        String[] expected = {"1", "12", "123", "1.234", "12.345", "123.456", "1.234.567"};
+        String raw = "1234567";
+        for (int i = 0; i < raw.length(); i++) {
+            AmountInput.Edit step = editAmount(text, cursor, cursor, raw.substring(i, i + 1), cursor, cursor);
+            eq(expected[i], step.text, "incremental grouping");
+            eq(step.text.length(), step.selectionStart, "cursor stays at end while typing");
+            eq(step.selectionStart, step.selectionEnd, "typing leaves a collapsed cursor");
+            text = step.text;
+            cursor = step.selectionStart;
+        }
+        AmountInput.Edit middle = editAmount("12.345", 2, 2, "9", 2, 2);
+        eq("129.345", middle.text, "insert in the middle preserves digits");
+        eq(3, middle.selectionStart, "cursor remains beside the inserted digit");
+        AmountInput.Edit afterDot = editAmount("12.345", 3, 3, "9", 3, 3);
+        eq("129.345", afterDot.text, "insert after separator preserves digits");
+        eq(3, afterDot.selectionStart, "cursor follows middle insertion");
+        AmountInput.Edit backspaceDot = editAmount("12.345", 2, 3, "", 3, 3);
+        eq("1.345", backspaceDot.text, "backspace just after dot deletes preceding digit");
+        eq(1, backspaceDot.selectionStart, "backspace leaves cursor beside preceding digit");
+        AmountInput.Edit deleteDot = editAmount("12.345", 2, 3, "", 2, 2);
+        eq("1.245", deleteDot.text, "forward delete before dot deletes following digit");
+        eq(3, deleteDot.selectionStart, "forward delete keeps the logical cursor position");
+        AmountInput.Edit deleteEnd = editAmount("1.234", 4, 5, "", 5, 5);
+        eq("123", deleteEnd.text, "grouping updates when deleting a digit");
+        eq(3, deleteEnd.selectionStart, "cursor follows end deletion");
+        AmountInput.Edit selection = editAmount("123.456", 1, 5, "", 1, 5);
+        eq("156", selection.text, "selection containing a separator deletes only selected digits");
+        eq(1, selection.selectionStart, "cursor follows selection deletion");
+        AmountInput.Edit replacement = editAmount("123.456", 1, 5, "99", 1, 5);
+        eq("19.956", replacement.text, "replacing selected digits retains intended amount");
+        eq(4, replacement.selectionStart, "cursor follows selection replacement");
+        eq("12.500", editAmount("", 0, 0, "12.500", 0, 0).text, "valid grouped paste accepted");
+        eq("12,50", editAmount("", 0, 0, "12,50", 0, 0).text, "comma paste not silently changed");
+        eq("12.34", editAmount("", 0, 0, "12.34", 0, 0).text, "malformed grouping not silently changed");
+        eq("12,503", editAmount("12,50", 5, 5, "3", 5, 5).text, "invalid paste stays invalid while editing");
+        eq("12.34", editAmount("1.000", 0, 5, "12.34", 0, 5).text,
+                "replacing a valid grouped amount never strips newly pasted punctuation");
+        eq("12..345", editAmount("12.345", 2, 2, ".", 2, 2).text,
+                "inserting an extra dot stays visibly invalid");
+        eq("1.250", editAmount("12,50", 2, 3, "", 3, 3).text, "correcting invalid punctuation permits grouping");
+        AmountInput.Edit range = AmountInput.afterEdit("", "1234567", 0, 0, 7, 0, 0, 2, 6);
+        eq("1.234.567", range.text, "selection test groups value");
+        eq(3, range.selectionStart, "selection start follows its digit");
+        eq(8, range.selectionEnd, "selection end follows its digit");
+        eq("1.000.000.000.000", editAmount("", 0, 0, "1000000000000", 0, 0).text,
+                "13 digits stay visible instead of being silently truncated");
+        for (String invalid : new String[]{".123", "1.00", "12.34", "1234.567", "1..000", "1.000.",
+                "1,000", "1.000,00", " 1000", "1000 ", "Rp1.000", "−1.000", "0.000"}) rejects(invalid);
+        eq(1L, Money.parseAmount("000.001"), "grouped leading zeroes preserve value");
+        check(FinanceMath.validate(Transaction.EXPENSE, "12.500", "Makan", "Makan & minum", "2026-10-30", "") == null,
+                "expense validates grouped amount");
+        check(FinanceMath.validate(Transaction.INCOME, "1.000.000", "Gaji", "Gaji", "2026-10-30", "") == null,
+                "income validates grouped amount");
+
+        // Compare many mid-string insertions/deletions with an independent digit-only model.
+        Random random = new Random(1701);
+        text = "";
+        for (int i = 0; i < 1500; i++) {
+            int digitCount = text.replace(".", "").length();
+            boolean insert = digitCount == 0 || (digitCount < 20 && random.nextBoolean());
+            int position;
+            String replacementText;
+            if (insert) {
+                position = random.nextInt(text.length() + 1);
+                replacementText = Integer.toString(random.nextInt(10));
+            } else {
+                position = random.nextInt(text.length());
+                while (text.charAt(position) == '.') position = random.nextInt(text.length());
+                replacementText = "";
+            }
+            int end = position + (insert ? 0 : 1);
+            String unformatted = text.substring(0, position) + replacementText + text.substring(end);
+            String digits = unformatted.replace(".", "");
+            int digitsBeforeCursor = (text.substring(0, position) + replacementText).replace(".", "").length();
+            int oldCursor = insert ? position : end;
+            AmountInput.Edit result = editAmount(text, position, end, replacementText, oldCursor, oldCursor);
+            eq(independentlyGrouped(digits), result.text, "random edit keeps every digit");
+            eq(digitsBeforeCursor, result.text.substring(0, result.selectionStart).replace(".", "").length(),
+                    "random edit preserves logical cursor");
+            text = result.text;
+        }
+        for (int i = 0; i < 500; i++) {
+            int start = random.nextInt(text.length() + 1);
+            int end = start + random.nextInt(text.length() - start + 1);
+            String replacementText = random.nextBoolean() ? Integer.toString(random.nextInt(10000)) : "";
+            if (start == end && replacementText.isEmpty()) continue;
+            String rawEdit = text.substring(0, start) + replacementText + text.substring(end);
+            int digitsBeforeCursor = (text.substring(0, start) + replacementText).replace(".", "").length();
+            AmountInput.Edit result = editAmount(text, start, end, replacementText, start, end);
+            eq(independentlyGrouped(rawEdit.replace(".", "")), result.text, "random replacement retains selected digits");
+            eq(digitsBeforeCursor, result.text.substring(0, result.selectionStart).replace(".", "").length(),
+                    "random replacement preserves logical cursor");
+            text = result.text;
+        }
+        for (int i = 0; i < 200; i++) {
+            long amount = 1 + Math.floorMod(random.nextLong(), Money.MAX_TRANSACTION);
+            eq(amount, Money.parseAmount(AmountInput.forDisplay(Long.toString(amount))), "formatted amount round trips exactly");
+        }
+    }
+
     private static void testLanguage() throws Exception {
         AppLanguage id = AppLanguage.INDONESIAN, en = AppLanguage.ENGLISH;
         eq(id, AppLanguage.fromCode(null), "missing preference defaults to Indonesian");
@@ -445,10 +581,10 @@ public final class DomainChecks {
         eq("Creation time not recorded", CreationTime.listLabel("", en), "English unavailable creation time");
         eq("Rp1.234.567", Money.format(1234567), "rupiah formatting is language-independent");
 
-        FinanceMath.ValidationError badAmount = FinanceMath.validate(Transaction.EXPENSE, "12.500", "Nasi",
+        FinanceMath.ValidationError badAmount = FinanceMath.validate(Transaction.EXPENSE, "12,50", "Nasi",
                 "Makan & minum", "2026-01-05", "", en);
         eq("amount", badAmount.field, "English validation keeps field key");
-        eq("Enter a whole rupiah amount without dots or commas (maximum 12 digits).", badAmount.message,
+        eq("Enter whole rupiah (up to 12 digits); use dots only as thousands separators, without commas or decimals.", badAmount.message,
                 "English validation message");
         eq("Enter a transaction name.", FinanceMath.validate(Transaction.EXPENSE, "100", " ",
                 "Makan & minum", "2026-01-05", "", en).message, "English title validation");
@@ -521,6 +657,7 @@ public final class DomainChecks {
 
     public static void main(String[] args) throws Exception {
         testSplashTiming();
+        testAmountInput();
         testLanguage();
         eq("Rp0", Money.format(0), "format zero");
         eq("Rp1.234.567", Money.format(1_234_567), "format rupiah");
@@ -531,8 +668,11 @@ public final class DomainChecks {
         eq("− Rp12.000", Money.signed(12000, false), "expense sign");
         eq(1L, Money.parseAmount("0001"), "leading zeroes");
         eq(999_999_999_999L, Money.parseAmount("999999999999"), "max value");
-        rejects(""); rejects("0"); rejects("-1"); rejects("1.000"); rejects("2,5");
-        rejects("1000000000000"); rejects("a100"); rejects(null);
+        eq(1000L, Money.parseAmount("1.000"), "valid thousands separator");
+        eq(12_500L, Money.parseAmount("12.500"), "grouped input");
+        eq(999_999_999_999L, Money.parseAmount("999.999.999.999"), "grouped maximum");
+        rejects(""); rejects("0"); rejects("-1"); rejects("2,5"); rejects("1,000");
+        rejects("1000000000000"); rejects("1.000.000.000.000"); rejects("a100"); rejects(null);
 
         check(Dates.isValid("2024-02-29"), "leap day is valid");
         check(!Dates.isValid("2023-02-29"), "non-leap day is invalid");
