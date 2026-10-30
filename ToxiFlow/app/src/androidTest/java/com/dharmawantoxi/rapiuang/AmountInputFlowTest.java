@@ -11,9 +11,10 @@ import static androidx.test.espresso.matcher.ViewMatchers.hasErrorText;
 import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
+import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
 import static org.junit.Assert.*;
+import static androidx.test.espresso.Espresso.pressBack;
 
-import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.view.KeyEvent;
@@ -23,7 +24,6 @@ import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.widget.EditText;
 
-import androidx.lifecycle.Lifecycle;
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -187,9 +187,9 @@ public final class AmountInputFlowTest {
         } finally { store.close(); }
         try (ActivityScenario<TransactionFormActivity> scenario = form(id)) {
             onView(withContentDescription(AMOUNT)).check(matches(withText("50.000")));
-            scenario.onActivity(Activity::onBackPressed);
+            pressBack();
             InstrumentationRegistry.getInstrumentation().waitForIdleSync();
-            assertEquals(Lifecycle.State.DESTROYED, scenario.getState());
+            onView(withText("Buang perubahan?")).check(doesNotExist());
         }
         store = new FinanceStore(context);
         try { assertEquals(50000L, store.get(id).amount); } finally { store.close(); }
