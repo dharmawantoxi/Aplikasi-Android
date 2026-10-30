@@ -242,6 +242,10 @@ public final class FinanceFlowTest {
             onView(withText("Ambil")).inRoot(isDialog()).perform(click());
             onView(withContentDescription("Dana siap pakai Rp55.000")).check(matches(isDisplayed()));
             onView(withContentDescription("Saldo tabungan Rp20.000")).check(matches(isDisplayed()));
+            onView(withText("Laporan")).perform(click());
+            onView(withText("TABUNGAN BULAN INI")).perform(scrollTo()).check(matches(isDisplayed()));
+            onView(withText(containsString("pindah ke tabungan"))).perform(scrollTo()).check(matches(isDisplayed()));
+            onView(withText(containsString("pindah ke dana tersedia"))).perform(scrollTo()).check(matches(isDisplayed()));
         }
         FinanceStore reader = new FinanceStore(context);
         try {

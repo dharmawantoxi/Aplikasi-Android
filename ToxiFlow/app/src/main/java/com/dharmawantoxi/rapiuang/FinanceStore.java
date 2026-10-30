@@ -278,6 +278,17 @@ public final class FinanceStore extends SQLiteOpenHelper {
         } finally { db.endTransaction(); }
     }
 
+    List<SavingsMovement> allSavingsMovements() {
+        List<SavingsMovement> movements = new ArrayList<>();
+        try (Cursor cursor = getReadableDatabase().query("savings_movements",
+                new String[]{"_id", "type", "amount", "date", "created_at"}, null, null,
+                null, null, "date DESC, _id DESC")) {
+            while (cursor.moveToNext()) movements.add(new SavingsMovement(cursor.getLong(0), cursor.getString(1),
+                    cursor.getLong(2), cursor.getString(3), cursor.getString(4)));
+        }
+        return movements;
+    }
+
     BigInteger savingsBalance() { return savingsBalance(getReadableDatabase()); }
 
     private static BigInteger savingsBalance(SQLiteDatabase db) {

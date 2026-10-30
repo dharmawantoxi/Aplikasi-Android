@@ -53,6 +53,7 @@ public final class MainActivity extends Activity {
     private List<Transaction> all = new ArrayList<>();
     private List<Transaction> month = new ArrayList<>();
     private List<DebtRecord> debtRecords = new ArrayList<>();
+    private List<SavingsMovement> savingsMovements = new ArrayList<>();
     private BigInteger availableFunds = BigInteger.ZERO;
     private BigInteger savingsBalance = BigInteger.ZERO;
     private int page = HOME;
@@ -141,6 +142,7 @@ public final class MainActivity extends Activity {
             all = store.all();
             month = FinanceMath.forMonth(all, year, monthIndex);
             debtRecords = store.allDebtRecords();
+            savingsMovements = store.allSavingsMovements();
             availableFunds = store.availableFunds();
             savingsBalance = store.savingsBalance();
             loadFailed = false;
@@ -953,6 +955,8 @@ public final class MainActivity extends Activity {
         balance.addView(Ui.text(this, Money.format(summary.balance), 16, summary.balance.signum() < 0 ? Ui.CORAL : Ui.GREEN, true));
         flow.addView(balance);
         content.addView(flow);
+        content.addView(Ui.gap(this, 12));
+        content.addView(savingsActivityCard());
         FinanceInsights insights = FinanceInsights.forMonth(year, monthIndex, all, language);
         content.addView(Ui.gap(this, 24));
         content.addView(sectionHeading(tr("Sorotan bulanan", "Monthly insights"), null, null));
@@ -1003,6 +1007,55 @@ public final class MainActivity extends Activity {
         }
         content.addView(Ui.gap(this, 16));
         content.addView(addTransactionCallout());
+    }
+
+    private View savingsActivityCard() {
+        MonthlyReport report = MonthlyReport.forMonth(year, monthIndex, all, savingsMovements, language);
+        LinearLayout card = Ui.column(this);
+        card.setBackground(Ui.shape(this, Ui.WHITE, 20));
+        Ui.pad(card, 17, 16, 17, 16);
+        card.addView(Ui.overline(this, tr("TABUNGAN BULAN INI", "SAVINGS THIS MONTH"), Ui.GREEN));
+        card.addView(Ui.gap(this, 7));
+        card.addView(reportAmountRow(tr("Saldo awal tabungan", "Opening savings balance"), report.savingsOpeningBalance, Ui.MUTED));
+        card.addView(reportAmountRow(tr("Ditambahkan ke tabungan", "Added to savings"), report.savingsAdded, 0xff6ca984));
+        card.addView(reportAmountRow(tr("Diambil dari tabungan", "Withdrawn from savings"), report.savingsWithdrawn, 0xffe9ae9b));
+        LinearLayout closing = Ui.row(this);
+        closing.addView(Ui.text(this, tr("Saldo akhir tabungan", "Closing savings balance"), 12, Ui.INK, true), Ui.weighted(0, -2, 1));
+        closing.addView(Ui.text(this, Money.format(report.savingsClosingBalance), 13, Ui.GREEN, true));
+        card.addView(Ui.gap(this, 5));
+        card.addView(closing);
+        boolean hasActivity = false;
+        for (Transaction transaction : month) if (transaction.savingsAmount > 0) hasActivity = true;
+        hasActivity |= !report.savingsMovements.isEmpty();
+        if (!hasActivity) {
+            card.addView(Ui.gap(this, 5));
+            card.addView(Ui.text(this, tr("Belum ada aktivitas tabungan pada periode ini.", "No savings activity in this period."), 11, Ui.MUTED, false));
+        } else {
+            card.addView(Ui.gap(this, 8));
+            card.addView(Ui.divider(this));
+            for (Transaction transaction : month) if (transaction.savingsAmount > 0) {
+                boolean income = Transaction.INCOME.equals(transaction.type);
+                card.addView(savingsEventRow(Dates.displayShort(transaction.date, language) + " · " + transaction.title
+                        + (income ? tr(" · masuk ke tabungan", " · added to savings") : tr(" · dibayar dari tabungan", " · paid from savings")),
+                        transaction.savingsAmount, income));
+            }
+            for (SavingsMovement movement : report.savingsMovements) {
+                boolean deposit = SavingsMovement.DEPOSIT.equals(movement.type);
+                card.addView(savingsEventRow(Dates.displayShort(movement.date, language)
+                        + (deposit ? tr(" · pindah ke tabungan", " · transfer to savings")
+                        : tr(" · pindah ke dana tersedia", " · transfer to available funds")), movement.amount, deposit));
+            }
+        }
+        return card;
+    }
+
+    private View savingsEventRow(String label, long value, boolean added) {
+        LinearLayout row = Ui.row(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.addView(Ui.text(this, label, 11, Ui.MUTED, false), Ui.weighted(0, -2, 1));
+        row.addView(Ui.text(this, (added ? "+ " : "− ") + Money.format(value), 12,
+                added ? Ui.GREEN : Ui.CORAL, true));
+        return row;
     }
 
     private View insightHighlights(FinanceInsights insights) {
@@ -1116,11 +1169,12 @@ public final class MainActivity extends Activity {
 
     private void confirmMonthlyPrint() {
         // Fix the selected month; a consistent snapshot is captured when printing is prepared.
-        MonthlyReport report = MonthlyReport.forMonth(year, monthIndex, all, language);
+        MonthlyReport report = MonthlyReport.forMonth(year, monthIndex, all, savingsMovements, language);
         CheckBox includePhotos = new CheckBox(this);
         includePhotos.setText(tr("Sertakan foto sebagai lampiran", "Include photos as appendices"));
         includePhotos.setChecked(true);
-        String disclosure = tr("Laporan memuat seluruh transaksi, nominal, waktu pembuatan, dan catatan pada periode ini, ", "The report includes all transactions, amounts, creation times, and notes in this period, ")
+        String disclosure = tr("Laporan memuat seluruh transaksi, alokasi dan perpindahan tabungan, saldo awal/akhir tabungan, nominal, waktu pembuatan, dan catatan pada periode ini, ",
+                        "The report includes all transactions, savings allocations and transfers, opening/closing savings balances, amounts, creation times, and notes in this period, ")
                 + tr("termasuk nominal yang disembunyikan di beranda.\n\n", "including amounts hidden on the home screen.\n\n")
                 + tr("Jika dipilih, foto ikut dicetak atau disimpan sebagai halaman lampiran di PDF. ", "If selected, photos are printed or saved as appendix pages in the PDF. ")
                 + tr("Foto dan data diberikan kepada layanan cetak yang dipilih. CSV tidak memuat gambar.\n\n", "Photos and data are provided to the selected print service. CSV does not include images.\n\n")

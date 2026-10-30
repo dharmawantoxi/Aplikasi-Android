@@ -95,6 +95,30 @@ public final class DomainChecks {
         eq(2, january.transactions.size(), "print includes both month boundaries only");
         eq(new BigInteger("-5"), january.summary.balance, "print negative difference");
         check(reportText(january).contains("Selisih periode: −Rp5"), "negative print difference formatted");
+
+        List<Transaction> savingsTransactions = Arrays.asList(
+                new Transaction(30, Transaction.INCOME, 50000, "Gaji lalu", "Gaji", "2026-09-20", "", null, false, 10000),
+                new Transaction(31, Transaction.INCOME, 50000, "Gaji", "Gaji", "2026-10-05", "", null, false, 20000),
+                new Transaction(32, Transaction.EXPENSE, 10000, "Belanja", "Belanja", "2026-10-10", "", null, false, 3000),
+                new Transaction(33, Transaction.INCOME, 30000, "Bonus nanti", "Gaji", "2026-11-02", "", null, false, 9000));
+        List<SavingsMovement> savingsTransfers = Arrays.asList(
+                new SavingsMovement(1, SavingsMovement.DEPOSIT, 5000, "2026-09-25", "2026-09-25 10:00:00"),
+                new SavingsMovement(2, SavingsMovement.DEPOSIT, 4000, "2026-10-12", "2026-10-12 10:00:00"),
+                new SavingsMovement(3, SavingsMovement.WITHDRAWAL, 2000, "2026-10-15", "2026-10-15 10:00:00"),
+                new SavingsMovement(4, SavingsMovement.DEPOSIT, 8000, "2026-11-03", "2026-11-03 10:00:00"));
+        MonthlyReport savingsReport = MonthlyReport.forMonth(2026, 9, savingsTransactions, savingsTransfers,
+                AppLanguage.INDONESIAN);
+        eq(new BigInteger("15000"), savingsReport.savingsOpeningBalance, "monthly savings opening balance includes earlier allocations and transfers");
+        eq(new BigInteger("24000"), savingsReport.savingsAdded, "monthly savings added includes income allocations and deposits");
+        eq(new BigInteger("5000"), savingsReport.savingsWithdrawn, "monthly savings out includes expense allocations and transfers");
+        eq(new BigInteger("34000"), savingsReport.savingsClosingBalance, "monthly savings closing balance");
+        eq(2, savingsReport.savingsMovements.size(), "monthly report filters transfers by month");
+        List<String> savingsText = reportText(savingsReport);
+        check(savingsText.contains("Saldo awal tabungan: Rp15.000"), "monthly report includes opening savings balance");
+        check(savingsText.contains("Saldo akhir tabungan: Rp34.000"), "monthly report includes closing savings balance");
+        check(savingsText.contains("Pindah ke tabungan · Rp4.000"), "monthly report lists manual savings transfer");
+        check(savingsText.contains("Diambil dari tabungan: Rp3.000"), "monthly report lists expense savings allocation");
+
         char[] longNote = new char[300]; Arrays.fill(longNote, 'x');
         String note = "baris pertama\n" + new String(longNote) + " 🧾";
         MonthlyReport longText = MonthlyReport.forMonth(2026, 9, Collections.singletonList(
