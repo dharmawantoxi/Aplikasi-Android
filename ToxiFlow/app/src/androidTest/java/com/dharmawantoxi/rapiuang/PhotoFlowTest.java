@@ -9,6 +9,7 @@ import static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.action.ViewActions.typeText;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.RootMatchers.isDialog;
 import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
@@ -27,6 +28,8 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.test.core.app.ActivityScenario;
+import androidx.test.espresso.NoMatchingRootException;
+import androidx.test.espresso.NoMatchingViewException;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import org.junit.After;
@@ -92,6 +95,20 @@ public final class PhotoFlowTest {
             if (!found[0]) SystemClock.sleep(50);
         }
         assertTrue("Timed out waiting for form: " + text, found[0]);
+    }
+
+    /** Wait for background photo processing to post its dialog to the UI thread. */
+    private void waitForDialog(String text) {
+        long until = SystemClock.uptimeMillis() + 15000;
+        while (SystemClock.uptimeMillis() < until) {
+            try {
+                onView(withText(text)).inRoot(isDialog()).check(matches(isDisplayed()));
+                return;
+            } catch (NoMatchingRootException | NoMatchingViewException | AssertionError notReadyYet) {
+                SystemClock.sleep(50);
+            }
+        }
+        fail("Timed out waiting for dialog: " + text);
     }
 
     private boolean hasText(View view, String text) {
@@ -231,8 +248,7 @@ public final class PhotoFlowTest {
             try (ActivityScenario<TransactionFormActivity> scenario = ActivityScenario.launch(form)) {
                 waitForForm(scenario, "Foto tersimpan pada transaksi.", true);
                 scenario.onActivity(activity -> activity.onActivityResult(PICK_PHOTO, Activity.RESULT_OK, new Intent().setData(uri)));
-                waitForForm(scenario, "Foto tersimpan pada transaksi.", true);
-                onView(withText("Foto belum bisa dipakai")).check(matches(isDisplayed()));
+                waitForDialog("Foto belum bisa dipakai");
                 onView(withText("Tutup")).perform(click());
                 onView(withContentDescription("Nominal transaksi dalam rupiah")).perform(replaceText("26000"), closeSoftKeyboard());
                 onView(withText("Simpan transaksi")).perform(click());
