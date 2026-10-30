@@ -19,7 +19,7 @@ public final class CsvExport {
 
     public static void write(Writer writer, List<Transaction> transactions) throws IOException {
         writer.write('\ufeff'); // UTF-8 BOM helps spreadsheet programs detect Indonesian text.
-        writer.write("Tanggal,Jenis,Kategori,Nama,Nominal (Rp),Catatan\r\n");
+        writer.write("Tanggal,Jenis,Kategori,Nama,Nominal (Rp),Catatan,Dibuat (waktu perangkat),Foto terlampir (foto tidak disertakan)\r\n");
         for (Transaction t : transactions) {
             writer.write(cell(t.date));
             writer.write(',');
@@ -32,6 +32,10 @@ public final class CsvExport {
             writer.write(Long.toString(t.amount));
             writer.write(',');
             writer.write(cell(t.note));
+            writer.write(',');
+            writer.write(cell(t.createdAt)); // Empty for transactions created before this feature.
+            writer.write(',');
+            writer.write(cell(t.hasPhoto ? "Ada" : "Tidak"));
             writer.write("\r\n");
         }
         writer.flush();

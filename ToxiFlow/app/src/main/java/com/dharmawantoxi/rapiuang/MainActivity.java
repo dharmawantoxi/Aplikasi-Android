@@ -3,15 +3,25 @@ package com.dharmawantoxi.rapiuang;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.DatePickerDialog;
+import android.app.Dialog;
 import android.content.ActivityNotFoundException;
+import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.print.PrintAttributes;
+import android.print.PrintJob;
+import android.print.PrintManager;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -29,6 +39,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity {
     private static final int FORM_REQUEST = 20;
@@ -45,10 +57,15 @@ public final class MainActivity extends Activity {
     private String search = "";
     private boolean hideAmounts;
     private boolean loadFailed;
+    private final ExecutorService photoReader = Executors.newSingleThreadExecutor();
+    private final List<Dialog> photoDialogs = new ArrayList<>();
+    private final Handler photoHandler = new Handler(Looper.getMainLooper());
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         store = new FinanceStore(this);
+        PhotoFiles.pruneOld(this);
+        PrintSnapshot.pruneOld(this);
         Calendar now = Calendar.getInstance();
         year = now.get(Calendar.YEAR);
         monthIndex = now.get(Calendar.MONTH);
@@ -81,6 +98,9 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        for (Dialog dialog : new ArrayList<>(photoDialogs)) dialog.dismiss();
+        photoDialogs.clear();
+        photoReader.shutdownNow();
         store.close();
         super.onDestroy();
     }
@@ -488,10 +508,16 @@ public final class MainActivity extends Activity {
         title.setEllipsize(TextUtils.TruncateAt.END);
         text.addView(title);
         text.addView(Ui.gap(this, 2));
-        TextView subtitle = Ui.text(this, t.category + (showDate ? " · " + Dates.displayShort(t.date) : ""), 11, Ui.MUTED, false);
+        TextView subtitle = Ui.text(this, t.category + (showDate ? " · " + Dates.displayShort(t.date) : "")
+                + (t.hasPhoto ? " · Foto" : ""), 11, Ui.MUTED, false);
         subtitle.setMaxLines(1);
         subtitle.setEllipsize(TextUtils.TruncateAt.END);
         text.addView(subtitle);
+        text.addView(Ui.gap(this, 2));
+        TextView created = Ui.text(this, CreationTime.listLabel(t.createdAt), 11, Ui.MUTED, false);
+        created.setMaxLines(1);
+        created.setEllipsize(TextUtils.TruncateAt.END);
+        text.addView(created);
         row.addView(text, middle);
         boolean masked = showDate && hideAmounts;
         TextView amount = Ui.text(this, masked ? "••••••" : Money.signed(t.amount, income), 13, income ? Ui.GREEN : Ui.INK, true);
@@ -499,7 +525,9 @@ public final class MainActivity extends Activity {
         amount.setMaxWidth(Ui.dp(this, 145));
         row.addView(amount, Ui.lp(-2, -2));
         row.setContentDescription(t.title + ", " + t.category + ", " + (income ? "pemasukan " : "pengeluaran ")
-                + (masked ? "nominal disembunyikan" : Money.format(t.amount)) + ", " + Dates.display(t.date) + ". Ketuk untuk detail.");
+                + (masked ? "nominal disembunyikan" : Money.format(t.amount))
+                + ", tanggal transaksi " + Dates.display(t.date) + ", dibuat " + CreationTime.display(t.createdAt)
+                + (t.hasPhoto ? ", ada foto terlampir" : "") + ". Ketuk untuk detail.");
         row.setOnClickListener(v -> showTransaction(t));
         row.setFocusable(true);
         return row;
@@ -509,6 +537,8 @@ public final class MainActivity extends Activity {
         content.addView(pageHeader("Laporan", "Kenali ke mana uangmu mengalir."));
         content.addView(Ui.gap(this, 24));
         content.addView(monthSelector());
+        content.addView(Ui.gap(this, 12));
+        content.addView(printReportButton());
         content.addView(Ui.gap(this, 18));
         FinanceMath.Summary summary = FinanceMath.summarize(month);
         LinearLayout flow = Ui.column(this);
@@ -536,6 +566,23 @@ public final class MainActivity extends Activity {
         balance.addView(Ui.text(this, Money.format(summary.balance), 16, summary.balance.signum() < 0 ? Ui.CORAL : Ui.GREEN, true));
         flow.addView(balance);
         content.addView(flow);
+        FinanceInsights insights = FinanceInsights.forMonth(year, monthIndex, all);
+        content.addView(Ui.gap(this, 24));
+        content.addView(sectionHeading("Sorotan bulanan", null, null));
+        content.addView(Ui.gap(this, 5));
+        content.addView(Ui.text(this, "Berdasarkan transaksi di bulan terpilih.", 12, Ui.MUTED, false));
+        content.addView(Ui.gap(this, 12));
+        content.addView(insightHighlights(insights));
+        content.addView(Ui.gap(this, 24));
+        content.addView(sectionHeading("Pengeluaran berulang", null, null));
+        content.addView(Ui.gap(this, 5));
+        content.addView(Ui.text(this, "Nama dan kategori sama: minimal dua kali bulan ini atau pada dua bulan dalam rentang yang diperiksa.", 12, Ui.MUTED, false));
+        content.addView(Ui.gap(this, 12));
+        content.addView(recurringInsightCard(insights));
+        content.addView(Ui.gap(this, 24));
+        content.addView(sectionHeading("Saran sederhana", null, null));
+        content.addView(Ui.gap(this, 12));
+        content.addView(suggestionCard(insights));
         content.addView(Ui.gap(this, 24));
         content.addView(sectionHeading("Pengeluaran per kategori", null, null));
         content.addView(Ui.gap(this, 5));
@@ -569,6 +616,175 @@ public final class MainActivity extends Activity {
         }
         content.addView(Ui.gap(this, 16));
         content.addView(addTransactionCallout());
+    }
+
+    private View insightHighlights(FinanceInsights insights) {
+        LinearLayout card = Ui.column(this);
+        card.setBackground(Ui.shape(this, Ui.WHITE, 20));
+        Ui.pad(card, 17, 17, 17, 17);
+        card.addView(Ui.overline(this, "PENGELUARAN TERBESAR", Ui.MUTED));
+        card.addView(Ui.gap(this, 7));
+        if (insights.largestExpense == null) {
+            card.addView(Ui.text(this, "Belum ada pengeluaran pada periode ini.", 13, Ui.MUTED, false));
+        } else {
+            Transaction t = insights.largestExpense;
+            card.addView(Ui.text(this, "Transaksi: " + t.title, 14, Ui.INK, true));
+            card.addView(Ui.gap(this, 3));
+            card.addView(Ui.text(this, Money.format(t.amount) + " · " + t.category + " · " + Dates.display(t.date),
+                    12, Ui.MUTED, false));
+            if (insights.largestExpenseCategory != null) {
+                FinanceMath.CategoryTotal category = insights.largestExpenseCategory;
+                int percent = FinanceMath.percent(category.amount, insights.summary.expense);
+                card.addView(Ui.gap(this, 6));
+                card.addView(Ui.text(this, "Kategori terbesar: " + category.category + " · "
+                        + Money.format(category.amount) + " (" + percent + "% dari pengeluaran)", 12, Ui.INK, false));
+            }
+        }
+        card.addView(Ui.gap(this, 16));
+        card.addView(Ui.divider(this));
+        card.addView(Ui.gap(this, 16));
+        card.addView(Ui.overline(this, "PEMASUKAN TERBESAR", Ui.MUTED));
+        card.addView(Ui.gap(this, 7));
+        if (insights.largestIncome == null) {
+            card.addView(Ui.text(this, "Belum ada pemasukan pada periode ini.", 13, Ui.MUTED, false));
+        } else {
+            Transaction t = insights.largestIncome;
+            card.addView(Ui.text(this, "Transaksi: " + t.title, 14, Ui.INK, true));
+            card.addView(Ui.gap(this, 3));
+            card.addView(Ui.text(this, Money.format(t.amount) + " · " + t.category + " · " + Dates.display(t.date),
+                    12, Ui.MUTED, false));
+            FinanceInsights.Group source = insights.largestIncomeSource;
+            if (source != null) {
+                card.addView(Ui.gap(this, 6));
+                card.addView(Ui.text(this, "Sumber terbesar: " + source.title + " · " + source.category
+                        + " · " + Money.format(source.total) + " (" + source.count + " transaksi bulan ini)",
+                        12, Ui.INK, false));
+                card.addView(Ui.gap(this, 3));
+                card.addView(Ui.text(this, "Sumber dikelompokkan menurut nama dan kategori yang sama.", 10, Ui.MUTED, false));
+            }
+        }
+        return card;
+    }
+
+    private View recurringInsightCard(FinanceInsights insights) {
+        LinearLayout card = Ui.column(this);
+        card.setBackground(Ui.shape(this, Ui.WHITE, 20));
+        Ui.pad(card, 17, 16, 17, 16);
+        if (insights.recurringExpenses.isEmpty()) {
+            card.addView(Ui.text(this, "Belum ada pengeluaran berulang yang terdeteksi pada periode ini.", 13, Ui.MUTED, false));
+        } else {
+            int shown = Math.min(FinanceInsights.MAX_RECURRING_SHOWN, insights.recurringExpenses.size());
+            for (int i = 0; i < shown; i++) {
+                if (i > 0) { card.addView(Ui.gap(this, 12)); card.addView(Ui.divider(this)); card.addView(Ui.gap(this, 12)); }
+                FinanceInsights.Group group = insights.recurringExpenses.get(i);
+                card.addView(Ui.text(this, group.title + " · " + group.category, 14, Ui.INK, true));
+                card.addView(Ui.gap(this, 3));
+                card.addView(Ui.text(this, "Total bulan ini: " + Money.format(group.total), 13, Ui.INK, true));
+                card.addView(Ui.gap(this, 3));
+                card.addView(Ui.text(this, insights.recurringEvidence(group), 11, Ui.MUTED, false));
+            }
+            if (insights.recurringExpenses.size() > shown) {
+                card.addView(Ui.gap(this, 10));
+                card.addView(Ui.text(this, "Menampilkan " + shown + " dari " + insights.recurringExpenses.size()
+                        + " teratas berdasarkan total bulan ini.", 11, Ui.MUTED, false));
+            }
+        }
+        card.addView(Ui.gap(this, 10));
+        card.addView(Ui.text(this, "Rentang: bulan terpilih dan hingga dua bulan sebelumnya. Pola ini tidak memastikan jadwal rutin.",
+                11, Ui.MUTED, false));
+        return card;
+    }
+
+    private View suggestionCard(FinanceInsights insights) {
+        LinearLayout card = Ui.column(this);
+        card.setBackground(Ui.shape(this, Ui.PALE, 20));
+        Ui.pad(card, 17, 16, 17, 16);
+        for (int i = 0; i < insights.suggestions.size(); i++) {
+            if (i > 0) card.addView(Ui.gap(this, 9));
+            card.addView(Ui.text(this, "• " + insights.suggestions.get(i), 12, Ui.INK, false));
+        }
+        card.addView(Ui.gap(this, 12));
+        card.addView(Ui.text(this, "Saran otomatis berdasarkan catatan yang tersedia, bukan nasihat keuangan profesional.",
+                11, Ui.MUTED, false));
+        return card;
+    }
+
+    private View printReportButton() {
+        LinearLayout button = Ui.row(this);
+        Ui.pad(button, 14, 12, 14, 12);
+        button.setContentDescription("Cetak laporan bulanan " + Dates.monthLabel(year, monthIndex));
+        Ui.clickable(button, Ui.outlined(this, Ui.WHITE, Ui.LINE, 18), v -> confirmMonthlyPrint());
+        button.addView(Ui.iconBox(this, "print", Ui.GREEN, Ui.PALE, 42, 21, 13));
+        LinearLayout labels = Ui.column(this);
+        LinearLayout.LayoutParams params = Ui.weighted(0, -2, 1);
+        params.leftMargin = Ui.dp(this, 12);
+        labels.addView(Ui.text(this, "Cetak laporan bulanan", 14, Ui.INK, true));
+        labels.addView(Ui.gap(this, 3));
+        labels.addView(Ui.text(this, "Cetak atau simpan sebagai PDF", 11, Ui.MUTED, false));
+        button.addView(labels, params);
+        button.addView(new IconView(this, "next", Ui.GREEN), Ui.lp(Ui.dp(this, 19), Ui.dp(this, 19)));
+        return button;
+    }
+
+    private void confirmMonthlyPrint() {
+        // Fix the selected month; a consistent snapshot is captured when printing is prepared.
+        MonthlyReport report = MonthlyReport.forMonth(year, monthIndex, all);
+        CheckBox includePhotos = new CheckBox(this);
+        includePhotos.setText("Sertakan foto sebagai lampiran");
+        includePhotos.setChecked(true);
+        String disclosure = "Laporan memuat seluruh transaksi, nominal, waktu pembuatan, dan catatan pada periode ini, "
+                + "termasuk nominal yang disembunyikan di beranda.\n\n"
+                + "Jika dipilih, foto ikut dicetak atau disimpan sebagai halaman lampiran di PDF. "
+                + "Foto dan data diberikan kepada layanan cetak yang dipilih. CSV tidak memuat gambar.\n\n"
+                + "Pola berulang juga menghitung keberadaan transaksi dengan nama dan kategori yang sama "
+                + "pada hingga dua bulan sebelumnya.\n\n"
+                + "Maksimal " + PhotoPrintPolicy.MAX_PHOTOS_PER_WRITE
+                + " foto per proses cetak; pilih rentang halaman lebih kecil bila perlu.";
+        // A single scrollable custom panel keeps both the checkbox and action buttons accessible
+        // on short screens; a separate long message plus custom panel can crowd out the buttons.
+        LinearLayout content = Ui.column(this);
+        Ui.pad(content, 24, 4, 24, 16);
+        content.addView(includePhotos);
+        content.addView(Ui.gap(this, 10));
+        content.addView(Ui.text(this, disclosure, 14, Ui.INK, false));
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
+        new AlertDialog.Builder(this)
+                .setTitle("Cetak " + report.period() + "?")
+                .setView(scroll)
+                .setNegativeButton("Batal", null)
+                .setPositiveButton("Lanjutkan", (dialog, which) -> startMonthlyPrint(report, includePhotos.isChecked()))
+                .show();
+    }
+
+    private void startMonthlyPrint(MonthlyReport report, boolean includePhotos) {
+        PrintManager manager = (PrintManager) getSystemService(PRINT_SERVICE);
+        if (manager == null) {
+            showPrintUnavailable();
+            return;
+        }
+        MonthlyPrintAdapter adapter = new MonthlyPrintAdapter(this, report, includePhotos);
+        try {
+            PrintAttributes defaults = new PrintAttributes.Builder()
+                    .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                    .setMinMargins(new PrintAttributes.Margins(500, 500, 500, 500))
+                    .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
+                    .build();
+            PrintJob job = manager.print("ToxiFlow - " + report.period(), adapter, defaults);
+            if (job == null) {
+                adapter.onFinish();
+                showPrintUnavailable();
+            }
+        } catch (RuntimeException e) {
+            adapter.onFinish();
+            showPrintUnavailable();
+        }
+    }
+
+    private void showPrintUnavailable() {
+        new AlertDialog.Builder(this).setTitle("Belum bisa mencetak")
+                .setMessage("Layanan cetak Android tidak tersedia. Periksa layanan cetak perangkat dan coba lagi.")
+                .setPositiveButton("Tutup", null).show();
     }
 
     private View reportAmountRow(String title, BigInteger amount, int dotColor) {
@@ -646,21 +862,138 @@ public final class MainActivity extends Activity {
     private void showTransaction(Transaction t) {
         boolean income = Transaction.INCOME.equals(t.type);
         String details = (income ? "Pemasukan" : "Pengeluaran") + " · " + t.category + "\n\n"
-                + Money.format(t.amount) + "\n" + Dates.display(t.date)
+                + Money.format(t.amount) + "\nTanggal transaksi: " + Dates.display(t.date)
+                + "\nDibuat: " + CreationTime.display(t.createdAt)
                 + (t.note.isEmpty() ? "" : "\n\nCatatan: " + t.note);
-        new AlertDialog.Builder(this)
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
                 .setTitle(t.title)
-                .setMessage(details)
                 .setPositiveButton("Ubah", (dialog, which) -> openForm(t))
                 .setNeutralButton("Hapus", (dialog, which) -> confirmDelete(t))
-                .setNegativeButton("Tutup", null)
-                .show();
+                .setNegativeButton("Tutup", null);
+        if (!t.hasPhoto) {
+            builder.setMessage(details).show();
+            return;
+        }
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout content = Ui.column(this);
+        Ui.pad(content, 24, 4, 24, 12);
+        content.addView(Ui.text(this, details, 14, Ui.INK, false));
+        content.addView(Ui.gap(this, 14));
+        TextView status = Ui.text(this, "Memuat foto…", 12, Ui.MUTED, false);
+        content.addView(status);
+        content.addView(Ui.gap(this, 6));
+        ImageView thumbnail = new ImageView(this);
+        thumbnail.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        thumbnail.setContentDescription("Pratinjau foto terlampir");
+        thumbnail.setBackground(Ui.outlined(this, Ui.WHITE, Ui.LINE, 14));
+        content.addView(thumbnail, Ui.lp(-1, Ui.dp(this, 150)));
+        TextView view = Ui.text(this, "Lihat foto", 13, Ui.GREEN, true);
+        view.setGravity(Gravity.CENTER);
+        Ui.clickable(view, Ui.outlined(this, Ui.WHITE, Ui.LINE, 14), v -> showFullPhoto(t.id));
+        LinearLayout.LayoutParams viewMargin = Ui.lp(-1, Ui.dp(this, 48));
+        viewMargin.topMargin = Ui.dp(this, 8);
+        content.addView(view, viewMargin);
+        scroll.addView(content);
+        AlertDialog dialog = builder.setView(scroll).create();
+        dialog.show();
+        loadPhoto(t.id, 600, dialog, thumbnail, status);
+    }
+
+    private void showFullPhoto(long id) {
+        Dialog dialog = new Dialog(this, android.R.style.Theme_Material_NoActionBar_Fullscreen);
+        LinearLayout root = Ui.column(this);
+        root.setBackgroundColor(0xff142019);
+        Ui.pad(root, 12, 12, 12, 12);
+        if (Build.VERSION.SDK_INT >= 35) {
+            root.setOnApplyWindowInsetsListener((view, insets) -> {
+                android.graphics.Insets bars = insets.getInsets(android.view.WindowInsets.Type.systemBars()
+                        | android.view.WindowInsets.Type.displayCutout());
+                int pad = Ui.dp(this, 12);
+                view.setPadding(pad + bars.left, pad + bars.top, pad + bars.right, pad + bars.bottom);
+                return insets;
+            });
+        }
+        LinearLayout header = Ui.row(this);
+        header.addView(Ui.text(this, "Foto transaksi", 17, Ui.WHITE, true), Ui.weighted(0, -2, 1));
+        TextView close = Ui.text(this, "Tutup", 14, Ui.WHITE, true);
+        close.setGravity(Gravity.CENTER);
+        close.setContentDescription("Tutup foto");
+        Ui.clickable(close, Ui.shape(this, 0xff365443, 12), v -> dialog.dismiss());
+        header.addView(close, Ui.lp(Ui.dp(this, 70), Ui.dp(this, 48)));
+        root.addView(header);
+        TextView status = Ui.text(this, "Memuat foto…", 12, Ui.WHITE, false);
+        Ui.pad(status, 4, 8, 4, 8);
+        root.addView(status);
+        PhotoZoomView photo = new PhotoZoomView(this);
+        root.addView(photo, Ui.weighted(-1, 0, 1));
+        TextView hint = Ui.text(this, "Cubit atau gunakan tombol untuk memperbesar, lalu geser foto.", 11, 0xffd0ded2, false);
+        hint.setGravity(Gravity.CENTER);
+        Ui.pad(hint, 0, 8, 0, 8);
+        root.addView(hint);
+        LinearLayout controls = Ui.row(this);
+        TextView out = photoZoomButton("−", "Perkecil foto", () -> photo.zoomBy(.7f));
+        TextView reset = photoZoomButton("Atur ulang", "Atur ulang ukuran foto", photo::resetZoom);
+        TextView in = photoZoomButton("+", "Perbesar foto", () -> photo.zoomBy(1.5f));
+        controls.addView(out, Ui.weighted(0, Ui.dp(this, 48), 1));
+        LinearLayout.LayoutParams middle = Ui.weighted(0, Ui.dp(this, 48), 2);
+        middle.leftMargin = Ui.dp(this, 8); middle.rightMargin = Ui.dp(this, 8);
+        controls.addView(reset, middle);
+        controls.addView(in, Ui.weighted(0, Ui.dp(this, 48), 1));
+        root.addView(controls);
+        dialog.setContentView(root);
+        dialog.show();
+        loadPhoto(id, PhotoPolicy.MAX_SIDE, dialog, photo, status);
+    }
+
+    private TextView photoZoomButton(String text, String description, Runnable action) {
+        TextView button = Ui.text(this, text, 16, Ui.WHITE, true);
+        button.setGravity(Gravity.CENTER);
+        button.setContentDescription(description);
+        Ui.clickable(button, Ui.shape(this, 0xff365443, 12), v -> action.run());
+        return button;
+    }
+
+    /** Reads one bounded BLOB on a worker; a dismissed screen never retains its bitmap. */
+    private void loadPhoto(long id, int size, Dialog dialog, ImageView target, TextView status) {
+        Context context = getApplicationContext();
+        // Freeze the database choice before the worker runs (also isolates debug UI tests).
+        final FinanceStore reader = new FinanceStore(context);
+        photoDialogs.add(dialog);
+        dialog.setOnDismissListener(d -> {
+            photoDialogs.remove(dialog);
+            if (target instanceof PhotoZoomView) ((PhotoZoomView) target).setPhoto(null);
+            else target.setImageDrawable(null);
+            // Let Android release previously displayed bitmaps after its render thread is done.
+        });
+        photoReader.execute(() -> {
+            Bitmap image = null;
+            try {
+                byte[] bytes;
+                try { bytes = reader.getPhoto(id); } finally { reader.close(); }
+                image = PhotoProcessor.preview(bytes, size);
+            } catch (RuntimeException | OutOfMemoryError ignored) { }
+            final Bitmap result = image;
+            if (!photoHandler.post(() -> {
+                if (isFinishing() || isDestroyed() || !dialog.isShowing()) {
+                    if (result != null && !result.isRecycled()) result.recycle();
+                    return;
+                }
+                if (result == null) {
+                    status.setText("Foto tidak dapat dibuka. Data transaksi tetap tersimpan.");
+                    return;
+                }
+                if (target instanceof PhotoZoomView) ((PhotoZoomView) target).setPhoto(result);
+                else target.setImageBitmap(result);
+                status.setText("Foto terlampir");
+            }) && result != null && !result.isRecycled()) result.recycle();
+        });
     }
 
     private void confirmDelete(Transaction t) {
         new AlertDialog.Builder(this)
                 .setTitle("Hapus transaksi?")
-                .setMessage("“" + t.title + "” akan dihapus dari catatan dan saldo. Tindakan ini tidak dapat dibatalkan.")
+                .setMessage("“" + t.title + "” akan dihapus dari catatan dan saldo"
+                        + (t.hasPhoto ? " beserta foto terlampir" : "") + ". Tindakan ini tidak dapat dibatalkan.")
                 .setPositiveButton("Hapus", (dialog, which) -> {
                     try {
                         if (store.delete(t.id)) Toast.makeText(this, "Transaksi dihapus", Toast.LENGTH_SHORT).show();
@@ -687,11 +1020,17 @@ public final class MainActivity extends Activity {
                 .setTitle("Tentang ToxiFlow")
                 .setMessage("Catatan sederhana untuk pemasukan dan pengeluaran.\n\n"
                         + "Data disimpan hanya di perangkat ini, tanpa akun atau koneksi internet. "
-                        + "Data akan hilang jika aplikasi dihapus atau datanya dibersihkan.\n\n"
+                        + "Database dan foto tidak dienkripsi. Data akan hilang jika aplikasi dihapus atau datanya dibersihkan.\n\n"
                         + "Saldo keseluruhan menghitung semua transaksi yang dicatat, termasuk tanggal mendatang. "
                         + "Ringkasan dan laporan mengikuti periode yang dipilih.\n\n"
+                        + "Jam pembuatan transaksi dicatat sesuai waktu perangkat saat disimpan dan tidak berubah saat diedit. "
+                        + "Jam transaksi lama tidak tersedia.\n\n"
+                        + "Sorotan dan saran dibuat secara lokal dari catatan yang tersedia, bukan nasihat keuangan profesional.\n\n"
                         + "Ekspor CSV membuat salinan yang tidak terenkripsi untuk dibuka di aplikasi spreadsheet; "
-                        + "file CSV belum dapat diimpor kembali ke aplikasi.")
+                        + "file CSV belum dapat diimpor kembali ke aplikasi dan tidak memuat gambar foto.\n\n"
+                        + "Cetak laporan bulanan melalui halaman Laporan. Dokumen dan PDF berisi nominal "
+                        + "serta catatan; foto opsional ditambahkan sebagai halaman lampiran. Data dapat dibagikan "
+                        + "ke layanan cetak yang kamu pilih.")
                 .setPositiveButton("Mengerti", null)
                 .setNeutralButton("Ekspor CSV", (dialog, which) -> requestExport())
                 .show();
