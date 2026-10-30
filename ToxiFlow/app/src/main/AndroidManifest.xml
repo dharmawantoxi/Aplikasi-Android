@@ -8,6 +8,11 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.ToxiFlow"
         android:usesCleartextTraffic="false">
+        <provider
+            android:name=".PhotoCaptureProvider"
+            android:authorities="${applicationId}.photo_capture"
+            android:exported="false"
+            android:grantUriPermissions="true" />
         <activity
             android:name=".TransactionFormActivity"
             android:exported="false"

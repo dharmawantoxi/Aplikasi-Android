@@ -3,9 +3,17 @@ package com.dharmawantoxi.rapiuang;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.DatePickerDialog;
+import android.content.ActivityNotFoundException;
+import android.content.ClipData;
+import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.MediaStore;
 import android.text.InputFilter;
 import android.text.InputType;
 import android.text.method.TextKeyListener;
@@ -16,14 +24,20 @@ import android.view.inputmethod.EditorInfo;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.util.Arrays;
 import java.util.Calendar;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 public final class TransactionFormActivity extends Activity {
     private FinanceStore store;
@@ -35,10 +49,22 @@ public final class TransactionFormActivity extends Activity {
     private EditText amountInput, titleInput, noteInput;
     private Spinner categoryInput;
     private TextView dateText, expenseTab, incomeTab, saveButton;
+    private static final int PICK_PHOTO = 31, TAKE_PHOTO = 32;
+    private FinanceStore.PhotoAction photoAction = FinanceStore.PhotoAction.KEEP;
+    private String draftName, captureName, processingCaptureName;
+    private ImageView photoPreview;
+    private TextView photoStatus, choosePhotoButton, takePhotoButton, removePhotoButton, restorePhotoButton;
+    private ExecutorService photoExecutor;
+    private final Handler photoHandler = new Handler(Looper.getMainLooper());
+    private Future<?> importTask;
+    private long importGeneration, previewGeneration;
+    private boolean photoBusy, destroyed, stateSaved, pendingRechooseMessage;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         store = new FinanceStore(this);
+        photoExecutor = Executors.newSingleThreadExecutor();
+        PhotoFiles.pruneOld(this);
         transactionId = getIntent().getLongExtra("transaction_id", 0);
         if (transactionId > 0) {
             try { original = store.get(transactionId); }
@@ -67,8 +93,15 @@ public final class TransactionFormActivity extends Activity {
             initialTitle = savedInstanceState.getString("title", initialTitle);
             initialNote = savedInstanceState.getString("note", initialNote);
             initialCategory = savedInstanceState.getString("category", initialCategory);
+            try { photoAction = FinanceStore.PhotoAction.valueOf(savedInstanceState.getString("photo_action", "KEEP")); }
+            catch (IllegalArgumentException ignored) { photoAction = FinanceStore.PhotoAction.KEEP; }
+            draftName = savedInstanceState.getString("photo_draft");
+            captureName = savedInstanceState.getString("photo_capture");
+            pendingRechooseMessage = savedInstanceState.getBoolean("photo_importing", false);
         }
         buildForm(initialAmount, initialTitle, initialCategory, initialNote);
+        updatePhotoUi();
+        requestPhotoPreview();
     }
 
     private void showFatalError(String message) {
@@ -173,7 +206,7 @@ public final class TransactionFormActivity extends Activity {
         content.addView(categoryBox);
         content.addView(Ui.gap(this, 17));
 
-        content.addView(fieldLabel("TANGGAL", false));
+        content.addView(fieldLabel("TANGGAL TRANSAKSI", false));
         content.addView(Ui.gap(this, 7));
         LinearLayout dateBox = Ui.row(this);
         Ui.pad(dateBox, 15, 0, 15, 0);
@@ -188,6 +221,11 @@ public final class TransactionFormActivity extends Activity {
         dateBox.setContentDescription("Pilih tanggal, " + Dates.display(selectedDate));
         dateText.setTag(dateBox);
         content.addView(dateBox);
+        content.addView(Ui.gap(this, 6));
+        String createdHint = original == null
+                ? "Jam pembuatan dicatat otomatis saat disimpan, sesuai jam perangkat."
+                : "Dibuat: " + CreationTime.display(original.createdAt) + ". Waktu ini tidak berubah saat diedit.";
+        content.addView(Ui.text(this, createdHint, 11, Ui.MUTED, false));
         content.addView(Ui.gap(this, 17));
 
         content.addView(fieldLabel("CATATAN", true));
@@ -202,7 +240,38 @@ public final class TransactionFormActivity extends Activity {
         Ui.pad(noteBox, 15, 12, 15, 12);
         noteBox.addView(noteInput, Ui.lp(-1, Ui.dp(this, 62)));
         content.addView(noteBox);
-        content.addView(Ui.gap(this, 10));
+        content.addView(Ui.gap(this, 19));
+        content.addView(fieldLabel("FOTO TRANSAKSI", true));
+        content.addView(Ui.gap(this, 7));
+        content.addView(Ui.text(this, "Satu foto struk atau bukti, boleh dikosongkan. Foto diperkecil dan disimpan di perangkat.",
+                11, Ui.MUTED, false));
+        content.addView(Ui.gap(this, 8));
+        photoStatus = Ui.text(this, "Belum ada foto.", 12, Ui.INK, false);
+        photoStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        content.addView(photoStatus);
+        content.addView(Ui.gap(this, 8));
+        photoPreview = new ImageView(this);
+        photoPreview.setContentDescription("Pratinjau foto transaksi");
+        photoPreview.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        photoPreview.setBackground(Ui.outlined(this, Ui.WHITE, Ui.LINE, 14));
+        photoPreview.setVisibility(View.GONE);
+        content.addView(photoPreview, Ui.lp(-1, Ui.dp(this, 175)));
+        LinearLayout photoActions = Ui.row(this);
+        choosePhotoButton = photoButton("Pilih foto", v -> pickPhoto());
+        takePhotoButton = photoButton("Ambil foto", v -> takePhoto());
+        photoActions.addView(choosePhotoButton, Ui.weighted(0, Ui.dp(this, 48), 1));
+        photoActions.addView(Ui.gap(this, 8), Ui.lp(Ui.dp(this, 8), 1));
+        photoActions.addView(takePhotoButton, Ui.weighted(0, Ui.dp(this, 48), 1));
+        content.addView(photoActions);
+        removePhotoButton = photoButton("Hapus foto", v -> removePhoto());
+        LinearLayout.LayoutParams photoButtonMargin = Ui.lp(-1, Ui.dp(this, 48));
+        photoButtonMargin.topMargin = Ui.dp(this, 8);
+        content.addView(removePhotoButton, photoButtonMargin);
+        restorePhotoButton = photoButton("Gunakan foto semula", v -> restorePhoto());
+        LinearLayout.LayoutParams restoreMargin = Ui.lp(-1, Ui.dp(this, 48));
+        restoreMargin.topMargin = Ui.dp(this, 8);
+        content.addView(restorePhotoButton, restoreMargin);
+        content.addView(Ui.gap(this, 12));
         content.addView(Ui.text(this, "Data hanya tersimpan di perangkat ini.", 11, Ui.MUTED, false));
 
         LinearLayout footer = Ui.column(this);
@@ -309,6 +378,245 @@ public final class TransactionFormActivity extends Activity {
         dialog.show();
     }
 
+    private TextView photoButton(String text, View.OnClickListener click) {
+        TextView button = Ui.text(this, text, 13, Ui.GREEN, true);
+        button.setGravity(Gravity.CENTER);
+        Ui.clickable(button, Ui.outlined(this, Ui.WHITE, Ui.LINE, 14), click);
+        return button;
+    }
+
+    private boolean hasCurrentPhoto() {
+        return photoAction == FinanceStore.PhotoAction.REPLACE
+                || (photoAction == FinanceStore.PhotoAction.KEEP && original != null && original.hasPhoto);
+    }
+
+    private void updatePhotoUi() {
+        if (photoStatus == null) return;
+        boolean hasPhoto = hasCurrentPhoto();
+        if (photoBusy) photoStatus.setText("Memproses foto…");
+        else if (photoAction == FinanceStore.PhotoAction.REMOVE) photoStatus.setText("Foto akan dihapus saat transaksi disimpan.");
+        else if (photoAction == FinanceStore.PhotoAction.REPLACE) photoStatus.setText("Foto baru siap disimpan.");
+        else if (hasPhoto) photoStatus.setText("Foto tersimpan pada transaksi.");
+        else photoStatus.setText("Belum ada foto.");
+        choosePhotoButton.setText(hasPhoto ? "Ganti foto" : "Pilih foto");
+        removePhotoButton.setVisibility(hasPhoto ? View.VISIBLE : View.GONE);
+        restorePhotoButton.setVisibility(original != null && original.hasPhoto
+                && photoAction != FinanceStore.PhotoAction.KEEP ? View.VISIBLE : View.GONE);
+        for (TextView button : new TextView[]{choosePhotoButton, takePhotoButton, removePhotoButton, restorePhotoButton}) {
+            button.setEnabled(!photoBusy);
+            button.setAlpha(photoBusy ? .5f : 1f);
+        }
+        if (saveButton != null) {
+            saveButton.setEnabled(!photoBusy);
+            saveButton.setAlpha(photoBusy ? .5f : 1f);
+        }
+    }
+
+    private void setPhotoBitmap(Bitmap bitmap) {
+        if (photoPreview != null) {
+            photoPreview.setImageBitmap(bitmap);
+            photoPreview.setVisibility(bitmap == null ? View.GONE : View.VISIBLE);
+        }
+        // Previously displayed bitmaps are released by Android after rendering completes.
+    }
+
+    private void requestPhotoPreview() {
+        final long generation = ++previewGeneration;
+        if (!hasCurrentPhoto()) { setPhotoBitmap(null); return; }
+        final Context context = getApplicationContext();
+        final boolean fromDraft = photoAction == FinanceStore.PhotoAction.REPLACE;
+        final String currentDraft = draftName;
+        final long id = transactionId;
+        // Freeze the database choice before the worker runs (also isolates debug UI tests).
+        final FinanceStore reader = fromDraft ? null : new FinanceStore(context);
+        final WeakReference<TransactionFormActivity> weak = new WeakReference<>(this);
+        final Handler handler = photoHandler;
+        photoExecutor.execute(() -> {
+            Bitmap preview = null;
+            try {
+                byte[] bytes;
+                if (fromDraft) bytes = PhotoProcessor.readDraft(context, currentDraft);
+                else {
+                    try { bytes = reader.getPhoto(id); } finally { reader.close(); }
+                }
+                preview = PhotoProcessor.preview(bytes, 600);
+            } catch (IOException | RuntimeException | OutOfMemoryError ignored) { }
+            final Bitmap result = preview;
+            if (!handler.post(() -> {
+                TransactionFormActivity activity = weak.get();
+                if (activity == null || activity.destroyed || activity.previewGeneration != generation) {
+                    if (result != null && !result.isRecycled()) result.recycle();
+                    return;
+                }
+                activity.setPhotoBitmap(result);
+                if (result == null && !activity.photoBusy) {
+                    if (!fromDraft) activity.photoStatus.setText("Foto tersimpan, tetapi pratinjau tidak tersedia. Foto tidak diubah.");
+                    else if (activity.original != null && activity.original.hasPhoto)
+                        activity.photoStatus.setText("Foto pilihan tidak tersedia. Pilih ulang atau gunakan foto semula.");
+                    else activity.photoStatus.setText("Foto pilihan tidak tersedia. Pilih ulang atau hapus foto.");
+                }
+            }) && result != null && !result.isRecycled()) result.recycle();
+        });
+    }
+
+    private void pickPhoto() {
+        if (photoBusy) return;
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("image/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try { startActivityForResult(intent, PICK_PHOTO); }
+        catch (ActivityNotFoundException | SecurityException e) {
+            Toast.makeText(this, "Pemilih foto tidak tersedia di perangkat ini.", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void takePhoto() {
+        if (photoBusy || captureName != null) return;
+        try {
+            captureName = PhotoFiles.createCapture(this);
+            Uri uri = PhotoCaptureProvider.uri(this, captureName);
+            Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+            intent.putExtra(MediaStore.EXTRA_OUTPUT, uri);
+            intent.setClipData(ClipData.newRawUri("Foto transaksi", uri));
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            startActivityForResult(intent, TAKE_PHOTO);
+        } catch (IOException | ActivityNotFoundException | SecurityException e) {
+            discardCapture(captureName);
+            captureName = null;
+            Toast.makeText(this, "Kamera tidak tersedia. Pilih foto dari perangkat.", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void discardCapture(String name) {
+        if (!PhotoFiles.validName(name, "capture")) return;
+        try { revokeUriPermission(PhotoCaptureProvider.uri(this, name),
+                Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION); }
+        catch (RuntimeException ignored) { }
+        PhotoFiles.delete(this, name, "capture");
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != PICK_PHOTO && requestCode != TAKE_PHOTO) return;
+        stateSaved = false; // The picker has returned and the activity is resuming.
+        if (requestCode == PICK_PHOTO) {
+            if (resultCode != RESULT_OK) return;
+            Uri uri = data == null ? null : data.getData();
+            if (uri == null) { showPhotoError(); return; }
+            beginPhotoImport(uri, null);
+        } else {
+            String capture = captureName;
+            captureName = null;
+            if (PhotoFiles.validName(capture, "capture")) {
+                try { revokeUriPermission(PhotoCaptureProvider.uri(this, capture),
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION); }
+                catch (RuntimeException ignored) { }
+            }
+            if (resultCode != RESULT_OK) { PhotoFiles.delete(this, capture, "capture"); return; }
+            if (!PhotoFiles.validName(capture, "capture")) { showPhotoError(); return; }
+            beginPhotoImport(null, capture);
+        }
+    }
+
+    private void beginPhotoImport(Uri uri, String capture) {
+        if (photoBusy) { PhotoFiles.delete(this, capture, "capture"); return; }
+        photoBusy = true;
+        processingCaptureName = capture;
+        updatePhotoUi();
+        final long generation = ++importGeneration;
+        final Context context = getApplicationContext();
+        final WeakReference<TransactionFormActivity> weak = new WeakReference<>(this);
+        final Handler handler = photoHandler;
+        importTask = photoExecutor.submit(() -> {
+            String name = null;
+            Bitmap preview = null;
+            boolean failed = false;
+            try {
+                name = capture == null ? PhotoProcessor.importUri(context, uri) : PhotoProcessor.importCapture(context, capture);
+                preview = PhotoProcessor.preview(PhotoProcessor.readDraft(context, name), 600);
+                if (preview == null) throw new IOException("Pratinjau foto tidak tersedia");
+            } catch (IOException | RuntimeException | OutOfMemoryError e) {
+                failed = true;
+            } finally {
+                PhotoFiles.delete(context, capture, "capture");
+            }
+            final String resultName = name;
+            final Bitmap resultPreview = preview;
+            final boolean resultFailed = failed;
+            Runnable deliver = () -> {
+                TransactionFormActivity activity = weak.get();
+                if (activity == null || activity.destroyed || activity.importGeneration != generation || activity.stateSaved) {
+                    PhotoFiles.delete(context, resultName, "draft");
+                    if (resultPreview != null && !resultPreview.isRecycled()) resultPreview.recycle();
+                    if (activity != null && !activity.destroyed && activity.importGeneration == generation) {
+                        activity.photoBusy = false;
+                        activity.processingCaptureName = null;
+                        activity.pendingRechooseMessage = true;
+                        activity.updatePhotoUi();
+                    }
+                    return;
+                }
+                activity.photoBusy = false;
+                activity.processingCaptureName = null;
+                activity.importTask = null;
+                if (resultFailed) {
+                    PhotoFiles.delete(context, resultName, "draft");
+                    if (resultPreview != null && !resultPreview.isRecycled()) resultPreview.recycle();
+                    activity.updatePhotoUi();
+                    activity.showPhotoError();
+                    return;
+                }
+                PhotoFiles.delete(context, activity.draftName, "draft");
+                activity.draftName = resultName;
+                activity.photoAction = FinanceStore.PhotoAction.REPLACE;
+                activity.previewGeneration++;
+                activity.setPhotoBitmap(resultPreview);
+                activity.updatePhotoUi();
+            };
+            if (!handler.post(deliver)) {
+                PhotoFiles.delete(context, resultName, "draft");
+                if (resultPreview != null && !resultPreview.isRecycled()) resultPreview.recycle();
+            }
+        });
+    }
+
+    private void showPhotoError() {
+        new AlertDialog.Builder(this).setTitle("Foto belum bisa dipakai")
+                .setMessage("Pilih foto yang dapat dibuka dan berukuran maksimal 20 MiB, lalu coba lagi. "
+                        + "Foto baru tidak digunakan; pilihan sebelumnya tetap seperti semula.")
+                .setPositiveButton("Tutup", null).show();
+    }
+
+    private void removePhoto() {
+        if (photoBusy) return;
+        PhotoFiles.delete(this, draftName, "draft");
+        draftName = null;
+        photoAction = original != null && original.hasPhoto ? FinanceStore.PhotoAction.REMOVE : FinanceStore.PhotoAction.KEEP;
+        previewGeneration++;
+        setPhotoBitmap(null);
+        updatePhotoUi();
+    }
+
+    private void restorePhoto() {
+        if (photoBusy || original == null || !original.hasPhoto) return;
+        PhotoFiles.delete(this, draftName, "draft");
+        draftName = null;
+        photoAction = FinanceStore.PhotoAction.KEEP;
+        setPhotoBitmap(null);
+        updatePhotoUi();
+        requestPhotoPreview();
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        stateSaved = false;
+        if (pendingRechooseMessage) {
+            pendingRechooseMessage = false;
+            Toast.makeText(this, "Pemrosesan foto terhenti. Pilih kembali; foto sebelumnya tidak diubah.", Toast.LENGTH_LONG).show();
+        }
+    }
+
     private void save() {
         String rawAmount = amountInput.getText().toString();
         String title = titleInput.getText().toString();
@@ -322,16 +630,27 @@ public final class TransactionFormActivity extends Activity {
             else Toast.makeText(this, error.message, Toast.LENGTH_LONG).show();
             return;
         }
+        if (photoBusy) {
+            Toast.makeText(this, "Tunggu sampai foto selesai diproses.", Toast.LENGTH_SHORT).show();
+            return;
+        }
         saveButton.setEnabled(false);
         try {
+            byte[] photo = photoAction == FinanceStore.PhotoAction.REPLACE
+                    ? PhotoProcessor.readDraft(this, draftName) : null;
             Transaction transaction = new Transaction(transactionId, type, Money.parseAmount(rawAmount),
                     title.trim(), category, selectedDate, note.trim());
-            store.save(transaction);
+            store.save(transaction, photoAction, photo);
             Intent result = new Intent();
             result.putExtra("saved_date", selectedDate);
             setResult(RESULT_OK, result);
             Toast.makeText(this, original == null ? "Transaksi tersimpan" : "Transaksi diperbarui", Toast.LENGTH_SHORT).show();
             finish();
+        } catch (IOException e) {
+            saveButton.setEnabled(true);
+            new AlertDialog.Builder(this).setTitle("Foto pilihan tidak tersedia")
+                    .setMessage("Transaksi belum disimpan. Pilih ulang foto, gunakan foto semula, atau hapus foto sebelum menyimpan.")
+                    .setPositiveButton("Tutup", null).show();
         } catch (RuntimeException e) {
             saveButton.setEnabled(true);
             new AlertDialog.Builder(this).setTitle("Belum bisa menyimpan")
@@ -350,6 +669,11 @@ public final class TransactionFormActivity extends Activity {
         out.putString("title", titleInput.getText().toString());
         out.putString("note", noteInput.getText().toString());
         out.putString("category", selectedCategory());
+        out.putString("photo_action", photoAction.name());
+        out.putString("photo_draft", draftName);
+        out.putString("photo_capture", captureName);
+        out.putBoolean("photo_importing", photoBusy || pendingRechooseMessage);
+        stateSaved = true;
     }
 
     private boolean hasChanges() {
@@ -363,7 +687,8 @@ public final class TransactionFormActivity extends Activity {
                 || !titleInput.getText().toString().equals(originalTitle)
                 || !noteInput.getText().toString().equals(originalNote)
                 || !type.equals(originalType) || !selectedDate.equals(initialDate)
-                || !selectedCategory().equals(originalCategory);
+                || !selectedCategory().equals(originalCategory)
+                || photoAction != FinanceStore.PhotoAction.KEEP || photoBusy;
     }
 
     @Override public void onBackPressed() {
@@ -375,6 +700,19 @@ public final class TransactionFormActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        destroyed = true;
+        importGeneration++;
+        previewGeneration++;
+        if (importTask != null) importTask.cancel(true);
+        if (photoExecutor != null) photoExecutor.shutdownNow();
+        PhotoFiles.delete(this, processingCaptureName, "capture");
+        // A stopped activity may be recreated from its saved state even without a rotation.
+        boolean keepForRestore = isChangingConfigurations() || (stateSaved && !isFinishing());
+        if (!keepForRestore) {
+            PhotoFiles.delete(this, draftName, "draft");
+            discardCapture(captureName);
+        }
+        setPhotoBitmap(null);
         if (store != null) store.close();
         super.onDestroy();
     }

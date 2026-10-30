@@ -65,6 +65,9 @@ final class IconView extends View {
             case "calendar":
                 round(c, 4, 5, 20, 20, 2); line(c, 4, 9, 20, 9); line(c, 8, 3, 8, 7); line(c, 16, 3, 16, 7);
                 dot(c, 8, 13, .8f); dot(c, 12, 13, .8f); dot(c, 16, 13, .8f); dot(c, 8, 17, .8f); dot(c, 12, 17, .8f); break;
+            case "print":
+                path(c, 7, 9, 7, 3, 17, 3, 17, 9); round(c, 3, 9, 21, 17, 2);
+                path(c, 7, 14, 17, 14, 17, 21, 7, 21, 7, 14); line(c, 9, 17, 15, 17); dot(c, 17.5f, 11.8f, .8f); break;
             case "search": c.drawCircle(10.5f, 10.5f, 6, paint); line(c, 15, 15, 20, 20); break;
             case "info": c.drawCircle(12, 12, 9, paint); line(c, 12, 11, 12, 16); dot(c, 12, 7.5f, 1); break;
             case "eye":
