@@ -255,6 +255,28 @@ public final class FinanceFlowTest {
         } finally { reader.close(); }
     }
 
+    @Test public void openingSavingsBalanceDoesNotCreateIncomeOrReduceAvailableFunds() {
+        try (ActivityScenario<MainActivity> scenario = launchHome()) {
+            onView(withContentDescription("Dana")).perform(click());
+            onView(withText("Catat saldo awal tabungan")).perform(scrollTo(), click());
+            onView(withContentDescription("Saldo awal tabungan dalam rupiah")).inRoot(isDialog())
+                    .perform(typeText("50000"), closeSoftKeyboard());
+            onView(withText("Simpan")).inRoot(isDialog()).perform(click());
+            onView(withContentDescription("Dana siap pakai Rp0")).check(matches(isDisplayed()));
+            onView(withContentDescription("Saldo tabungan Rp50.000")).check(matches(isDisplayed()));
+            onView(withText("Laporan")).perform(click());
+            onView(withText(containsString("saldo awal dicatat"))).perform(scrollTo()).check(matches(isDisplayed()));
+            onView(withText(containsString("Saldo akhir tabungan"))).perform(scrollTo()).check(matches(isDisplayed()));
+        }
+        FinanceStore reader = new FinanceStore(context);
+        try {
+            assertTrue(reader.all().isEmpty());
+            assertEquals("0", reader.availableFunds().toString());
+            assertEquals("50000", reader.savingsBalance().toString());
+            assertEquals("0", FinanceMath.summarize(reader.all()).income.toString());
+        } finally { reader.close(); }
+    }
+
     @Test public void incomeAndExpenseTransactionsCanAllocatePartToSavings() {
         try (ActivityScenario<MainActivity> scenario = launchHome()) {
             onView(withText("Catat transaksi")).perform(scrollTo(), click());

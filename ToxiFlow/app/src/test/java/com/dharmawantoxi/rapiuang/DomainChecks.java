@@ -118,6 +118,14 @@ public final class DomainChecks {
         check(savingsText.contains("Saldo akhir tabungan: Rp34.000"), "monthly report includes closing savings balance");
         check(savingsText.contains("Pindah ke tabungan · Rp4.000"), "monthly report lists manual savings transfer");
         check(savingsText.contains("Diambil dari tabungan: Rp3.000"), "monthly report lists expense savings allocation");
+        MonthlyReport initialSavingsReport = MonthlyReport.forMonth(2026, 9, Collections.<Transaction>emptyList(),
+                Collections.<SavingsMovement>emptyList(),
+                new SavingsOpeningBalance(25000, "2026-10-01"), AppLanguage.INDONESIAN);
+        eq(BigInteger.ZERO, initialSavingsReport.savingsOpeningBalance, "starting entry is not misreported as prior-month balance");
+        eq(new BigInteger("25000"), initialSavingsReport.savingsOpeningEntry, "starting balance is recorded in its entry month");
+        eq(new BigInteger("25000"), initialSavingsReport.savingsClosingBalance, "starting amount contributes to closing savings");
+        check(reportText(initialSavingsReport).contains("Saldo awal dicatat: Rp25.000 · 1 Oktober 2026"),
+                "monthly report identifies the entered opening amount and date");
 
         char[] longNote = new char[300]; Arrays.fill(longNote, 'x');
         String note = "baris pertama\n" + new String(longNote) + " 🧾";

@@ -106,7 +106,7 @@ public final class FinanceStoreTest {
             legacy.close();
         }
         store = new FinanceStore(context, TEST_DB, () -> "2026-11-10 11:22:33");
-        assertEquals(6, store.getReadableDatabase().getVersion());
+        assertEquals(7, store.getReadableDatabase().getVersion());
         assertEquals(2, store.all().size());
         Transaction oldExpense = store.get(1);
         assertEquals("Makan", oldExpense.title);
@@ -147,7 +147,7 @@ public final class FinanceStoreTest {
             legacy.setVersion(2);
         } finally { legacy.close(); }
         store = new FinanceStore(context, TEST_DB);
-        assertEquals(6, store.getReadableDatabase().getVersion());
+        assertEquals(7, store.getReadableDatabase().getVersion());
         assertEquals(2, store.all().size());
         assertEquals("2026-10-02 08:12:00", store.get(1).createdAt);
         assertNull(store.get(2).createdAt);
@@ -258,6 +258,25 @@ public final class FinanceStoreTest {
         assertEquals(100000, store.get(incomeId).amount);
     }
 
+    @Test public void openingSavingsBalanceIsSeparateFromCashAndIncomeReports() {
+        store.save(new Transaction(0, Transaction.INCOME, 100000,
+                "Gaji", "Gaji", "2026-10-01", ""));
+        store.setSavingsOpeningBalance(50000);
+        assertEquals("100000", store.availableFunds().toString());
+        assertEquals("50000", store.savingsBalance().toString());
+        assertEquals("100000", FinanceMath.summarize(store.all()).income.toString());
+        SavingsOpeningBalance opening = store.getSavingsOpeningBalance();
+        assertNotNull(opening);
+        assertEquals(50000, opening.amount);
+        assertTrue(Dates.isValid(opening.date));
+
+        store.setSavingsOpeningBalance(60000); // Correcting the baseline replaces it, not adds another.
+        assertEquals("100000", store.availableFunds().toString());
+        assertEquals("60000", store.savingsBalance().toString());
+        assertEquals(opening.date, store.getSavingsOpeningBalance().date);
+        assertEquals("100000", FinanceMath.summarize(store.all()).income.toString());
+    }
+
     @Test public void upgradingVersionThreeAddsDebtTablesWithoutChangingTransactions() {
         store.close();
         SQLiteDatabase legacy = context.openOrCreateDatabase(TEST_DB, Context.MODE_PRIVATE, null);
@@ -272,7 +291,7 @@ public final class FinanceStoreTest {
             legacy.setVersion(3);
         } finally { legacy.close(); }
         store = new FinanceStore(context, TEST_DB);
-        assertEquals(6, store.getReadableDatabase().getVersion());
+        assertEquals(7, store.getReadableDatabase().getVersion());
         assertEquals(1, store.all().size());
         assertEquals("tetap", store.get(1).note);
         assertTrue(store.allDebtRecords().isEmpty());

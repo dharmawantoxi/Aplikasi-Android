@@ -15,7 +15,7 @@ import java.util.List;
 public final class FinanceStore extends SQLiteOpenHelper {
     private static final String DATABASE_NAME = "rapiuang.db";
     private static final String TABLE = "transactions";
-    private static final int DATABASE_VERSION = 6;
+    private static final int DATABASE_VERSION = 7;
     private static final String[] COLUMNS = {"_id", "type", "amount", "title", "category", "date", "note", "created_at",
             "savings_amount", "photo IS NOT NULL AS has_photo"};
     enum PhotoAction { KEEP, REPLACE, REMOVE }
@@ -55,6 +55,15 @@ public final class FinanceStore extends SQLiteOpenHelper {
         db.execSQL("CREATE INDEX transactions_date ON transactions(date DESC, _id DESC)");
         createDebtTables(db);
         createSavingsTable(db);
+        createSavingsOpeningBalanceTable(db);
+    }
+
+    private static void createSavingsOpeningBalanceTable(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE savings_opening_balance ("
+                + "_id INTEGER PRIMARY KEY CHECK(_id = 1), "
+                + "amount INTEGER NOT NULL CHECK(amount > 0 AND amount <= 999999999999), "
+                + "date TEXT NOT NULL CHECK(length(date) = 10), "
+                + "created_at TEXT NOT NULL)");
     }
 
     private static void createSavingsTable(SQLiteDatabase db) {
@@ -110,6 +119,10 @@ public final class FinanceStore extends SQLiteOpenHelper {
             db.execSQL("ALTER TABLE transactions ADD COLUMN savings_amount INTEGER NOT NULL DEFAULT 0 "
                     + "CHECK(savings_amount >= 0 AND savings_amount <= amount)");
             oldVersion = 6;
+        }
+        if (oldVersion == 6 && newVersion >= 7) {
+            createSavingsOpeningBalanceTable(db);
+            oldVersion = 7;
         }
         if (oldVersion != newVersion) throw new IllegalStateException("Migrasi basis data belum tersedia.");
     }
@@ -278,6 +291,42 @@ public final class FinanceStore extends SQLiteOpenHelper {
         } finally { db.endTransaction(); }
     }
 
+    /** Set or correct the one-time savings baseline without changing available funds or reports' income. */
+    void setSavingsOpeningBalance(long amount) {
+        if (amount <= 0 || amount > Money.MAX_TRANSACTION)
+            throw new IllegalArgumentException("Saldo awal tabungan harus lebih besar dari Rp0 dan maksimal Rp999.999.999.999.");
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        try {
+            BigInteger current = savingsBalance(db);
+            BigInteger previousOpening = BigInteger.ZERO;
+            try (Cursor cursor = db.rawQuery("SELECT amount FROM savings_opening_balance WHERE _id = 1", null)) {
+                if (cursor.moveToFirst()) previousOpening = BigInteger.valueOf(cursor.getLong(0));
+            }
+            if (current.subtract(previousOpening).add(BigInteger.valueOf(amount)).signum() < 0)
+                throw new IllegalArgumentException("Saldo awal baru membuat saldo tabungan negatif.");
+            ContentValues values = new ContentValues();
+            values.put("amount", amount);
+            int changed = db.update("savings_opening_balance", values, "_id = 1", null);
+            if (changed == 0) {
+                String createdAt = timeSource.now();
+                if (!CreationTime.isValid(createdAt)) throw new IllegalStateException("Jam perangkat tidak valid.");
+                values.put("_id", 1);
+                values.put("date", Dates.today());
+                values.put("created_at", createdAt);
+                db.insertOrThrow("savings_opening_balance", null, values);
+            }
+            db.setTransactionSuccessful();
+        } finally { db.endTransaction(); }
+    }
+
+    SavingsOpeningBalance getSavingsOpeningBalance() {
+        try (Cursor cursor = getReadableDatabase().query("savings_opening_balance",
+                new String[]{"amount", "date"}, "_id = 1", null, null, null, null)) {
+            return cursor.moveToFirst() ? new SavingsOpeningBalance(cursor.getLong(0), cursor.getString(1)) : null;
+        }
+    }
+
     List<SavingsMovement> allSavingsMovements() {
         List<SavingsMovement> movements = new ArrayList<>();
         try (Cursor cursor = getReadableDatabase().query("savings_movements",
@@ -293,6 +342,9 @@ public final class FinanceStore extends SQLiteOpenHelper {
 
     private static BigInteger savingsBalance(SQLiteDatabase db) {
         BigInteger balance = BigInteger.ZERO;
+        try (Cursor cursor = db.rawQuery("SELECT amount FROM savings_opening_balance WHERE _id = 1", null)) {
+            if (cursor.moveToFirst()) balance = BigInteger.valueOf(cursor.getLong(0));
+        }
         try (Cursor cursor = db.rawQuery("SELECT type, savings_amount FROM transactions", null)) {
             while (cursor.moveToNext()) {
                 BigInteger amount = BigInteger.valueOf(cursor.getLong(1));

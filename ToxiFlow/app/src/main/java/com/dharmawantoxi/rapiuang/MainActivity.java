@@ -56,6 +56,7 @@ public final class MainActivity extends Activity {
     private List<SavingsMovement> savingsMovements = new ArrayList<>();
     private BigInteger availableFunds = BigInteger.ZERO;
     private BigInteger savingsBalance = BigInteger.ZERO;
+    private SavingsOpeningBalance openingSavingsBalance;
     private int page = HOME;
     private int year, monthIndex;
     private String filter = "";
@@ -145,6 +146,7 @@ public final class MainActivity extends Activity {
             savingsMovements = store.allSavingsMovements();
             availableFunds = store.availableFunds();
             savingsBalance = store.savingsBalance();
+            openingSavingsBalance = store.getSavingsOpeningBalance();
             loadFailed = false;
         } catch (RuntimeException e) {
             loadFailed = true;
@@ -307,7 +309,21 @@ public final class MainActivity extends Activity {
         inside.addView(Ui.gap(this, 5));
         inside.addView(Ui.text(this, tr("Terpisah dari dana tersedia dan laporan transaksi.",
                 "Separate from available funds and transaction reports."), 11, 0xffd9d1e7, false));
-        inside.addView(Ui.gap(this, 13));
+        if (openingSavingsBalance != null) {
+            inside.addView(Ui.gap(this, 5));
+            inside.addView(Ui.text(this, tr("Saldo awal dicatat pada ", "Starting balance entered on ")
+                    + Dates.display(openingSavingsBalance.date, language) + " · " + Money.format(openingSavingsBalance.amount),
+                    10, 0xffd9d1e7, false));
+        }
+        inside.addView(Ui.gap(this, 12));
+        TextView openingButton = Ui.text(this, openingSavingsBalance == null
+                ? tr("Catat saldo awal tabungan", "Enter opening savings balance")
+                : tr("Ubah saldo awal tabungan", "Edit opening savings balance"), 12, Ui.WHITE, true);
+        openingButton.setGravity(Gravity.CENTER);
+        openingButton.setMinHeight(Ui.dp(this, 42));
+        Ui.clickable(openingButton, Ui.shape(this, 0xff5c4d75, 12), v -> openSavingsOpeningBalance());
+        inside.addView(openingButton);
+        inside.addView(Ui.gap(this, 10));
         LinearLayout actions = Ui.row(this);
         actions.addView(savingsAction(tr("Tambah tabungan", "Add to savings"), true), Ui.weighted(0, -2, 1));
         View spacer = new View(this);
@@ -326,6 +342,44 @@ public final class MainActivity extends Activity {
         Ui.clickable(button, Ui.shape(this, deposit ? 0xff5c4d75 : 0xff445c50, 12),
                 v -> openSavingsMovement(deposit));
         return button;
+    }
+
+    private void openSavingsOpeningBalance() {
+        LinearLayout content = Ui.column(this);
+        Ui.pad(content, 24, 5, 24, 8);
+        content.addView(Ui.text(this, tr("Catat tabungan yang sudah dimiliki sebelum mulai memakai aplikasi. Jumlah ini tidak mengurangi dana tersedia dan bukan pemasukan.",
+                "Enter savings you already had before using the app. This amount does not reduce available funds or count as income."),
+                12, Ui.MUTED, false));
+        content.addView(Ui.gap(this, 12));
+        EditText amount = debtTextField(tr("Saldo awal dalam rupiah", "Opening balance in rupiah"),
+                tr("Saldo awal tabungan dalam rupiah", "Opening savings balance in rupiah"), 20,
+                android.text.InputType.TYPE_CLASS_NUMBER);
+        if (openingSavingsBalance != null) amount.setText(Long.toString(openingSavingsBalance.amount));
+        content.addView(amount, Ui.lp(-1, Ui.dp(this, 50)));
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(openingSavingsBalance == null ? tr("Catat saldo awal", "Enter opening balance")
+                        : tr("Ubah saldo awal", "Edit opening balance"))
+                .setView(content).setNegativeButton(tr("Batal", "Cancel"), null)
+                .setPositiveButton(tr("Simpan", "Save"), null).create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            final long value;
+            try { value = Money.parseAmount(amount.getText().toString(), language); }
+            catch (IllegalArgumentException error) { amount.setError(error.getMessage()); amount.requestFocus(); return; }
+            try {
+                store.setSavingsOpeningBalance(value);
+                dialog.dismiss();
+                Toast.makeText(this, tr("Saldo awal tabungan tersimpan", "Opening savings balance saved"), Toast.LENGTH_SHORT).show();
+                refresh();
+            } catch (IllegalArgumentException error) {
+                String message = error.getMessage() != null && error.getMessage().startsWith("Saldo awal baru")
+                        ? tr("Saldo awal baru membuat saldo tabungan negatif.", "The new opening balance would make savings negative.")
+                        : tr("Saldo awal harus lebih dari Rp0 dan maksimal Rp999.999.999.999.",
+                                "Opening balance must be greater than Rp0 and no more than Rp999,999,999,999.");
+                amount.setError(message);
+                amount.requestFocus();
+            } catch (RuntimeException error) { showDebtStorageError(); }
+        }));
+        dialog.show();
     }
 
     private void openSavingsMovement(boolean deposit) {
@@ -1010,7 +1064,7 @@ public final class MainActivity extends Activity {
     }
 
     private View savingsActivityCard() {
-        MonthlyReport report = MonthlyReport.forMonth(year, monthIndex, all, savingsMovements, language);
+        MonthlyReport report = MonthlyReport.forMonth(year, monthIndex, all, savingsMovements, openingSavingsBalance, language);
         LinearLayout card = Ui.column(this);
         card.setBackground(Ui.shape(this, Ui.WHITE, 20));
         Ui.pad(card, 17, 16, 17, 16);
@@ -1027,12 +1081,16 @@ public final class MainActivity extends Activity {
         boolean hasActivity = false;
         for (Transaction transaction : month) if (transaction.savingsAmount > 0) hasActivity = true;
         hasActivity |= !report.savingsMovements.isEmpty();
+        hasActivity |= report.savingsOpeningEntry.signum() > 0;
         if (!hasActivity) {
             card.addView(Ui.gap(this, 5));
             card.addView(Ui.text(this, tr("Belum ada aktivitas tabungan pada periode ini.", "No savings activity in this period."), 11, Ui.MUTED, false));
         } else {
             card.addView(Ui.gap(this, 8));
             card.addView(Ui.divider(this));
+            if (report.savingsOpeningEntry.signum() > 0)
+                card.addView(savingsEventRow(Dates.displayShort(report.savingsOpeningEntryDate, language)
+                        + tr(" · saldo awal dicatat", " · opening balance entered"), report.savingsOpeningEntry.longValue(), true));
             for (Transaction transaction : month) if (transaction.savingsAmount > 0) {
                 boolean income = Transaction.INCOME.equals(transaction.type);
                 card.addView(savingsEventRow(Dates.displayShort(transaction.date, language) + " · " + transaction.title
@@ -1169,7 +1227,7 @@ public final class MainActivity extends Activity {
 
     private void confirmMonthlyPrint() {
         // Fix the selected month; a consistent snapshot is captured when printing is prepared.
-        MonthlyReport report = MonthlyReport.forMonth(year, monthIndex, all, savingsMovements, language);
+        MonthlyReport report = MonthlyReport.forMonth(year, monthIndex, all, savingsMovements, openingSavingsBalance, language);
         CheckBox includePhotos = new CheckBox(this);
         includePhotos.setText(tr("Sertakan foto sebagai lampiran", "Include photos as appendices"));
         includePhotos.setChecked(true);
