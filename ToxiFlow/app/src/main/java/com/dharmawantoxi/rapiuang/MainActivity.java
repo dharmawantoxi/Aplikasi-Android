@@ -57,12 +57,30 @@ public final class MainActivity extends Activity {
     private String search = "";
     private boolean hideAmounts;
     private boolean loadFailed;
+    private AppLanguage language = AppLanguage.INDONESIAN;
     private final ExecutorService photoReader = Executors.newSingleThreadExecutor();
     private final List<Dialog> photoDialogs = new ArrayList<>();
     private final Handler photoHandler = new Handler(Looper.getMainLooper());
 
+    @Override protected void attachBaseContext(Context base) {
+        super.attachBaseContext(LanguageSettings.wrap(base));
+    }
+
+    private String tr(String indonesian, String english) {
+        return language.text(indonesian, english);
+    }
+
     @Override protected void onCreate(Bundle savedInstanceState) {
+        // The launcher component keeps its original name so existing shortcuts survive updates.
+        setTheme(R.style.Theme_ToxiFlow);
         super.onCreate(savedInstanceState);
+        language = LanguageSettings.get(this);
+        if (savedInstanceState == null && Intent.ACTION_MAIN.equals(getIntent().getAction())
+                && getIntent().hasCategory(Intent.CATEGORY_LAUNCHER)) {
+            startActivity(new Intent(this, SplashActivity.class));
+            finish();
+            return;
+        }
         store = new FinanceStore(this);
         PhotoFiles.pruneOld(this);
         PrintSnapshot.pruneOld(this);
@@ -85,7 +103,7 @@ public final class MainActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
-        refresh();
+        if (store != null) refresh(); // A launcher redirect can finish before initialization.
     }
 
     @Override protected void onSaveInstanceState(Bundle out) {
@@ -101,7 +119,7 @@ public final class MainActivity extends Activity {
         for (Dialog dialog : new ArrayList<>(photoDialogs)) dialog.dismiss();
         photoDialogs.clear();
         photoReader.shutdownNow();
-        store.close();
+        if (store != null) store.close(); // Launcher redirects before the store is opened.
         super.onDestroy();
     }
 
@@ -131,14 +149,14 @@ public final class MainActivity extends Activity {
             LinearLayout problem = Ui.column(this);
             problem.setGravity(Gravity.CENTER);
             Ui.pad(problem, 28, 20, 28, 20);
-            TextView heading = Ui.text(this, "Data belum bisa dibuka", 20, Ui.INK, true);
-            TextView description = Ui.text(this, "Periksa ruang penyimpanan perangkat, lalu coba lagi. Data tidak dihapus.", 14, Ui.MUTED, false);
+            TextView heading = Ui.text(this, tr("Data belum bisa dibuka", "Data could not be opened"), 20, Ui.INK, true);
+            TextView description = Ui.text(this, tr("Periksa ruang penyimpanan perangkat, lalu coba lagi. Data tidak dihapus.", "Check device storage and try again. Your data has not been deleted."), 14, Ui.MUTED, false);
             description.setGravity(Gravity.CENTER);
             problem.addView(heading);
             problem.addView(Ui.gap(this, 8));
             problem.addView(description);
             problem.addView(Ui.gap(this, 18));
-            TextView retry = Ui.text(this, "Coba lagi", 15, Ui.WHITE, true);
+            TextView retry = Ui.text(this, tr("Coba lagi", "Try again"), 15, Ui.WHITE, true);
             retry.setGravity(Gravity.CENTER);
             Ui.pad(retry, 24, 12, 24, 12);
             Ui.clickable(retry, Ui.shape(this, Ui.GREEN, 14), v -> refresh());
@@ -163,11 +181,11 @@ public final class MainActivity extends Activity {
     private void buildHome(LinearLayout content) {
         content.addView(brandHeader());
         content.addView(Ui.gap(this, 22));
-        content.addView(Ui.overline(this, "RUANG UNTUK KEUANGANMU", Ui.GREEN));
+        content.addView(Ui.overline(this, tr("RUANG UNTUK KEUANGANMU", "SPACE FOR YOUR FINANCES"), Ui.GREEN));
         content.addView(Ui.gap(this, 5));
-        content.addView(Ui.display(this, "Uang lebih rapi,\nhidup lebih tenang.", 27));
+        content.addView(Ui.display(this, tr("Uang lebih rapi,\nhidup lebih tenang.", "Clearer finances,\nmore peace of mind."), 27));
         content.addView(Ui.gap(this, 7));
-        content.addView(Ui.text(this, "Pelan-pelan, mulai dari satu catatan.", 13, Ui.MUTED, false));
+        content.addView(Ui.text(this, tr("Pelan-pelan, mulai dari satu catatan.", "One step at a time, starting with one entry."), 13, Ui.MUTED, false));
         content.addView(Ui.gap(this, 20));
         content.addView(monthSelector());
         content.addView(Ui.gap(this, 12));
@@ -175,14 +193,14 @@ public final class MainActivity extends Activity {
         content.addView(Ui.gap(this, 14));
         content.addView(addTransactionCallout());
         content.addView(Ui.gap(this, 25));
-        content.addView(sectionHeading("Transaksi terbaru", "Lihat semua", () -> {
+        content.addView(sectionHeading(tr("Transaksi terbaru", "Recent transactions"), tr("Lihat semua", "See all"), () -> {
             page = TRANSACTIONS;
             filter = "";
             search = "";
             render();
         }));
         content.addView(Ui.gap(this, 4));
-        content.addView(Ui.text(this, "Di periode " + Dates.monthLabel(year, monthIndex), 12, Ui.MUTED, false));
+        content.addView(Ui.text(this, tr("Di periode ", "In ") + Dates.monthLabel(year, monthIndex, language), 12, Ui.MUTED, false));
         content.addView(Ui.gap(this, 12));
         if (month.isEmpty()) content.addView(emptyState(false));
         else {
@@ -200,7 +218,7 @@ public final class MainActivity extends Activity {
         LinearLayout privacy = Ui.row(this);
         privacy.setGravity(Gravity.CENTER);
         privacy.addView(new IconView(this, "lock", Ui.MUTED), Ui.lp(Ui.dp(this, 13), Ui.dp(this, 13)));
-        TextView caption = Ui.text(this, "  Tersimpan di perangkatmu", 11, Ui.MUTED, false);
+        TextView caption = Ui.text(this, tr("  Tersimpan di perangkatmu", "  Stored on your device"), 11, Ui.MUTED, false);
         privacy.addView(caption);
         content.addView(privacy);
     }
@@ -216,48 +234,73 @@ public final class MainActivity extends Activity {
         brandParams.leftMargin = Ui.dp(this, 10);
         row.addView(wordmark, brandParams);
         wordmark.addView(Ui.text(this, "ToxiFlow", 17, Ui.INK, true));
-        wordmark.addView(Ui.text(this, "CATATAN KEUANGAN PRIBADI", 9, Ui.MUTED, true));
-        FrameLayout info = Ui.iconBox(this, "info", Ui.GREEN, Ui.WHITE, 48, 21, 14);
-        info.setContentDescription("Tentang aplikasi dan ekspor data");
-        Ui.clickable(info, Ui.outlined(this, Ui.WHITE, Ui.LINE, 14), v -> showAbout());
-        row.addView(info);
+        wordmark.addView(Ui.text(this, tr("CATATAN KEUANGAN PRIBADI", "PERSONAL FINANCE JOURNAL"), 9, Ui.MUTED, true));
+        addHeaderActions(row);
         return row;
     }
 
     private View pageHeader(String title, String subtitle) {
         LinearLayout row = Ui.row(this);
         LinearLayout labels = Ui.column(this);
-        labels.addView(Ui.overline(this, "TOXIFLOW / CATATANMU", Ui.GREEN));
+        labels.addView(Ui.overline(this, tr("TOXIFLOW / CATATANMU", "TOXIFLOW / YOUR RECORDS"), Ui.GREEN));
         labels.addView(Ui.gap(this, 5));
         labels.addView(Ui.display(this, title, 29));
         labels.addView(Ui.gap(this, 3));
         labels.addView(Ui.text(this, subtitle, 13, Ui.MUTED, false));
         row.addView(labels, Ui.weighted(0, -2, 1));
+        addHeaderActions(row);
+        return row;
+    }
+
+    private void addHeaderActions(LinearLayout row) {
+        TextView languageButton = Ui.text(this, language == AppLanguage.ENGLISH ? "EN" : "ID", 12, Ui.GREEN, true);
+        languageButton.setGravity(Gravity.CENTER);
+        languageButton.setTag("language_button");
+        languageButton.setContentDescription(tr("Ganti bahasa. Saat ini Bahasa Indonesia", "Change language. Currently English"));
+        Ui.clickable(languageButton, Ui.outlined(this, Ui.WHITE, Ui.LINE, 14), v -> chooseLanguage());
+        row.addView(languageButton, Ui.lp(Ui.dp(this, 48), Ui.dp(this, 48)));
+        row.addView(horizontalGap(8));
         FrameLayout info = Ui.iconBox(this, "info", Ui.GREEN, Ui.WHITE, 48, 21, 14);
-        info.setContentDescription("Tentang aplikasi dan ekspor data");
+        info.setContentDescription(tr("Tentang aplikasi dan ekspor data", "About the app and export data"));
         Ui.clickable(info, Ui.outlined(this, Ui.WHITE, Ui.LINE, 14), v -> showAbout());
         row.addView(info);
-        return row;
+    }
+
+    private void chooseLanguage() {
+        String[] choices = {"Bahasa Indonesia", "English"};
+        int selected = language == AppLanguage.ENGLISH ? 1 : 0;
+        new AlertDialog.Builder(this)
+                .setTitle("Bahasa / Language")
+                .setSingleChoiceItems(choices, selected, (dialog, which) -> {
+                    dialog.dismiss();
+                    AppLanguage chosen = which == 1 ? AppLanguage.ENGLISH : AppLanguage.INDONESIAN;
+                    if (chosen == language) return;
+                    if (LanguageSettings.save(this, chosen)) recreate();
+                    else Toast.makeText(this, tr("Pilihan bahasa belum bisa disimpan.",
+                            "Could not save the language choice."), Toast.LENGTH_LONG).show();
+                })
+                .setNegativeButton(tr("Batal", "Cancel"), null)
+                .show();
     }
 
     private View monthSelector() {
         LinearLayout row = Ui.row(this);
-        TextView label = Ui.overline(this, "PERIODE", Ui.MUTED);
+        TextView label = Ui.overline(this, tr("PERIODE", "PERIOD"), Ui.MUTED);
         row.addView(label, Ui.weighted(0, -2, 1));
         LinearLayout selector = Ui.row(this);
         selector.setBackground(Ui.outlined(this, Ui.WHITE, Ui.LINE, 14));
         FrameLayout previous = Ui.iconBox(this, "back", Ui.GREEN, Ui.WHITE, 48, 17, 13);
-        previous.setContentDescription("Bulan sebelumnya");
+        previous.setContentDescription(tr("Bulan sebelumnya", "Previous month"));
         Ui.clickable(previous, Ui.shape(this, Ui.WHITE, 13), v -> changeMonth(-1));
         selector.addView(previous);
-        TextView date = Ui.text(this, Dates.monthLabel(year, monthIndex), 13, Ui.INK, true);
+        TextView date = Ui.text(this, Dates.monthLabel(year, monthIndex, language), 13, Ui.INK, true);
         date.setGravity(Gravity.CENTER);
         date.setMinWidth(Ui.dp(this, 116));
-        date.setContentDescription("Pilih periode, saat ini " + Dates.monthLabel(year, monthIndex));
+        date.setContentDescription(tr("Pilih periode, saat ini ", "Choose period, currently ") + Dates.monthLabel(year, monthIndex, language));
         Ui.clickable(date, Ui.shape(this, Ui.WHITE, 12), v -> chooseMonth());
         selector.addView(date, Ui.lp(-2, Ui.dp(this, 48)));
         FrameLayout next = Ui.iconBox(this, "next", Ui.GREEN, Ui.WHITE, 48, 17, 13);
-        next.setContentDescription("Bulan berikutnya");
+        next.setContentDescription(tr("Bulan berikutnya", "Next month"));
         Ui.clickable(next, Ui.shape(this, Ui.WHITE, 13), v -> changeMonth(1));
         selector.addView(next);
         row.addView(selector);
@@ -282,7 +325,7 @@ public final class MainActivity extends Activity {
             month = FinanceMath.forMonth(all, year, monthIndex);
             render();
         }, year, monthIndex, 1);
-        dialog.setTitle("Pilih bulan dan tahun");
+        dialog.setTitle(tr("Pilih bulan dan tahun", "Choose month and year"));
         dialog.getDatePicker().setMinDate(Dates.calendarFor("1900-01-01").getTimeInMillis());
         dialog.getDatePicker().setMaxDate(Dates.calendarFor("2100-12-31").getTimeInMillis());
         dialog.show();
@@ -295,9 +338,9 @@ public final class MainActivity extends Activity {
         LinearLayout inside = Ui.column(this);
         Ui.pad(inside, 21, 18, 21, 19);
         LinearLayout top = Ui.row(this);
-        top.addView(Ui.overline(this, "SALDO KESELURUHAN", 0xffc6ddca), Ui.weighted(0, -2, 1));
+        top.addView(Ui.overline(this, tr("SALDO KESELURUHAN", "OVERALL BALANCE"), 0xffc6ddca), Ui.weighted(0, -2, 1));
         FrameLayout eye = Ui.iconBox(this, hideAmounts ? "eyeoff" : "eye", 0xffd5e9d8, 0x22ffffff, 36, 19, 12);
-        eye.setContentDescription(hideAmounts ? "Tampilkan nominal di beranda" : "Sembunyikan nominal di beranda");
+        eye.setContentDescription(hideAmounts ? tr("Tampilkan nominal di beranda", "Show amounts on the home screen") : tr("Sembunyikan nominal di beranda", "Hide amounts on the home screen"));
         Ui.clickable(eye, Ui.shape(this, 0x22ffffff, 12), v -> {
             hideAmounts = !hideAmounts;
             getPreferences(MODE_PRIVATE).edit().putBoolean("hide_dashboard_amounts", hideAmounts).apply();
@@ -306,10 +349,10 @@ public final class MainActivity extends Activity {
         top.addView(eye);
         inside.addView(top);
         TextView amount = Ui.text(this, hideAmounts ? "Rp ••••••" : Money.format(total.balance), 30, Ui.WHITE, true);
-        amount.setContentDescription(hideAmounts ? "Saldo disembunyikan" : "Saldo keseluruhan " + Money.format(total.balance));
+        amount.setContentDescription(hideAmounts ? tr("Saldo disembunyikan", "Balance hidden") : tr("Saldo keseluruhan ", "Overall balance ") + Money.format(total.balance));
         inside.addView(amount);
         inside.addView(Ui.gap(this, 2));
-        inside.addView(Ui.text(this, "Dari semua transaksi yang dicatat", 11, 0xffbed1c2, false));
+        inside.addView(Ui.text(this, tr("Dari semua transaksi yang dicatat", "From all recorded transactions"), 11, 0xffbed1c2, false));
         inside.addView(Ui.gap(this, 17));
         View line = new View(this);
         line.setBackgroundColor(0x38d5ead8);
@@ -317,13 +360,13 @@ public final class MainActivity extends Activity {
         inside.addView(Ui.gap(this, 15));
         LinearLayout subtotals = Ui.row(this);
         subtotals.setGravity(Gravity.TOP);
-        subtotals.addView(cardSubtotal("income", "Pemasukan", selected.income, 0xffc8e9ce), Ui.weighted(0, -2, 1));
+        subtotals.addView(cardSubtotal("income", tr("Pemasukan", "Income"), selected.income, 0xffc8e9ce), Ui.weighted(0, -2, 1));
         View space = new View(this);
         subtotals.addView(space, Ui.lp(Ui.dp(this, 8), 1));
-        subtotals.addView(cardSubtotal("expense", "Pengeluaran", selected.expense, 0xfff4cbbc), Ui.weighted(0, -2, 1));
+        subtotals.addView(cardSubtotal("expense", tr("Pengeluaran", "Expense"), selected.expense, 0xfff4cbbc), Ui.weighted(0, -2, 1));
         inside.addView(subtotals);
         inside.addView(Ui.gap(this, 11));
-        inside.addView(Ui.text(this, "Ringkasan periode terpilih", 10, 0xffafc8b6, false));
+        inside.addView(Ui.text(this, tr("Ringkasan periode terpilih", "Selected period summary"), 10, 0xffafc8b6, false));
         card.addView(inside, new FrameLayout.LayoutParams(-1, -2));
         return card;
     }
@@ -348,13 +391,13 @@ public final class MainActivity extends Activity {
         LinearLayout button = Ui.row(this);
         Ui.pad(button, 14, 11, 14, 11);
         Ui.clickable(button, Ui.shape(this, Ui.GREEN, 18), v -> openForm(null));
-        button.setContentDescription("Catat transaksi baru");
+        button.setContentDescription(tr("Catat transaksi baru", "Add a new transaction"));
         button.addView(Ui.iconBox(this, "plus", Ui.DARK, Ui.MINT, 38, 19, 12));
         LinearLayout labels = Ui.column(this);
         LinearLayout.LayoutParams p = Ui.weighted(0, -2, 1);
         p.leftMargin = Ui.dp(this, 12);
-        labels.addView(Ui.text(this, "Catat transaksi", 14, Ui.WHITE, true));
-        labels.addView(Ui.text(this, "Pemasukan atau pengeluaran", 11, 0xffc5ddca, false));
+        labels.addView(Ui.text(this, tr("Catat transaksi", "Add transaction"), 14, Ui.WHITE, true));
+        labels.addView(Ui.text(this, tr("Pemasukan atau pengeluaran", "Income or expense"), 11, 0xffc5ddca, false));
         button.addView(labels, p);
         button.addView(new IconView(this, "next", Ui.MINT), Ui.lp(Ui.dp(this, 19), Ui.dp(this, 19)));
         return button;
@@ -381,24 +424,24 @@ public final class MainActivity extends Activity {
         LinearLayout labels = Ui.column(this);
         LinearLayout.LayoutParams params = Ui.weighted(0, -2, 1);
         params.leftMargin = Ui.dp(this, 14);
-        labels.addView(Ui.text(this, filtered ? "Tidak ada hasil" : "Belum ada transaksi", 14, Ui.INK, true));
+        labels.addView(Ui.text(this, filtered ? tr("Tidak ada hasil", "No results") : tr("Belum ada transaksi", "No transactions yet"), 14, Ui.INK, true));
         labels.addView(Ui.gap(this, 3));
-        labels.addView(Ui.text(this, filtered ? "Coba kata kunci atau filter lain." : "Catatan pertamamu akan muncul di sini.", 12, Ui.MUTED, false));
+        labels.addView(Ui.text(this, filtered ? tr("Coba kata kunci atau filter lain.", "Try another search term or filter.") : tr("Catatan pertamamu akan muncul di sini.", "Your first entry will appear here."), 12, Ui.MUTED, false));
         empty.addView(labels, params);
         return empty;
     }
 
     private void buildTransactions(LinearLayout content) {
-        content.addView(pageHeader("Transaksi", "Semua catatan, dalam satu tempat."));
+        content.addView(pageHeader(tr("Transaksi", "Transactions"), tr("Semua catatan, dalam satu tempat.", "All your records in one place.")));
         content.addView(Ui.gap(this, 24));
         content.addView(monthSelector());
         content.addView(Ui.gap(this, 18));
         LinearLayout chips = Ui.row(this);
-        chips.addView(filterChip("Semua", ""), Ui.weighted(0, -2, 1));
+        chips.addView(filterChip(tr("Semua", "All"), ""), Ui.weighted(0, -2, 1));
         chips.addView(horizontalGap(6));
-        chips.addView(filterChip("Pemasukan", Transaction.INCOME), Ui.weighted(0, -2, 1.4f));
+        chips.addView(filterChip(tr("Pemasukan", "Income"), Transaction.INCOME), Ui.weighted(0, -2, 1.4f));
         chips.addView(horizontalGap(6));
-        chips.addView(filterChip("Pengeluaran", Transaction.EXPENSE), Ui.weighted(0, -2, 1.5f));
+        chips.addView(filterChip(tr("Pengeluaran", "Expense"), Transaction.EXPENSE), Ui.weighted(0, -2, 1.5f));
         content.addView(chips);
         content.addView(Ui.gap(this, 14));
         LinearLayout searchBox = Ui.row(this);
@@ -411,8 +454,8 @@ public final class MainActivity extends Activity {
         input.setTextColor(Ui.INK);
         input.setHintTextColor(Ui.MUTED);
         input.setBackgroundColor(android.graphics.Color.TRANSPARENT);
-        input.setHint("Cari nama, kategori, atau catatan");
-        input.setContentDescription("Cari transaksi");
+        input.setHint(tr("Cari nama, kategori, atau catatan", "Search names, categories, or notes"));
+        input.setContentDescription(tr("Cari transaksi", "Search transactions"));
         input.setPadding(Ui.dp(this, 10), 0, 0, 0);
         input.setText(search);
         searchBox.addView(input, Ui.weighted(0, Ui.dp(this, 48), 1));
@@ -442,7 +485,7 @@ public final class MainActivity extends Activity {
         TextView chip = Ui.text(this, title, 12, selected ? Ui.WHITE : Ui.GREEN, true);
         chip.setGravity(Gravity.CENTER);
         Ui.pad(chip, 13, 9, 13, 9);
-        chip.setContentDescription("Filter " + title + (selected ? ", dipilih" : ""));
+        chip.setContentDescription(tr("Filter ", "Filter ") + title + (selected ? tr(", dipilih", ", selected") : ""));
         Ui.clickable(chip, selected ? Ui.shape(this, Ui.GREEN, 13) : Ui.outlined(this, Ui.WHITE, Ui.LINE, 13), v -> {
             filter = value;
             render();
@@ -453,7 +496,7 @@ public final class MainActivity extends Activity {
     private void updateTransactionList() {
         if (transactionList == null) return;
         transactionList.removeAllViews();
-        List<Transaction> filtered = FinanceMath.filter(month, filter, search);
+        List<Transaction> filtered = FinanceMath.filter(month, filter, search, language);
         if (filtered.isEmpty()) {
             boolean filtering = !filter.isEmpty() || !search.trim().isEmpty();
             transactionList.addView(emptyState(filtering));
@@ -463,7 +506,8 @@ public final class MainActivity extends Activity {
             }
             return;
         }
-        TextView count = Ui.overline(this, filtered.size() + " TRANSAKSI", Ui.MUTED);
+        TextView count = Ui.overline(this, filtered.size() + tr(" TRANSAKSI",
+                filtered.size() == 1 ? " TRANSACTION" : " TRANSACTIONS"), Ui.MUTED);
         transactionList.addView(count);
         transactionList.addView(Ui.gap(this, 12));
         String lastDate = "";
@@ -471,7 +515,7 @@ public final class MainActivity extends Activity {
         for (Transaction transaction : filtered) {
             if (!transaction.date.equals(lastDate)) {
                 if (!lastDate.isEmpty()) transactionList.addView(Ui.gap(this, 18));
-                String label = transaction.date.equals(Dates.today()) ? "Hari ini · " + Dates.display(transaction.date) : Dates.display(transaction.date);
+                String label = transaction.date.equals(Dates.today()) ? tr("Hari ini · ", "Today · ") + Dates.display(transaction.date, language) : Dates.display(transaction.date, language);
                 transactionList.addView(Ui.text(this, label, 12, Ui.MUTED, true));
                 transactionList.addView(Ui.gap(this, 8));
                 dayCard = Ui.column(this);
@@ -508,13 +552,13 @@ public final class MainActivity extends Activity {
         title.setEllipsize(TextUtils.TruncateAt.END);
         text.addView(title);
         text.addView(Ui.gap(this, 2));
-        TextView subtitle = Ui.text(this, t.category + (showDate ? " · " + Dates.displayShort(t.date) : "")
-                + (t.hasPhoto ? " · Foto" : ""), 11, Ui.MUTED, false);
+        TextView subtitle = Ui.text(this, Categories.label(t.category, language) + (showDate ? " · " + Dates.displayShort(t.date, language) : "")
+                + (t.hasPhoto ? tr(" · Foto", " · Photo") : ""), 11, Ui.MUTED, false);
         subtitle.setMaxLines(1);
         subtitle.setEllipsize(TextUtils.TruncateAt.END);
         text.addView(subtitle);
         text.addView(Ui.gap(this, 2));
-        TextView created = Ui.text(this, CreationTime.listLabel(t.createdAt), 11, Ui.MUTED, false);
+        TextView created = Ui.text(this, CreationTime.listLabel(t.createdAt, language), 11, Ui.MUTED, false);
         created.setMaxLines(1);
         created.setEllipsize(TextUtils.TruncateAt.END);
         text.addView(created);
@@ -524,17 +568,17 @@ public final class MainActivity extends Activity {
         amount.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         amount.setMaxWidth(Ui.dp(this, 145));
         row.addView(amount, Ui.lp(-2, -2));
-        row.setContentDescription(t.title + ", " + t.category + ", " + (income ? "pemasukan " : "pengeluaran ")
-                + (masked ? "nominal disembunyikan" : Money.format(t.amount))
-                + ", tanggal transaksi " + Dates.display(t.date) + ", dibuat " + CreationTime.display(t.createdAt)
-                + (t.hasPhoto ? ", ada foto terlampir" : "") + ". Ketuk untuk detail.");
+        row.setContentDescription(t.title + ", " + Categories.label(t.category, language) + ", " + (income ? tr("pemasukan ", "income ") : tr("pengeluaran ", "expense "))
+                + (masked ? tr("nominal disembunyikan", "amount hidden") : Money.format(t.amount))
+                + tr(", tanggal transaksi ", ", transaction date ") + Dates.display(t.date, language) + tr(", dibuat ", ", created ") + CreationTime.display(t.createdAt, language)
+                + (t.hasPhoto ? tr(", ada foto terlampir", ", photo attached") : "") + tr(". Ketuk untuk detail.", ". Tap for details."));
         row.setOnClickListener(v -> showTransaction(t));
         row.setFocusable(true);
         return row;
     }
 
     private void buildReports(LinearLayout content) {
-        content.addView(pageHeader("Laporan", "Kenali ke mana uangmu mengalir."));
+        content.addView(pageHeader(tr("Laporan", "Reports"), tr("Kenali ke mana uangmu mengalir.", "See where your money goes.")));
         content.addView(Ui.gap(this, 24));
         content.addView(monthSelector());
         content.addView(Ui.gap(this, 12));
@@ -544,49 +588,49 @@ public final class MainActivity extends Activity {
         LinearLayout flow = Ui.column(this);
         flow.setBackground(Ui.shape(this, Ui.WHITE, 21));
         Ui.pad(flow, 19, 19, 19, 20);
-        flow.addView(Ui.overline(this, "RINGKASAN PERIODE", Ui.MUTED));
+        flow.addView(Ui.overline(this, tr("RINGKASAN PERIODE", "PERIOD SUMMARY"), Ui.MUTED));
         flow.addView(Ui.gap(this, 5));
-        flow.addView(Ui.text(this, "Arus kas", 18, Ui.INK, true));
+        flow.addView(Ui.text(this, tr("Arus kas", "Cash flow"), 18, Ui.INK, true));
         flow.addView(Ui.gap(this, 5));
-        flow.addView(Ui.text(this, "Pemasukan dan pengeluaran yang dicatat.", 12, Ui.MUTED, false));
+        flow.addView(Ui.text(this, tr("Pemasukan dan pengeluaran yang dicatat.", "Recorded income and expenses."), 12, Ui.MUTED, false));
         flow.addView(Ui.gap(this, 20));
         BigInteger totalFlow = summary.income.add(summary.expense);
         int share = FinanceMath.percent(summary.income, totalFlow);
         int background = totalFlow.signum() == 0 ? Ui.LINE : 0xffe9ae9b;
         flow.addView(new ProgressStrip(this, share, 0xff6ca984, background), Ui.lp(-1, Ui.dp(this, 9)));
         flow.addView(Ui.gap(this, 18));
-        flow.addView(reportAmountRow("Pemasukan", summary.income, 0xff6ca984));
+        flow.addView(reportAmountRow(tr("Pemasukan", "Income"), summary.income, 0xff6ca984));
         flow.addView(Ui.gap(this, 12));
-        flow.addView(reportAmountRow("Pengeluaran", summary.expense, 0xffe9ae9b));
+        flow.addView(reportAmountRow(tr("Pengeluaran", "Expense"), summary.expense, 0xffe9ae9b));
         flow.addView(Ui.gap(this, 16));
         flow.addView(Ui.divider(this));
         flow.addView(Ui.gap(this, 14));
         LinearLayout balance = Ui.row(this);
-        balance.addView(Ui.text(this, "Selisih periode", 13, Ui.INK, true), Ui.weighted(0, -2, 1));
+        balance.addView(Ui.text(this, tr("Selisih periode", "Period balance"), 13, Ui.INK, true), Ui.weighted(0, -2, 1));
         balance.addView(Ui.text(this, Money.format(summary.balance), 16, summary.balance.signum() < 0 ? Ui.CORAL : Ui.GREEN, true));
         flow.addView(balance);
         content.addView(flow);
-        FinanceInsights insights = FinanceInsights.forMonth(year, monthIndex, all);
+        FinanceInsights insights = FinanceInsights.forMonth(year, monthIndex, all, language);
         content.addView(Ui.gap(this, 24));
-        content.addView(sectionHeading("Sorotan bulanan", null, null));
+        content.addView(sectionHeading(tr("Sorotan bulanan", "Monthly insights"), null, null));
         content.addView(Ui.gap(this, 5));
-        content.addView(Ui.text(this, "Berdasarkan transaksi di bulan terpilih.", 12, Ui.MUTED, false));
+        content.addView(Ui.text(this, tr("Berdasarkan transaksi di bulan terpilih.", "Based on transactions in the selected month."), 12, Ui.MUTED, false));
         content.addView(Ui.gap(this, 12));
         content.addView(insightHighlights(insights));
         content.addView(Ui.gap(this, 24));
-        content.addView(sectionHeading("Pengeluaran berulang", null, null));
+        content.addView(sectionHeading(tr("Pengeluaran berulang", "Recurring expenses"), null, null));
         content.addView(Ui.gap(this, 5));
-        content.addView(Ui.text(this, "Nama dan kategori sama: minimal dua kali bulan ini atau pada dua bulan dalam rentang yang diperiksa.", 12, Ui.MUTED, false));
+        content.addView(Ui.text(this, tr("Nama dan kategori sama: minimal dua kali bulan ini atau pada dua bulan dalam rentang yang diperiksa.", "Same name and category: at least twice this month, or in two months within the checked window."), 12, Ui.MUTED, false));
         content.addView(Ui.gap(this, 12));
         content.addView(recurringInsightCard(insights));
         content.addView(Ui.gap(this, 24));
-        content.addView(sectionHeading("Saran sederhana", null, null));
+        content.addView(sectionHeading(tr("Saran sederhana", "Simple suggestions"), null, null));
         content.addView(Ui.gap(this, 12));
         content.addView(suggestionCard(insights));
         content.addView(Ui.gap(this, 24));
-        content.addView(sectionHeading("Pengeluaran per kategori", null, null));
+        content.addView(sectionHeading(tr("Pengeluaran per kategori", "Expenses by category"), null, null));
         content.addView(Ui.gap(this, 5));
-        content.addView(Ui.text(this, "Lihat bagian terbesar pengeluaranmu.", 12, Ui.MUTED, false));
+        content.addView(Ui.text(this, tr("Lihat bagian terbesar pengeluaranmu.", "See your largest expense categories."), 12, Ui.MUTED, false));
         content.addView(Ui.gap(this, 13));
         List<FinanceMath.CategoryTotal> categories = FinanceMath.expenseCategories(month);
         if (categories.isEmpty()) {
@@ -596,11 +640,11 @@ public final class MainActivity extends Activity {
             empty.setBackground(Ui.shape(this, Ui.WHITE, 20));
             empty.addView(Ui.iconBox(this, "chart", Ui.GREEN, Ui.PALE, 45, 22, 15));
             empty.addView(Ui.gap(this, 10));
-            TextView label = Ui.text(this, "Belum ada pengeluaran", 14, Ui.INK, true);
+            TextView label = Ui.text(this, tr("Belum ada pengeluaran", "No expenses yet"), 14, Ui.INK, true);
             label.setGravity(Gravity.CENTER);
             empty.addView(label);
             empty.addView(Ui.gap(this, 3));
-            TextView help = Ui.text(this, "Laporan akan muncul setelah kamu mencatatnya.", 12, Ui.MUTED, false);
+            TextView help = Ui.text(this, tr("Laporan akan muncul setelah kamu mencatatnya.", "The report will appear after you record expenses."), 12, Ui.MUTED, false);
             help.setGravity(Gravity.CENTER);
             empty.addView(help);
             content.addView(empty);
@@ -622,45 +666,46 @@ public final class MainActivity extends Activity {
         LinearLayout card = Ui.column(this);
         card.setBackground(Ui.shape(this, Ui.WHITE, 20));
         Ui.pad(card, 17, 17, 17, 17);
-        card.addView(Ui.overline(this, "PENGELUARAN TERBESAR", Ui.MUTED));
+        card.addView(Ui.overline(this, tr("PENGELUARAN TERBESAR", "LARGEST EXPENSE"), Ui.MUTED));
         card.addView(Ui.gap(this, 7));
         if (insights.largestExpense == null) {
-            card.addView(Ui.text(this, "Belum ada pengeluaran pada periode ini.", 13, Ui.MUTED, false));
+            card.addView(Ui.text(this, tr("Belum ada pengeluaran pada periode ini.", "No expenses in this period."), 13, Ui.MUTED, false));
         } else {
             Transaction t = insights.largestExpense;
-            card.addView(Ui.text(this, "Transaksi: " + t.title, 14, Ui.INK, true));
+            card.addView(Ui.text(this, tr("Transaksi: ", "Transaction: ") + t.title, 14, Ui.INK, true));
             card.addView(Ui.gap(this, 3));
-            card.addView(Ui.text(this, Money.format(t.amount) + " · " + t.category + " · " + Dates.display(t.date),
+            card.addView(Ui.text(this, Money.format(t.amount) + " · " + Categories.label(t.category, language) + " · " + Dates.display(t.date, language),
                     12, Ui.MUTED, false));
             if (insights.largestExpenseCategory != null) {
                 FinanceMath.CategoryTotal category = insights.largestExpenseCategory;
                 int percent = FinanceMath.percent(category.amount, insights.summary.expense);
                 card.addView(Ui.gap(this, 6));
-                card.addView(Ui.text(this, "Kategori terbesar: " + category.category + " · "
-                        + Money.format(category.amount) + " (" + percent + "% dari pengeluaran)", 12, Ui.INK, false));
+                card.addView(Ui.text(this, tr("Kategori terbesar: ", "Largest category: ") + Categories.label(category.category, language) + " · "
+                        + Money.format(category.amount) + " (" + percent + tr("% dari pengeluaran)", "% of expenses)"), 12, Ui.INK, false));
             }
         }
         card.addView(Ui.gap(this, 16));
         card.addView(Ui.divider(this));
         card.addView(Ui.gap(this, 16));
-        card.addView(Ui.overline(this, "PEMASUKAN TERBESAR", Ui.MUTED));
+        card.addView(Ui.overline(this, tr("PEMASUKAN TERBESAR", "LARGEST INCOME"), Ui.MUTED));
         card.addView(Ui.gap(this, 7));
         if (insights.largestIncome == null) {
-            card.addView(Ui.text(this, "Belum ada pemasukan pada periode ini.", 13, Ui.MUTED, false));
+            card.addView(Ui.text(this, tr("Belum ada pemasukan pada periode ini.", "No income in this period."), 13, Ui.MUTED, false));
         } else {
             Transaction t = insights.largestIncome;
-            card.addView(Ui.text(this, "Transaksi: " + t.title, 14, Ui.INK, true));
+            card.addView(Ui.text(this, tr("Transaksi: ", "Transaction: ") + t.title, 14, Ui.INK, true));
             card.addView(Ui.gap(this, 3));
-            card.addView(Ui.text(this, Money.format(t.amount) + " · " + t.category + " · " + Dates.display(t.date),
+            card.addView(Ui.text(this, Money.format(t.amount) + " · " + Categories.label(t.category, language) + " · " + Dates.display(t.date, language),
                     12, Ui.MUTED, false));
             FinanceInsights.Group source = insights.largestIncomeSource;
             if (source != null) {
                 card.addView(Ui.gap(this, 6));
-                card.addView(Ui.text(this, "Sumber terbesar: " + source.title + " · " + source.category
-                        + " · " + Money.format(source.total) + " (" + source.count + " transaksi bulan ini)",
+                card.addView(Ui.text(this, tr("Sumber terbesar: ", "Largest source: ") + source.title + " · " + Categories.label(source.category, language)
+                        + " · " + Money.format(source.total) + " (" + source.count + tr(" transaksi bulan ini)",
+                        source.count == 1 ? " transaction this month)" : " transactions this month)"),
                         12, Ui.INK, false));
                 card.addView(Ui.gap(this, 3));
-                card.addView(Ui.text(this, "Sumber dikelompokkan menurut nama dan kategori yang sama.", 10, Ui.MUTED, false));
+                card.addView(Ui.text(this, tr("Sumber dikelompokkan menurut nama dan kategori yang sama.", "Sources are grouped by the same name and category."), 10, Ui.MUTED, false));
             }
         }
         return card;
@@ -671,26 +716,26 @@ public final class MainActivity extends Activity {
         card.setBackground(Ui.shape(this, Ui.WHITE, 20));
         Ui.pad(card, 17, 16, 17, 16);
         if (insights.recurringExpenses.isEmpty()) {
-            card.addView(Ui.text(this, "Belum ada pengeluaran berulang yang terdeteksi pada periode ini.", 13, Ui.MUTED, false));
+            card.addView(Ui.text(this, tr("Belum ada pengeluaran berulang yang terdeteksi pada periode ini.", "No recurring expenses were detected in this period."), 13, Ui.MUTED, false));
         } else {
             int shown = Math.min(FinanceInsights.MAX_RECURRING_SHOWN, insights.recurringExpenses.size());
             for (int i = 0; i < shown; i++) {
                 if (i > 0) { card.addView(Ui.gap(this, 12)); card.addView(Ui.divider(this)); card.addView(Ui.gap(this, 12)); }
                 FinanceInsights.Group group = insights.recurringExpenses.get(i);
-                card.addView(Ui.text(this, group.title + " · " + group.category, 14, Ui.INK, true));
+                card.addView(Ui.text(this, group.title + " · " + Categories.label(group.category, language), 14, Ui.INK, true));
                 card.addView(Ui.gap(this, 3));
-                card.addView(Ui.text(this, "Total bulan ini: " + Money.format(group.total), 13, Ui.INK, true));
+                card.addView(Ui.text(this, tr("Total bulan ini: ", "Total this month: ") + Money.format(group.total), 13, Ui.INK, true));
                 card.addView(Ui.gap(this, 3));
                 card.addView(Ui.text(this, insights.recurringEvidence(group), 11, Ui.MUTED, false));
             }
             if (insights.recurringExpenses.size() > shown) {
                 card.addView(Ui.gap(this, 10));
-                card.addView(Ui.text(this, "Menampilkan " + shown + " dari " + insights.recurringExpenses.size()
-                        + " teratas berdasarkan total bulan ini.", 11, Ui.MUTED, false));
+                card.addView(Ui.text(this, tr("Menampilkan ", "Showing ") + shown + tr(" dari ", " of ") + insights.recurringExpenses.size()
+                        + tr(" teratas berdasarkan total bulan ini.", " top entries by this month’s total."), 11, Ui.MUTED, false));
             }
         }
         card.addView(Ui.gap(this, 10));
-        card.addView(Ui.text(this, "Rentang: bulan terpilih dan hingga dua bulan sebelumnya. Pola ini tidak memastikan jadwal rutin.",
+        card.addView(Ui.text(this, tr("Rentang: bulan terpilih dan hingga dua bulan sebelumnya. Pola ini tidak memastikan jadwal rutin.", "Window: the selected month and up to two previous months. This pattern does not guarantee a regular schedule."),
                 11, Ui.MUTED, false));
         return card;
     }
@@ -704,7 +749,7 @@ public final class MainActivity extends Activity {
             card.addView(Ui.text(this, "• " + insights.suggestions.get(i), 12, Ui.INK, false));
         }
         card.addView(Ui.gap(this, 12));
-        card.addView(Ui.text(this, "Saran otomatis berdasarkan catatan yang tersedia, bukan nasihat keuangan profesional.",
+        card.addView(Ui.text(this, tr("Saran otomatis berdasarkan catatan yang tersedia, bukan nasihat keuangan profesional.", "Automatic suggestions are based on available records and are not professional financial advice."),
                 11, Ui.MUTED, false));
         return card;
     }
@@ -712,15 +757,15 @@ public final class MainActivity extends Activity {
     private View printReportButton() {
         LinearLayout button = Ui.row(this);
         Ui.pad(button, 14, 12, 14, 12);
-        button.setContentDescription("Cetak laporan bulanan " + Dates.monthLabel(year, monthIndex));
+        button.setContentDescription(tr("Cetak laporan bulanan ", "Print monthly report for ") + Dates.monthLabel(year, monthIndex, language));
         Ui.clickable(button, Ui.outlined(this, Ui.WHITE, Ui.LINE, 18), v -> confirmMonthlyPrint());
         button.addView(Ui.iconBox(this, "print", Ui.GREEN, Ui.PALE, 42, 21, 13));
         LinearLayout labels = Ui.column(this);
         LinearLayout.LayoutParams params = Ui.weighted(0, -2, 1);
         params.leftMargin = Ui.dp(this, 12);
-        labels.addView(Ui.text(this, "Cetak laporan bulanan", 14, Ui.INK, true));
+        labels.addView(Ui.text(this, tr("Cetak laporan bulanan", "Print monthly report"), 14, Ui.INK, true));
         labels.addView(Ui.gap(this, 3));
-        labels.addView(Ui.text(this, "Cetak atau simpan sebagai PDF", 11, Ui.MUTED, false));
+        labels.addView(Ui.text(this, tr("Cetak atau simpan sebagai PDF", "Print or save as PDF"), 11, Ui.MUTED, false));
         button.addView(labels, params);
         button.addView(new IconView(this, "next", Ui.GREEN), Ui.lp(Ui.dp(this, 19), Ui.dp(this, 19)));
         return button;
@@ -728,18 +773,18 @@ public final class MainActivity extends Activity {
 
     private void confirmMonthlyPrint() {
         // Fix the selected month; a consistent snapshot is captured when printing is prepared.
-        MonthlyReport report = MonthlyReport.forMonth(year, monthIndex, all);
+        MonthlyReport report = MonthlyReport.forMonth(year, monthIndex, all, language);
         CheckBox includePhotos = new CheckBox(this);
-        includePhotos.setText("Sertakan foto sebagai lampiran");
+        includePhotos.setText(tr("Sertakan foto sebagai lampiran", "Include photos as appendices"));
         includePhotos.setChecked(true);
-        String disclosure = "Laporan memuat seluruh transaksi, nominal, waktu pembuatan, dan catatan pada periode ini, "
-                + "termasuk nominal yang disembunyikan di beranda.\n\n"
-                + "Jika dipilih, foto ikut dicetak atau disimpan sebagai halaman lampiran di PDF. "
-                + "Foto dan data diberikan kepada layanan cetak yang dipilih. CSV tidak memuat gambar.\n\n"
-                + "Pola berulang juga menghitung keberadaan transaksi dengan nama dan kategori yang sama "
-                + "pada hingga dua bulan sebelumnya.\n\n"
-                + "Maksimal " + PhotoPrintPolicy.MAX_PHOTOS_PER_WRITE
-                + " foto per proses cetak; pilih rentang halaman lebih kecil bila perlu.";
+        String disclosure = tr("Laporan memuat seluruh transaksi, nominal, waktu pembuatan, dan catatan pada periode ini, ", "The report includes all transactions, amounts, creation times, and notes in this period, ")
+                + tr("termasuk nominal yang disembunyikan di beranda.\n\n", "including amounts hidden on the home screen.\n\n")
+                + tr("Jika dipilih, foto ikut dicetak atau disimpan sebagai halaman lampiran di PDF. ", "If selected, photos are printed or saved as appendix pages in the PDF. ")
+                + tr("Foto dan data diberikan kepada layanan cetak yang dipilih. CSV tidak memuat gambar.\n\n", "Photos and data are provided to the selected print service. CSV does not include images.\n\n")
+                + tr("Pola berulang juga menghitung keberadaan transaksi dengan nama dan kategori yang sama ", "Recurring patterns also count transactions with the same name and category ")
+                + tr("pada hingga dua bulan sebelumnya.\n\n", "in up to two previous months.\n\n")
+                + tr("Maksimal ", "Maximum ") + PhotoPrintPolicy.MAX_PHOTOS_PER_WRITE
+                + tr(" foto per proses cetak; pilih rentang halaman lebih kecil bila perlu.", " photos per print job; select a smaller page range if needed.");
         // A single scrollable custom panel keeps both the checkbox and action buttons accessible
         // on short screens; a separate long message plus custom panel can crowd out the buttons.
         LinearLayout content = Ui.column(this);
@@ -750,10 +795,10 @@ public final class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
         new AlertDialog.Builder(this)
-                .setTitle("Cetak " + report.period() + "?")
+                .setTitle(tr("Cetak ", "Print ") + report.period() + "?")
                 .setView(scroll)
-                .setNegativeButton("Batal", null)
-                .setPositiveButton("Lanjutkan", (dialog, which) -> startMonthlyPrint(report, includePhotos.isChecked()))
+                .setNegativeButton(tr("Batal", "Cancel"), null)
+                .setPositiveButton(tr("Lanjutkan", "Continue"), (dialog, which) -> startMonthlyPrint(report, includePhotos.isChecked()))
                 .show();
     }
 
@@ -782,9 +827,9 @@ public final class MainActivity extends Activity {
     }
 
     private void showPrintUnavailable() {
-        new AlertDialog.Builder(this).setTitle("Belum bisa mencetak")
-                .setMessage("Layanan cetak Android tidak tersedia. Periksa layanan cetak perangkat dan coba lagi.")
-                .setPositiveButton("Tutup", null).show();
+        new AlertDialog.Builder(this).setTitle(tr("Belum bisa mencetak", "Unable to print"))
+                .setMessage(tr("Layanan cetak Android tidak tersedia. Periksa layanan cetak perangkat dan coba lagi.", "The Android print service is unavailable. Check the device’s print service and try again."))
+                .setPositiveButton(tr("Tutup", "Close"), null).show();
     }
 
     private View reportAmountRow(String title, BigInteger amount, int dotColor) {
@@ -810,7 +855,7 @@ public final class MainActivity extends Activity {
         params.leftMargin = Ui.dp(this, 12);
         row.addView(info, params);
         LinearLayout head = Ui.row(this);
-        head.addView(Ui.text(this, category.category, 13, Ui.INK, true), Ui.weighted(0, -2, 1));
+        head.addView(Ui.text(this, Categories.label(category.category, language), 13, Ui.INK, true), Ui.weighted(0, -2, 1));
         head.addView(Ui.text(this, Money.format(category.amount), 13, Ui.INK, true));
         info.addView(head);
         info.addView(Ui.gap(this, 8));
@@ -821,7 +866,7 @@ public final class MainActivity extends Activity {
         percentage.setGravity(Gravity.END);
         progress.addView(percentage, Ui.lp(Ui.dp(this, 37), -2));
         info.addView(progress);
-        row.setContentDescription(category.category + ", " + Money.format(category.amount) + ", " + percent + " persen dari pengeluaran");
+        row.setContentDescription(Categories.label(category.category, language) + ", " + Money.format(category.amount) + ", " + percent + tr(" persen dari pengeluaran", " percent of expenses"));
         return row;
     }
 
@@ -831,10 +876,10 @@ public final class MainActivity extends Activity {
         container.addView(Ui.divider(this));
         LinearLayout nav = Ui.row(this);
         nav.setGravity(Gravity.CENTER_VERTICAL);
-        nav.addView(navItem("home", "Beranda", page == HOME, () -> { page = HOME; render(); }), Ui.weighted(0, -1, 1));
-        nav.addView(navItem("list", "Transaksi", page == TRANSACTIONS, () -> { page = TRANSACTIONS; render(); }), Ui.weighted(0, -1, 1));
-        nav.addView(navItem("plus", "Catat", false, () -> openForm(null)), Ui.weighted(0, -1, 1));
-        nav.addView(navItem("chart", "Laporan", page == REPORTS, () -> { page = REPORTS; render(); }), Ui.weighted(0, -1, 1));
+        nav.addView(navItem("home", tr("Beranda", "Home"), page == HOME, () -> { page = HOME; render(); }), Ui.weighted(0, -1, 1));
+        nav.addView(navItem("list", tr("Transaksi", "Transactions"), page == TRANSACTIONS, () -> { page = TRANSACTIONS; render(); }), Ui.weighted(0, -1, 1));
+        nav.addView(navItem("plus", tr("Catat", "Add"), false, () -> openForm(null)), Ui.weighted(0, -1, 1));
+        nav.addView(navItem("chart", tr("Laporan", "Reports"), page == REPORTS, () -> { page = REPORTS; render(); }), Ui.weighted(0, -1, 1));
         container.addView(nav, Ui.weighted(-1, 0, 1));
         return container;
     }
@@ -842,7 +887,7 @@ public final class MainActivity extends Activity {
     private View navItem(String icon, String label, boolean selected, Runnable action) {
         LinearLayout item = Ui.column(this);
         item.setGravity(Gravity.CENTER);
-        item.setContentDescription(label + (selected ? ", halaman aktif" : ""));
+        item.setContentDescription(label + (selected ? tr(", halaman aktif", ", current page") : ""));
         item.setOnClickListener(v -> action.run());
         item.setFocusable(true);
         if ("plus".equals(icon)) item.addView(Ui.iconBox(this, icon, Ui.WHITE, Ui.GREEN, 32, 18, 11));
@@ -861,15 +906,15 @@ public final class MainActivity extends Activity {
 
     private void showTransaction(Transaction t) {
         boolean income = Transaction.INCOME.equals(t.type);
-        String details = (income ? "Pemasukan" : "Pengeluaran") + " · " + t.category + "\n\n"
-                + Money.format(t.amount) + "\nTanggal transaksi: " + Dates.display(t.date)
-                + "\nDibuat: " + CreationTime.display(t.createdAt)
-                + (t.note.isEmpty() ? "" : "\n\nCatatan: " + t.note);
+        String details = (income ? tr("Pemasukan", "Income") : tr("Pengeluaran", "Expense")) + " · " + Categories.label(t.category, language) + "\n\n"
+                + Money.format(t.amount) + tr("\nTanggal transaksi: ", "\nTransaction date: ") + Dates.display(t.date, language)
+                + tr("\nDibuat: ", "\nCreated: ") + CreationTime.display(t.createdAt, language)
+                + (t.note.isEmpty() ? "" : tr("\n\nCatatan: ", "\n\nNote: ") + t.note);
         AlertDialog.Builder builder = new AlertDialog.Builder(this)
                 .setTitle(t.title)
-                .setPositiveButton("Ubah", (dialog, which) -> openForm(t))
-                .setNeutralButton("Hapus", (dialog, which) -> confirmDelete(t))
-                .setNegativeButton("Tutup", null);
+                .setPositiveButton(tr("Ubah", "Edit"), (dialog, which) -> openForm(t))
+                .setNeutralButton(tr("Hapus", "Delete"), (dialog, which) -> confirmDelete(t))
+                .setNegativeButton(tr("Tutup", "Close"), null);
         if (!t.hasPhoto) {
             builder.setMessage(details).show();
             return;
@@ -879,15 +924,15 @@ public final class MainActivity extends Activity {
         Ui.pad(content, 24, 4, 24, 12);
         content.addView(Ui.text(this, details, 14, Ui.INK, false));
         content.addView(Ui.gap(this, 14));
-        TextView status = Ui.text(this, "Memuat foto…", 12, Ui.MUTED, false);
+        TextView status = Ui.text(this, tr("Memuat foto…", "Loading photo…"), 12, Ui.MUTED, false);
         content.addView(status);
         content.addView(Ui.gap(this, 6));
         ImageView thumbnail = new ImageView(this);
         thumbnail.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        thumbnail.setContentDescription("Pratinjau foto terlampir");
+        thumbnail.setContentDescription(tr("Pratinjau foto terlampir", "Attached photo preview"));
         thumbnail.setBackground(Ui.outlined(this, Ui.WHITE, Ui.LINE, 14));
         content.addView(thumbnail, Ui.lp(-1, Ui.dp(this, 150)));
-        TextView view = Ui.text(this, "Lihat foto", 13, Ui.GREEN, true);
+        TextView view = Ui.text(this, tr("Lihat foto", "View photo"), 13, Ui.GREEN, true);
         view.setGravity(Gravity.CENTER);
         Ui.clickable(view, Ui.outlined(this, Ui.WHITE, Ui.LINE, 14), v -> showFullPhoto(t.id));
         LinearLayout.LayoutParams viewMargin = Ui.lp(-1, Ui.dp(this, 48));
@@ -914,26 +959,26 @@ public final class MainActivity extends Activity {
             });
         }
         LinearLayout header = Ui.row(this);
-        header.addView(Ui.text(this, "Foto transaksi", 17, Ui.WHITE, true), Ui.weighted(0, -2, 1));
-        TextView close = Ui.text(this, "Tutup", 14, Ui.WHITE, true);
+        header.addView(Ui.text(this, tr("Foto transaksi", "Transaction photo"), 17, Ui.WHITE, true), Ui.weighted(0, -2, 1));
+        TextView close = Ui.text(this, tr("Tutup", "Close"), 14, Ui.WHITE, true);
         close.setGravity(Gravity.CENTER);
-        close.setContentDescription("Tutup foto");
+        close.setContentDescription(tr("Tutup foto", "Close photo"));
         Ui.clickable(close, Ui.shape(this, 0xff365443, 12), v -> dialog.dismiss());
         header.addView(close, Ui.lp(Ui.dp(this, 70), Ui.dp(this, 48)));
         root.addView(header);
-        TextView status = Ui.text(this, "Memuat foto…", 12, Ui.WHITE, false);
+        TextView status = Ui.text(this, tr("Memuat foto…", "Loading photo…"), 12, Ui.WHITE, false);
         Ui.pad(status, 4, 8, 4, 8);
         root.addView(status);
         PhotoZoomView photo = new PhotoZoomView(this);
         root.addView(photo, Ui.weighted(-1, 0, 1));
-        TextView hint = Ui.text(this, "Cubit atau gunakan tombol untuk memperbesar, lalu geser foto.", 11, 0xffd0ded2, false);
+        TextView hint = Ui.text(this, tr("Cubit atau gunakan tombol untuk memperbesar, lalu geser foto.", "Pinch or use the buttons to zoom, then drag the photo."), 11, 0xffd0ded2, false);
         hint.setGravity(Gravity.CENTER);
         Ui.pad(hint, 0, 8, 0, 8);
         root.addView(hint);
         LinearLayout controls = Ui.row(this);
-        TextView out = photoZoomButton("−", "Perkecil foto", () -> photo.zoomBy(.7f));
-        TextView reset = photoZoomButton("Atur ulang", "Atur ulang ukuran foto", photo::resetZoom);
-        TextView in = photoZoomButton("+", "Perbesar foto", () -> photo.zoomBy(1.5f));
+        TextView out = photoZoomButton("−", tr("Perkecil foto", "Zoom out"), () -> photo.zoomBy(.7f));
+        TextView reset = photoZoomButton(tr("Atur ulang", "Reset"), tr("Atur ulang ukuran foto", "Reset photo zoom"), photo::resetZoom);
+        TextView in = photoZoomButton("+", tr("Perbesar foto", "Zoom in"), () -> photo.zoomBy(1.5f));
         controls.addView(out, Ui.weighted(0, Ui.dp(this, 48), 1));
         LinearLayout.LayoutParams middle = Ui.weighted(0, Ui.dp(this, 48), 2);
         middle.leftMargin = Ui.dp(this, 8); middle.rightMargin = Ui.dp(this, 8);
@@ -979,33 +1024,33 @@ public final class MainActivity extends Activity {
                     return;
                 }
                 if (result == null) {
-                    status.setText("Foto tidak dapat dibuka. Data transaksi tetap tersimpan.");
+                    status.setText(tr("Foto tidak dapat dibuka. Data transaksi tetap tersimpan.", "The photo could not be opened. The transaction remains saved."));
                     return;
                 }
                 if (target instanceof PhotoZoomView) ((PhotoZoomView) target).setPhoto(result);
                 else target.setImageBitmap(result);
-                status.setText("Foto terlampir");
+                status.setText(tr("Foto terlampir", "Photo attached"));
             }) && result != null && !result.isRecycled()) result.recycle();
         });
     }
 
     private void confirmDelete(Transaction t) {
         new AlertDialog.Builder(this)
-                .setTitle("Hapus transaksi?")
-                .setMessage("“" + t.title + "” akan dihapus dari catatan dan saldo"
-                        + (t.hasPhoto ? " beserta foto terlampir" : "") + ". Tindakan ini tidak dapat dibatalkan.")
-                .setPositiveButton("Hapus", (dialog, which) -> {
+                .setTitle(tr("Hapus transaksi?", "Delete transaction?"))
+                .setMessage("“" + t.title + tr("” akan dihapus dari catatan dan saldo", "” will be deleted from your records and balance")
+                        + (t.hasPhoto ? tr(" beserta foto terlampir", " along with its attached photo") : "") + tr(". Tindakan ini tidak dapat dibatalkan.", ". This cannot be undone."))
+                .setPositiveButton(tr("Hapus", "Delete"), (dialog, which) -> {
                     try {
-                        if (store.delete(t.id)) Toast.makeText(this, "Transaksi dihapus", Toast.LENGTH_SHORT).show();
-                        else Toast.makeText(this, "Transaksi tidak ditemukan", Toast.LENGTH_LONG).show();
+                        if (store.delete(t.id)) Toast.makeText(this, tr("Transaksi dihapus", "Transaction deleted"), Toast.LENGTH_SHORT).show();
+                        else Toast.makeText(this, tr("Transaksi tidak ditemukan", "Transaction not found"), Toast.LENGTH_LONG).show();
                         refresh();
                     } catch (RuntimeException e) {
-                        new AlertDialog.Builder(this).setTitle("Belum bisa menghapus")
-                                .setMessage("Transaksi belum dihapus. Periksa ruang penyimpanan dan coba lagi.")
-                                .setPositiveButton("Tutup", null).show();
+                        new AlertDialog.Builder(this).setTitle(tr("Belum bisa menghapus", "Unable to delete"))
+                                .setMessage(tr("Transaksi belum dihapus. Periksa ruang penyimpanan dan coba lagi.", "The transaction was not deleted. Check device storage and try again."))
+                                .setPositiveButton(tr("Tutup", "Close"), null).show();
                     }
                 })
-                .setNegativeButton("Batal", null).show();
+                .setNegativeButton(tr("Batal", "Cancel"), null).show();
     }
 
     private void openForm(Transaction transaction) {
@@ -1017,22 +1062,22 @@ public final class MainActivity extends Activity {
 
     private void showAbout() {
         new AlertDialog.Builder(this)
-                .setTitle("Tentang ToxiFlow")
-                .setMessage("Catatan sederhana untuk pemasukan dan pengeluaran.\n\n"
-                        + "Data disimpan hanya di perangkat ini, tanpa akun atau koneksi internet. "
-                        + "Database dan foto tidak dienkripsi. Data akan hilang jika aplikasi dihapus atau datanya dibersihkan.\n\n"
-                        + "Saldo keseluruhan menghitung semua transaksi yang dicatat, termasuk tanggal mendatang. "
-                        + "Ringkasan dan laporan mengikuti periode yang dipilih.\n\n"
-                        + "Jam pembuatan transaksi dicatat sesuai waktu perangkat saat disimpan dan tidak berubah saat diedit. "
-                        + "Jam transaksi lama tidak tersedia.\n\n"
-                        + "Sorotan dan saran dibuat secara lokal dari catatan yang tersedia, bukan nasihat keuangan profesional.\n\n"
-                        + "Ekspor CSV membuat salinan yang tidak terenkripsi untuk dibuka di aplikasi spreadsheet; "
-                        + "file CSV belum dapat diimpor kembali ke aplikasi dan tidak memuat gambar foto.\n\n"
-                        + "Cetak laporan bulanan melalui halaman Laporan. Dokumen dan PDF berisi nominal "
-                        + "serta catatan; foto opsional ditambahkan sebagai halaman lampiran. Data dapat dibagikan "
-                        + "ke layanan cetak yang kamu pilih.")
-                .setPositiveButton("Mengerti", null)
-                .setNeutralButton("Ekspor CSV", (dialog, which) -> requestExport())
+                .setTitle(tr("Tentang ToxiFlow", "About ToxiFlow"))
+                .setMessage(tr("Catatan sederhana untuk pemasukan dan pengeluaran.\n\n", "A simple record of income and expenses.\n\n")
+                        + tr("Data disimpan hanya di perangkat ini, tanpa akun atau koneksi internet. ", "Data is stored only on this device, without an account or internet connection. ")
+                        + tr("Database dan foto tidak dienkripsi. Data akan hilang jika aplikasi dihapus atau datanya dibersihkan.\n\n", "The database and photos are not encrypted. Data is lost if the app is uninstalled or its data is cleared.\n\n")
+                        + tr("Saldo keseluruhan menghitung semua transaksi yang dicatat, termasuk tanggal mendatang. ", "The overall balance includes all recorded transactions, including future dates. ")
+                        + tr("Ringkasan dan laporan mengikuti periode yang dipilih.\n\n", "Summaries and reports follow the selected period.\n\n")
+                        + tr("Jam pembuatan transaksi dicatat sesuai waktu perangkat saat disimpan dan tidak berubah saat diedit. ", "Creation time is recorded using the device time when a transaction is saved and does not change when edited. ")
+                        + tr("Jam transaksi lama tidak tersedia.\n\n", "Creation time is unavailable for older transactions.\n\n")
+                        + tr("Sorotan dan saran dibuat secara lokal dari catatan yang tersedia, bukan nasihat keuangan profesional.\n\n", "Insights and suggestions are generated locally from available records and are not professional financial advice.\n\n")
+                        + tr("Ekspor CSV membuat salinan yang tidak terenkripsi untuk dibuka di aplikasi spreadsheet; ", "CSV export creates an unencrypted copy for spreadsheet apps; ")
+                        + tr("file CSV belum dapat diimpor kembali ke aplikasi dan tidak memuat gambar foto.\n\n", "CSV files cannot yet be imported back into the app and do not contain photo images.\n\n")
+                        + tr("Cetak laporan bulanan melalui halaman Laporan. Dokumen dan PDF berisi nominal ", "Print a monthly report from Reports. Printed documents and PDFs contain amounts ")
+                        + tr("serta catatan; foto opsional ditambahkan sebagai halaman lampiran. Data dapat dibagikan ", "and notes; optional photos are added as appendix pages. Data may be shared ")
+                        + tr("ke layanan cetak yang kamu pilih.", "with the print service you choose."))
+                .setPositiveButton(tr("Mengerti", "Got it"), null)
+                .setNeutralButton(tr("Ekspor CSV", "Export CSV"), (dialog, which) -> requestExport())
                 .show();
     }
 
@@ -1044,7 +1089,7 @@ public final class MainActivity extends Activity {
         try {
             startActivityForResult(intent, EXPORT_REQUEST);
         } catch (ActivityNotFoundException e) {
-            Toast.makeText(this, "Tidak ada pemilih file untuk ekspor.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, tr("Tidak ada pemilih file untuk ekspor.", "No file picker is available for export."), Toast.LENGTH_LONG).show();
         }
     }
 
@@ -1069,13 +1114,13 @@ public final class MainActivity extends Activity {
             OutputStream stream = getContentResolver().openOutputStream(uri, "wt");
             if (stream == null) throw new IOException("Penyedia file tidak membuka tujuan");
             try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(stream, StandardCharsets.UTF_8))) {
-                CsvExport.write(writer, snapshot);
+                CsvExport.write(writer, snapshot, language);
             }
-            Toast.makeText(this, "CSV berhasil diekspor", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, tr("CSV berhasil diekspor", "CSV exported successfully"), Toast.LENGTH_LONG).show();
         } catch (IOException | RuntimeException e) {
-            new AlertDialog.Builder(this).setTitle("Ekspor belum berhasil")
-                    .setMessage("Coba pilih lokasi lain. File yang belum lengkap mungkin tertinggal di lokasi tujuan.")
-                    .setPositiveButton("Tutup", null).show();
+            new AlertDialog.Builder(this).setTitle(tr("Ekspor belum berhasil", "Export failed"))
+                    .setMessage(tr("Coba pilih lokasi lain. File yang belum lengkap mungkin tertinggal di lokasi tujuan.", "Try another location. An incomplete file may remain at the destination."))
+                    .setPositiveButton(tr("Tutup", "Close"), null).show();
         }
     }
 }

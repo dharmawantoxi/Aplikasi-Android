@@ -7,13 +7,19 @@ public final class Money {
     public static final long MAX_TRANSACTION = 999_999_999_999L;
     private Money() { }
 
-    public static long parseAmount(String input) {
+    public static long parseAmount(String input) { return parseAmount(input, AppLanguage.INDONESIAN); }
+
+    static long parseAmount(String input, AppLanguage language) {
         if (input == null || !input.matches("[0-9]{1,12}")) {
-            throw new IllegalArgumentException("Masukkan nominal rupiah tanpa titik atau koma (maksimal 12 digit).");
+            throw new IllegalArgumentException(language.text(
+                    "Masukkan nominal rupiah tanpa titik atau koma (maksimal 12 digit).",
+                    "Enter a whole rupiah amount without dots or commas (maximum 12 digits)."));
         }
         long value = Long.parseLong(input);
         if (value <= 0 || value > MAX_TRANSACTION) {
-            throw new IllegalArgumentException("Nominal harus lebih besar dari Rp0 dan maksimal Rp999.999.999.999.");
+            throw new IllegalArgumentException(language.text(
+                    "Nominal harus lebih besar dari Rp0 dan maksimal Rp999.999.999.999.",
+                    "The amount must be greater than Rp0 and no more than Rp999.999.999.999."));
         }
         return value;
     }

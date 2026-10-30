@@ -40,6 +40,11 @@ final class PrintSnapshot implements PhotoPrintSource, AutoCloseable {
     /** Capture text and photos under one SQLite transaction after the user confirms printing. */
     static PrintSnapshot create(Context context, FinanceStore reader, int year, int month,
                                 boolean includePhotos, CancellationSignal cancellation) throws IOException {
+        return create(context, reader, year, month, includePhotos, AppLanguage.INDONESIAN, cancellation);
+    }
+
+    static PrintSnapshot create(Context context, FinanceStore reader, int year, int month,
+                                boolean includePhotos, AppLanguage language, CancellationSignal cancellation) throws IOException {
         File job = null;
         boolean success = false;
         try {
@@ -50,7 +55,7 @@ final class PrintSnapshot implements PhotoPrintSource, AutoCloseable {
             Map<Long, File> files = new HashMap<>();
             try {
                 cancellation.throwIfCanceled();
-                report = MonthlyReport.forMonth(year, month, reader.all());
+                report = MonthlyReport.forMonth(year, month, reader.all(), language);
                 List<Transaction> attached = report.photoTransactions();
                 if (includePhotos && attached.size() >= MonthlyPrintLayout.MAX_PAGES)
                     throw new PrintPagination.TooManyPagesException(); // At least one page is needed for text.

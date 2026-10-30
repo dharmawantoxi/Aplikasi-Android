@@ -412,7 +412,116 @@ public final class DomainChecks {
         eq(0, PrintPagination.normalizeRanges(2, Collections.singletonList(new int[]{3, 5})).size(), "out-of-range selection");
     }
 
+    private static void testLanguage() throws Exception {
+        AppLanguage id = AppLanguage.INDONESIAN, en = AppLanguage.ENGLISH;
+        eq(id, AppLanguage.fromCode(null), "missing preference defaults to Indonesian");
+        eq(id, AppLanguage.fromCode("invalid"), "unknown language falls back to Indonesian");
+        eq(id, AppLanguage.fromCode("id"), "Indonesian preference code");
+        eq(en, AppLanguage.fromCode("en"), "English preference code");
+
+        String[] expenseLabels = {"Food & drink", "Shopping", "Transport", "Bills", "Health",
+                "Entertainment", "Education", "Other"};
+        String[] incomeLabels = {"Salary", "Business", "Gift", "Investment", "Other"};
+        eq(expenseLabels.length, Categories.EXPENSE.length, "all expense categories translated");
+        eq(incomeLabels.length, Categories.INCOME.length, "all income categories translated");
+        for (int i = 0; i < expenseLabels.length; i++) {
+            String key = Categories.EXPENSE[i];
+            eq(key, Categories.label(key, id), "Indonesian category preserves key");
+            eq(expenseLabels[i], Categories.label(key, en), "English expense label");
+            check(Categories.validForType(Transaction.EXPENSE, key), "expense key remains valid");
+        }
+        for (int i = 0; i < incomeLabels.length; i++) {
+            String key = Categories.INCOME[i];
+            eq(key, Categories.label(key, id), "Indonesian income preserves key");
+            eq(incomeLabels[i], Categories.label(key, en), "English income label");
+            check(Categories.validForType(Transaction.INCOME, key), "income key remains valid");
+        }
+        eq("custom existing category", Categories.label("custom existing category", en), "unknown category remains visible");
+        eq("30 October 2026", Dates.display("2026-10-30", en), "English date");
+        eq("30 Oct", Dates.displayShort("2026-10-30", en), "short English date");
+        eq("February 2026", Dates.monthLabel(2026, 1, en), "English period");
+        eq("30 October 2026, 14:05", CreationTime.display("2026-10-30 14:05:07", en), "English creation date");
+        eq("Not recorded", CreationTime.display("", en), "English unavailable creation date");
+        eq("Creation time not recorded", CreationTime.listLabel("", en), "English unavailable creation time");
+        eq("Rp1.234.567", Money.format(1234567), "rupiah formatting is language-independent");
+
+        FinanceMath.ValidationError badAmount = FinanceMath.validate(Transaction.EXPENSE, "12.500", "Nasi",
+                "Makan & minum", "2026-01-05", "", en);
+        eq("amount", badAmount.field, "English validation keeps field key");
+        eq("Enter a whole rupiah amount without dots or commas (maximum 12 digits).", badAmount.message,
+                "English validation message");
+        eq("Enter a transaction name.", FinanceMath.validate(Transaction.EXPENSE, "100", " ",
+                "Makan & minum", "2026-01-05", "", en).message, "English title validation");
+        check(FinanceMath.validate(Transaction.EXPENSE, "100", "Nasi", "Makan & minum",
+                "2026-01-05", "", en) == null, "canonical category accepted in English");
+        eq("category", FinanceMath.validate(Transaction.EXPENSE, "100", "Nasi", "Food & drink",
+                "2026-01-05", "", en).field, "translated label is never a database key");
+
+        List<Transaction> entries = new ArrayList<>(Arrays.asList(
+                new Transaction(1, Transaction.EXPENSE, 100, "Makan bersama", "Makan & minum", "2026-01-05",
+                        "Catatan, tetap sama", "2026-01-05 14:05:07", true),
+                t(2, Transaction.EXPENSE, 200, "Makan bersama", "Makan & minum", "2026-01-10", ""),
+                t(3, Transaction.EXPENSE, 50, "Makan bersama", "Makan & minum", "2025-12-10", ""),
+                t(4, Transaction.INCOME, 1000, "Gaji utama", "Gaji", "2026-01-01", "")));
+        eq(3, FinanceMath.filter(entries, "", "food & drink", en).size(), "search matches translated categories");
+        eq(3, FinanceMath.filter(entries, "", "makan & minum", en).size(), "search still matches stored category");
+        eq(1, FinanceMath.filter(entries, Transaction.INCOME, "salary", en).size(), "English search respects type");
+        eq(0, FinanceMath.filter(entries, "", "food & drink", id).size(), "Indonesian labels remain Indonesian");
+
+        FinanceInsights englishInsights = FinanceInsights.forMonth(2026, 0, entries, en);
+        FinanceInsights indonesianInsights = FinanceInsights.forMonth(2026, 0, entries, id);
+        eq(indonesianInsights.summary.balance, englishInsights.summary.balance, "language does not change totals");
+        eq("Makan & minum", englishInsights.largestExpenseCategory.category, "insights retain canonical category");
+        eq("2 times this month · recorded in 2 of 3 months checked",
+                englishInsights.recurringEvidence(englishInsights.recurringExpenses.get(0)), "English recurring evidence");
+        check(englishInsights.suggestions.toString().contains("Food & drink"), "English suggestions translate category");
+        check(englishInsights.suggestions.toString().contains("Makan bersama"), "English suggestions retain user title");
+
+        MonthlyReport englishReport = MonthlyReport.forMonth(2026, 0, entries, en);
+        StringWriter csv = new StringWriter();
+        CsvExport.write(csv, englishReport.transactions, en);
+        String exported = csv.toString();
+        check(exported.startsWith("\ufeffDate,Type,Category,Name,Amount (Rp),Note,"), "English CSV header");
+        check(exported.contains("\"2026-01-05\",\"Expense\",\"Food & drink\",\"Makan bersama\",100,\"Catatan, tetap sama\",\"2026-01-05 14:05:07\",\"Yes\""),
+                "English CSV labels change but ISO dates, user text and photo flag remain accurate");
+        eq("January 2026", englishReport.period(), "English report period");
+        eq("ToxiFlow-Report-2026-01.pdf", englishReport.fileName(), "English report filename");
+        entries.clear();
+        eq(3, englishReport.transactions.size(), "English report is an immutable period snapshot");
+        List<String> report = reportText(englishReport);
+        check(report.contains("Period: January 2026"), "English report period text");
+        check(report.contains("Category: Food & drink"), "English report displays translated category");
+        check(report.contains("Name: Makan bersama"), "English report preserves user title");
+        check(report.contains("Note: Catatan, tetap sama"), "English report preserves user note");
+        check(report.contains("Photo: Appendix 1"), "English report references photo appendix");
+        boolean omitted = false;
+        for (MonthlyReport.Paragraph p : englishReport.paragraphs(false))
+            if (p.text.equals("Photo not included in this report.")) omitted = true;
+        check(omitted, "English report discloses when photo omitted");
+        eq(en, englishReport.language, "report retains selected language independently of other state");
+    }
+
+    private static void testSplashTiming() {
+        eq(3_000L, SplashTiming.DURATION_MS, "splash duration matches the existing opening");
+        eq(103_000L, SplashTiming.deadline(100_000, 0), "new splash deadline");
+        eq(102_000L, SplashTiming.deadline(100_000, 102_000), "restore deadline without restarting");
+        eq(99_999L, SplashTiming.deadline(100_000, 99_999), "expired deadline remains expired");
+        eq(103_000L, SplashTiming.deadline(100_000, 103_001), "invalid future deadline resets");
+        eq(103_000L, SplashTiming.deadline(100_000, -1), "invalid negative deadline resets");
+        eq(3_000L, SplashTiming.remaining(100_000, 103_000), "remaining at launch");
+        eq(1_800L, SplashTiming.remaining(101_200, 103_000), "remaining after recreation");
+        eq(0L, SplashTiming.remaining(104_000, 103_000), "remaining clamps after deadline");
+        eq(3_000L, SplashTiming.remaining(100_000, 200_000), "remaining clamps a future deadline");
+        eq(0, SplashTiming.progress(3_000), "initial opening progress");
+        eq(40, SplashTiming.progress(1_800), "opening progress follows elapsed time");
+        eq(100, SplashTiming.progress(0), "opening progress completes");
+        eq(0, SplashTiming.progress(5_000), "opening progress clamps high remaining time");
+        eq(100, SplashTiming.progress(-1), "opening progress clamps negative remaining time");
+    }
+
     public static void main(String[] args) throws Exception {
+        testSplashTiming();
+        testLanguage();
         eq("Rp0", Money.format(0), "format zero");
         eq("Rp1.234.567", Money.format(1_234_567), "format rupiah");
         eq("−Rp1.234", Money.format(-1234), "format negative");

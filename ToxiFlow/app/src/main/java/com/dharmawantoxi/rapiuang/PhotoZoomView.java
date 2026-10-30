@@ -19,7 +19,9 @@ final class PhotoZoomView extends ImageView {
     PhotoZoomView(Context context) {
         super(context);
         setScaleType(ScaleType.MATRIX);
-        setContentDescription("Foto transaksi. Cubit atau gunakan tombol untuk memperbesar, lalu geser untuk melihat.");
+        setContentDescription(LanguageSettings.get(context).text(
+                "Foto transaksi. Cubit atau gunakan tombol untuk memperbesar, lalu geser untuk melihat.",
+                "Transaction photo. Pinch or use the buttons to zoom, then drag to view."));
         detector = new ScaleGestureDetector(context, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
             @Override public boolean onScale(ScaleGestureDetector gesture) {
                 zoom(gesture.getScaleFactor(), gesture.getFocusX(), gesture.getFocusY());

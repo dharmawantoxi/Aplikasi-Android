@@ -39,10 +39,13 @@ final class FinanceInsights {
     final List<Group> recurringExpenses;
     final int windowMonths;
     final List<String> suggestions;
+    final AppLanguage language;
 
     private FinanceInsights(FinanceMath.Summary summary, Transaction largestExpense, Transaction largestIncome,
                             FinanceMath.CategoryTotal largestExpenseCategory, Group largestIncomeSource,
-                            List<Group> recurringExpenses, int windowMonths, List<String> suggestions) {
+                            List<Group> recurringExpenses, int windowMonths, List<String> suggestions,
+                            AppLanguage language) {
+        this.language = language;
         this.summary = summary;
         this.largestExpense = largestExpense;
         this.largestIncome = largestIncome;
@@ -54,6 +57,10 @@ final class FinanceInsights {
     }
 
     static FinanceInsights forMonth(int year, int month, List<Transaction> all) {
+        return forMonth(year, month, all, AppLanguage.INDONESIAN);
+    }
+
+    static FinanceInsights forMonth(int year, int month, List<Transaction> all, AppLanguage language) {
         if (year < Dates.MIN_YEAR || year > Dates.MAX_YEAR || month < 0 || month > 11)
             throw new IllegalArgumentException("Periode tidak valid");
         List<Transaction> selected = FinanceMath.forMonth(all, year, month);
@@ -97,45 +104,61 @@ final class FinanceInsights {
         Collections.sort(repeated, GROUP_ORDER);
         List<Group> recurring = new ArrayList<>();
         for (Accumulator group : repeated) recurring.add(new Group(group));
-        List<String> advice = makeSuggestions(selected, summary, topCategory, recurring);
+        List<String> advice = makeSuggestions(selected, summary, topCategory, recurring, language);
         return new FinanceInsights(summary, biggestExpense, biggestIncome, topCategory, topIncomeSource,
-                recurring, keys.size(), advice);
+                recurring, keys.size(), advice, language);
     }
 
     /** Compact evidence, not a prediction that a payment will happen again. */
     String recurringEvidence(Group group) {
+        if (language == AppLanguage.ENGLISH) {
+            return group.count + (group.count == 1 ? " time" : " times") + " this month · recorded in "
+                    + group.monthsSeen + " of " + windowMonths + (windowMonths == 1 ? " month checked" : " months checked");
+        }
         return group.count + " kali bulan ini · tercatat dalam " + group.monthsSeen + " dari "
                 + windowMonths + " bulan yang diperiksa";
     }
 
     private static List<String> makeSuggestions(List<Transaction> selected, FinanceMath.Summary summary,
-                                                FinanceMath.CategoryTotal category, List<Group> recurring) {
+                                                FinanceMath.CategoryTotal category, List<Group> recurring,
+                                                AppLanguage language) {
         List<String> result = new ArrayList<>();
         if (selected.isEmpty()) {
-            result.add("Mulai catat pemasukan dan pengeluaran agar pola keuangan dapat terlihat.");
+            result.add(language.text("Mulai catat pemasukan dan pengeluaran agar pola keuangan dapat terlihat.",
+                    "Start recording income and expenses to see your financial patterns."));
             return result;
         }
         if (summary.income.signum() == 0 && summary.expense.signum() > 0) {
-            result.add("Belum ada pemasukan tercatat bulan ini. Pastikan catatan sudah lengkap sebelum menyimpulkan kondisi keuangan.");
+            result.add(language.text("Belum ada pemasukan tercatat bulan ini. Pastikan catatan sudah lengkap sebelum menyimpulkan kondisi keuangan.",
+                    "No income is recorded this month. Make sure your records are complete before drawing conclusions."));
         } else if (summary.expense.signum() == 0 && summary.income.signum() > 0) {
-            result.add("Belum ada pengeluaran tercatat bulan ini. Lengkapi pencatatan agar ringkasan lebih bermakna.");
+            result.add(language.text("Belum ada pengeluaran tercatat bulan ini. Lengkapi pencatatan agar ringkasan lebih bermakna.",
+                    "No expenses are recorded this month. Complete your records for a more meaningful summary."));
         } else if (summary.balance.signum() < 0) {
-            result.add("Pengeluaran tercatat melebihi pemasukan sebesar " + Money.format(summary.balance.abs())
-                    + ". Tinjau transaksi dan pastikan catatan sudah lengkap.");
+            result.add(language.text("Pengeluaran tercatat melebihi pemasukan sebesar ", "Recorded expenses exceed income by ")
+                    + Money.format(summary.balance.abs()) + language.text(
+                    ". Tinjau transaksi dan pastikan catatan sudah lengkap.", ". Review your transactions and make sure your records are complete."));
         } else if (summary.balance.signum() > 0) {
-            result.add("Selisih periode tercatat " + Money.format(summary.balance)
-                    + ". Jika catatan sudah lengkap, pertimbangkan menyisihkan sebagian sesuai kondisi dan kebutuhan.");
+            result.add(language.text("Selisih periode tercatat ", "The recorded balance for this period is ")
+                    + Money.format(summary.balance) + language.text(
+                    ". Jika catatan sudah lengkap, pertimbangkan menyisihkan sebagian sesuai kondisi dan kebutuhan.",
+                    ". If your records are complete, consider setting some aside according to your circumstances and needs."));
         } else {
-            result.add("Pemasukan dan pengeluaran tercatat seimbang. Periksa apakah semua transaksi sudah dicatat.");
+            result.add(language.text("Pemasukan dan pengeluaran tercatat seimbang. Periksa apakah semua transaksi sudah dicatat.",
+                    "Recorded income and expenses are balanced. Check whether all transactions have been recorded."));
         }
         if (category != null) {
-            result.add("Tinjau kategori " + category.category + " (" + Money.format(category.amount)
-                    + ") untuk melihat pos yang mungkin dapat disesuaikan dengan kebutuhan.");
+            result.add(language.text("Tinjau kategori ", "Review the category ") + Categories.label(category.category, language)
+                    + " (" + Money.format(category.amount) + language.text(
+                    ") untuk melihat pos yang mungkin dapat disesuaikan dengan kebutuhan.",
+                    ") for items that could be adjusted to suit your needs."));
         }
         if (!recurring.isEmpty()) {
             Group top = recurring.get(0);
-            result.add("Periksa pengeluaran berulang “" + top.title + "” (" + top.category
-                    + ") dan pertimbangkan apakah jumlah serta frekuensinya masih sesuai kebutuhan.");
+            result.add(language.text("Periksa pengeluaran berulang “", "Review the recurring expense “") + top.title
+                    + "” (" + Categories.label(top.category, language) + language.text(
+                    ") dan pertimbangkan apakah jumlah serta frekuensinya masih sesuai kebutuhan.",
+                    ") and consider whether its amount and frequency still suit your needs."));
         }
         return result;
     }

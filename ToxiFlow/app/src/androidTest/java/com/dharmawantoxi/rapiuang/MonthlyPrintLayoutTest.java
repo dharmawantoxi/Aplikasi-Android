@@ -184,6 +184,21 @@ public final class MonthlyPrintLayoutTest {
         } finally { full.delete(); selected.delete(); }
     }
 
+    @Test public void englishPhotoAppendixUsesReportLanguageAndKeepsUserText() {
+        Context context = ApplicationProvider.getApplicationContext();
+        Transaction entry = new Transaction(1, Transaction.EXPENSE, 1000, "Struk merah", "Belanja",
+                "2026-10-01", "Catatan", "2026-10-01 12:30:00", true);
+        MonthlyReport report = MonthlyReport.forMonth(2026, 9, Collections.singletonList(entry), AppLanguage.ENGLISH);
+        MonthlyPrintLayout.Plan plan = MonthlyPrintLayout.create(context,
+                attributes(PrintAttributes.MediaSize.ISO_A4, 500), report, true, new CancellationSignal());
+        assertEquals(AppLanguage.ENGLISH, plan.language);
+        assertEquals("October 2026", plan.period);
+        assertEquals(1, plan.photoPages.size());
+        assertEquals("Name: Struk merah\nDate: 1 October 2026 · Expense\nCategory: Shopping · Amount: Rp1.000",
+                plan.photoPages.get(0).label.getText().toString());
+        assertEquals("Belanja", plan.photoPages.get(0).transaction.category);
+    }
+
     @Test public void missingPhotoAndPhotoLimitFailRatherThanProducePartialPdf() throws Exception {
         Context context = ApplicationProvider.getApplicationContext();
         PrintAttributes attrs = attributes(PrintAttributes.MediaSize.ISO_A4, 500);

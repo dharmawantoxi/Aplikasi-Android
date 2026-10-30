@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">ToxiFlow</string>
+    <string name="splash_logo_description">DharmawanToxi logo</string>
+    <string name="splash_version">Version %1$s</string>
+    <string name="splash_loading">Loading app...</string>
+    <string name="splash_progress_description">Opening animation</string>
+    <string name="splash_copyright">© 2026 DharmawanToxi. All rights reserved.</string>
+</resources>
