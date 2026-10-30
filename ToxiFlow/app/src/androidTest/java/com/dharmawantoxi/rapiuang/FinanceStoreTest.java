@@ -106,7 +106,7 @@ public final class FinanceStoreTest {
             legacy.close();
         }
         store = new FinanceStore(context, TEST_DB, () -> "2026-11-10 11:22:33");
-        assertEquals(5, store.getReadableDatabase().getVersion());
+        assertEquals(6, store.getReadableDatabase().getVersion());
         assertEquals(2, store.all().size());
         Transaction oldExpense = store.get(1);
         assertEquals("Makan", oldExpense.title);
@@ -147,7 +147,7 @@ public final class FinanceStoreTest {
             legacy.setVersion(2);
         } finally { legacy.close(); }
         store = new FinanceStore(context, TEST_DB);
-        assertEquals(5, store.getReadableDatabase().getVersion());
+        assertEquals(6, store.getReadableDatabase().getVersion());
         assertEquals(2, store.all().size());
         assertEquals("2026-10-02 08:12:00", store.get(1).createdAt);
         assertNull(store.get(2).createdAt);
@@ -228,6 +228,36 @@ public final class FinanceStoreTest {
         assertEquals("65000", FinanceMath.summarize(store.all()).balance.toString());
     }
 
+    @Test public void transactionCanSplitIncomeAndExpenseBetweenAvailableFundsAndSavings() {
+        long incomeId = store.save(new Transaction(0, Transaction.INCOME, 100000,
+                "Gaji", "Gaji", "2026-10-01", "", null, false, 40000));
+        assertEquals("60000", store.availableFunds().toString());
+        assertEquals("40000", store.savingsBalance().toString());
+
+        long expenseId = store.save(new Transaction(0, Transaction.EXPENSE, 30000,
+                "Belanja", "Belanja", "2026-10-02", "", null, false, 10000));
+        assertEquals("40000", store.availableFunds().toString());
+        assertEquals("30000", store.savingsBalance().toString());
+        assertEquals("70000", FinanceMath.summarize(store.all()).balance.toString());
+        assertEquals(10000, store.get(expenseId).savingsAmount);
+
+        try {
+            store.save(new Transaction(0, Transaction.EXPENSE, 50000,
+                    "Liburan", "Hiburan", "2026-10-03", "", null, false, 35000));
+            fail("Expense exceeding savings balance accepted");
+        } catch (IllegalArgumentException expected) { }
+        try {
+            store.save(new Transaction(expenseId, Transaction.EXPENSE, 30000,
+                    "Belanja", "Belanja", "2026-10-02", "", null, false, 45000));
+            fail("Edited expense exceeding savings balance accepted");
+        } catch (IllegalArgumentException expected) { }
+        assertEquals("30000", store.savingsBalance().toString());
+        assertTrue(store.delete(expenseId));
+        assertEquals("60000", store.availableFunds().toString());
+        assertEquals("40000", store.savingsBalance().toString());
+        assertEquals(100000, store.get(incomeId).amount);
+    }
+
     @Test public void upgradingVersionThreeAddsDebtTablesWithoutChangingTransactions() {
         store.close();
         SQLiteDatabase legacy = context.openOrCreateDatabase(TEST_DB, Context.MODE_PRIVATE, null);
@@ -242,7 +272,7 @@ public final class FinanceStoreTest {
             legacy.setVersion(3);
         } finally { legacy.close(); }
         store = new FinanceStore(context, TEST_DB);
-        assertEquals(5, store.getReadableDatabase().getVersion());
+        assertEquals(6, store.getReadableDatabase().getVersion());
         assertEquals(1, store.all().size());
         assertEquals("tetap", store.get(1).note);
         assertTrue(store.allDebtRecords().isEmpty());

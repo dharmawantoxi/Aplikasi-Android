@@ -223,7 +223,7 @@ public final class FinanceFlowTest {
 
         try (ActivityScenario<MainActivity> scenario = launchHome()) {
             onView(withContentDescription("Dana")).perform(click());
-            onView(withText("Saldo tabungan terpisah dan tidak berubah oleh transaksi biasa.")).check(matches(isDisplayed()));
+            onView(withText("Atur bagian transaksi yang masuk ke atau diambil dari tabungan.")).check(matches(isDisplayed()));
             onView(withContentDescription("Dana siap pakai Rp75.000")).check(matches(isDisplayed()));
             onView(withContentDescription("Saldo tabungan Rp0")).check(matches(isDisplayed()));
             onView(withText("Gaji cash")).perform(scrollTo()).check(matches(isDisplayed()));
@@ -248,6 +248,35 @@ public final class FinanceFlowTest {
             assertEquals("55000", reader.availableFunds().toString());
             assertEquals("20000", reader.savingsBalance().toString());
             assertEquals("75000", FinanceMath.summarize(reader.all()).balance.toString());
+        } finally { reader.close(); }
+    }
+
+    @Test public void incomeAndExpenseTransactionsCanAllocatePartToSavings() {
+        try (ActivityScenario<MainActivity> scenario = launchHome()) {
+            onView(withText("Catat transaksi")).perform(scrollTo(), click());
+            onView(withText("Pemasukan")).perform(click());
+            onView(withContentDescription("Nominal transaksi dalam rupiah")).perform(typeText("100000"), closeSoftKeyboard());
+            onView(withContentDescription("Nominal transaksi yang ditambahkan ke atau diambil dari tabungan, opsional"))
+                    .perform(typeText("40000"), closeSoftKeyboard());
+            onView(withHint("Contoh: Gaji bulanan")).perform(typeText("Gaji"), closeSoftKeyboard());
+            onView(withText("Simpan transaksi")).perform(click());
+
+            onView(withText("Catat transaksi")).perform(scrollTo(), click());
+            onView(withContentDescription("Nominal transaksi dalam rupiah")).perform(typeText("30000"), closeSoftKeyboard());
+            onView(withContentDescription("Nominal transaksi yang ditambahkan ke atau diambil dari tabungan, opsional"))
+                    .perform(typeText("10000"), closeSoftKeyboard());
+            onView(withHint("Contoh: Makan siang")).perform(typeText("Belanja"), closeSoftKeyboard());
+            onView(withText("Simpan transaksi")).perform(click());
+
+            onView(withContentDescription("Dana")).perform(click());
+            onView(withContentDescription("Dana siap pakai Rp40.000")).check(matches(isDisplayed()));
+            onView(withContentDescription("Saldo tabungan Rp30.000")).check(matches(isDisplayed()));
+        }
+        FinanceStore reader = new FinanceStore(context);
+        try {
+            assertEquals("40000", reader.availableFunds().toString());
+            assertEquals("30000", reader.savingsBalance().toString());
+            assertEquals("70000", FinanceMath.summarize(reader.all()).balance.toString());
         } finally { reader.close(); }
     }
 

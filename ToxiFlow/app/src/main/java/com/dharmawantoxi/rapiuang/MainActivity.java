@@ -249,12 +249,12 @@ public final class MainActivity extends Activity {
 
     private void buildCash(LinearLayout content) {
         content.addView(pageHeader(tr("Dana & tabungan", "Cash & savings"),
-                tr("Saldo tabungan terpisah dan tidak berubah oleh transaksi biasa.",
-                        "Savings are separate and unaffected by ordinary transactions.")));
+                tr("Atur bagian transaksi yang masuk ke atau diambil dari tabungan.",
+                        "Set how much of a transaction goes into or comes from savings.")));
         content.addView(Ui.gap(this, 20));
         content.addView(Ui.text(this,
-                tr("Transaksi biasa hanya mengubah dana tersedia. Pindahkan uang ke/dari tabungan secara terpisah; perpindahan ini tidak dihitung sebagai pemasukan atau pengeluaran.",
-                        "Ordinary transactions affect available funds only. Move money into or out of savings separately; these transfers are not counted as income or expenses."),
+                tr("Transaksi biasa mengubah dana tersedia. Tentukan bagian tabungan langsung di transaksi, atau pindahkan saldo secara terpisah; alokasi dan perpindahan tabungan tidak dihitung sebagai pemasukan/pengeluaran tambahan.",
+                        "Ordinary transactions affect available funds. Allocate a portion to savings in the transaction or transfer it separately; savings allocations and transfers are not counted as extra income/expenses."),
                 12, Ui.MUTED, false));
         content.addView(Ui.gap(this, 16));
         content.addView(monthSelector());
@@ -275,8 +275,8 @@ public final class MainActivity extends Activity {
             Ui.pad(empty, 18, 18, 18, 18);
             empty.addView(Ui.text(this, tr("Belum ada transaksi pada periode ini", "No transactions in this period"), 14, Ui.INK, true));
             empty.addView(Ui.gap(this, 4));
-            empty.addView(Ui.text(this, tr("Pemasukan dan pengeluaran biasa memperbarui dana tersedia, bukan saldo tabungan.",
-                    "Ordinary income and expenses update available funds, not savings."), 12, Ui.MUTED, false));
+            empty.addView(Ui.text(this, tr("Transaksi biasa memakai dana tersedia kecuali bagian tabungan ditentukan.",
+                    "Ordinary transactions use available funds unless a savings portion is specified."), 12, Ui.MUTED, false));
             content.addView(empty);
             content.addView(Ui.gap(this, 14));
             content.addView(addTransactionCallout());
@@ -353,7 +353,14 @@ public final class MainActivity extends Activity {
                         : tr("Penarikan tabungan tersimpan", "Savings withdrawal saved"), Toast.LENGTH_SHORT).show();
                 refresh();
             } catch (IllegalArgumentException error) {
-                amount.setError(error.getMessage());
+                String message = error.getMessage();
+                if (message != null && message.startsWith("Dana tersedia tidak cukup"))
+                    message = tr("Dana tersedia tidak cukup untuk ditabung.", "Not enough available funds to add to savings.");
+                else if (message != null && message.startsWith("Saldo tabungan tidak cukup"))
+                    message = tr("Saldo tabungan tidak cukup untuk diambil.", "Not enough savings to withdraw.");
+                else if (message != null && message.startsWith("Nominal atau tanggal"))
+                    message = tr("Nominal atau tanggal perpindahan tabungan tidak valid.", "Invalid savings transfer amount or date.");
+                amount.setError(message);
                 amount.requestFocus();
             } catch (RuntimeException error) { showDebtStorageError(); }
         }));
@@ -1244,7 +1251,10 @@ public final class MainActivity extends Activity {
     private void showTransaction(Transaction t) {
         boolean income = Transaction.INCOME.equals(t.type);
         String details = (income ? tr("Pemasukan", "Income") : tr("Pengeluaran", "Expense")) + " · " + Categories.label(t.category, language) + "\n\n"
-                + Money.format(t.amount) + tr("\nTanggal transaksi: ", "\nTransaction date: ") + Dates.display(t.date, language)
+                + Money.format(t.amount)
+                + (t.savingsAmount == 0 ? "" : tr("\n" + (income ? "Masuk ke tabungan: " : "Diambil dari tabungan: "),
+                        "\n" + (income ? "Added to savings: " : "Paid from savings: ")) + Money.format(t.savingsAmount))
+                + tr("\nTanggal transaksi: ", "\nTransaction date: ") + Dates.display(t.date, language)
                 + tr("\nDibuat: ", "\nCreated: ") + CreationTime.display(t.createdAt, language)
                 + (t.note.isEmpty() ? "" : tr("\n\nCatatan: ", "\n\nNote: ") + t.note);
         AlertDialog.Builder builder = new AlertDialog.Builder(this)

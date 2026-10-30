@@ -606,7 +606,7 @@ public final class DomainChecks {
 
         List<Transaction> entries = new ArrayList<>(Arrays.asList(
                 new Transaction(1, Transaction.EXPENSE, 100, "Makan bersama", "Makan & minum", "2026-01-05",
-                        "Catatan, tetap sama", "2026-01-05 14:05:07", true),
+                        "Catatan, tetap sama", "2026-01-05 14:05:07", true, 25),
                 t(2, Transaction.EXPENSE, 200, "Makan bersama", "Makan & minum", "2026-01-10", ""),
                 t(3, Transaction.EXPENSE, 50, "Makan bersama", "Makan & minum", "2025-12-10", ""),
                 t(4, Transaction.INCOME, 1000, "Gaji utama", "Gaji", "2026-01-01", "")));
@@ -628,8 +628,8 @@ public final class DomainChecks {
         StringWriter csv = new StringWriter();
         CsvExport.write(csv, englishReport.transactions, en);
         String exported = csv.toString();
-        check(exported.startsWith("\ufeffDate,Type,Category,Name,Amount (Rp),Note,"), "English CSV header");
-        check(exported.contains("\"2026-01-05\",\"Expense\",\"Food & drink\",\"Makan bersama\",100,\"Catatan, tetap sama\",\"2026-01-05 14:05:07\",\"Yes\""),
+        check(exported.startsWith("\ufeffDate,Type,Category,Name,Amount (Rp),Savings portion (Rp),Note,"), "English CSV header");
+        check(exported.contains("\"2026-01-05\",\"Expense\",\"Food & drink\",\"Makan bersama\",100,25,\"Catatan, tetap sama\",\"2026-01-05 14:05:07\",\"Yes\""),
                 "English CSV labels change but ISO dates, user text and photo flag remain accurate");
         eq("January 2026", englishReport.period(), "English report period");
         eq("ToxiFlow-Report-2026-01.pdf", englishReport.fileName(), "English report filename");
@@ -639,6 +639,7 @@ public final class DomainChecks {
         check(report.contains("Period: January 2026"), "English report period text");
         check(report.contains("Category: Food & drink"), "English report displays translated category");
         check(report.contains("Name: Makan bersama"), "English report preserves user title");
+        check(report.contains("Paid from savings: Rp25"), "English report shows the savings-paid portion");
         check(report.contains("Note: Catatan, tetap sama"), "English report preserves user note");
         check(report.contains("Photo: Appendix 1"), "English report references photo appendix");
         boolean omitted = false;

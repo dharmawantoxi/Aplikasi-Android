@@ -15,9 +15,9 @@ import java.util.List;
 public final class FinanceStore extends SQLiteOpenHelper {
     private static final String DATABASE_NAME = "rapiuang.db";
     private static final String TABLE = "transactions";
-    private static final int DATABASE_VERSION = 5;
+    private static final int DATABASE_VERSION = 6;
     private static final String[] COLUMNS = {"_id", "type", "amount", "title", "category", "date", "note", "created_at",
-            "photo IS NOT NULL AS has_photo"};
+            "savings_amount", "photo IS NOT NULL AS has_photo"};
     enum PhotoAction { KEEP, REPLACE, REMOVE }
     private static volatile String databaseForUiTests;
     interface TimeSource { String now(); }
@@ -50,7 +50,8 @@ public final class FinanceStore extends SQLiteOpenHelper {
                 + "title TEXT NOT NULL CHECK(length(trim(title)) BETWEEN 1 AND 80), "
                 + "category TEXT NOT NULL, date TEXT NOT NULL CHECK(length(date) = 10), "
                 + "note TEXT NOT NULL DEFAULT '' CHECK(length(note) <= 300), "
-                + "created_at TEXT, photo BLOB)");
+                + "created_at TEXT, photo BLOB, "
+                + "savings_amount INTEGER NOT NULL DEFAULT 0 CHECK(savings_amount >= 0 AND savings_amount <= amount))");
         db.execSQL("CREATE INDEX transactions_date ON transactions(date DESC, _id DESC)");
         createDebtTables(db);
         createSavingsTable(db);
@@ -105,12 +106,17 @@ public final class FinanceStore extends SQLiteOpenHelper {
             createSavingsTable(db); // Separate savings ledger; existing transactions remain unchanged.
             oldVersion = 5;
         }
+        if (oldVersion == 5 && newVersion >= 6) {
+            db.execSQL("ALTER TABLE transactions ADD COLUMN savings_amount INTEGER NOT NULL DEFAULT 0 "
+                    + "CHECK(savings_amount >= 0 AND savings_amount <= amount)");
+            oldVersion = 6;
+        }
         if (oldVersion != newVersion) throw new IllegalStateException("Migrasi basis data belum tersedia.");
     }
 
     public long save(Transaction t) { return save(t, PhotoAction.KEEP, null); }
 
-    /** Photo and transaction changes commit together; KEEP never changes an existing attachment. */
+    /** Transaction fields and attached photos commit atomically, with savings allocation validated. */
     long save(Transaction t, PhotoAction action, byte[] photo) {
         if (action == null || (action == PhotoAction.REPLACE && !PhotoPolicy.validStoredJpeg(photo))
                 || (action != PhotoAction.REPLACE && photo != null))
@@ -118,9 +124,12 @@ public final class FinanceStore extends SQLiteOpenHelper {
         FinanceMath.ValidationError error = FinanceMath.validate(t.type, Long.toString(t.amount),
                 t.title, t.category, t.date, t.note);
         if (error != null) throw new IllegalArgumentException(error.message);
+        if (t.savingsAmount < 0 || t.savingsAmount > t.amount)
+            throw new IllegalArgumentException("Bagian tabungan harus antara Rp0 dan nominal transaksi.");
         ContentValues values = new ContentValues();
         values.put("type", t.type);
         values.put("amount", t.amount);
+        values.put("savings_amount", t.savingsAmount);
         values.put("title", t.title.trim());
         values.put("category", t.category);
         values.put("date", t.date);
@@ -128,16 +137,36 @@ public final class FinanceStore extends SQLiteOpenHelper {
         if (action == PhotoAction.REPLACE) values.put("photo", photo);
         else if (action == PhotoAction.REMOVE) values.putNull("photo");
         SQLiteDatabase db = getWritableDatabase();
-        if (t.id <= 0) {
-            String createdAt = timeSource.now();
-            if (!CreationTime.isValid(createdAt)) throw new IllegalStateException("Jam perangkat tidak valid.");
-            values.put("created_at", createdAt);
-            return db.insertOrThrow(TABLE, null, values);
-        }
-        // Never overwrite the creation time when a transaction is edited.
-        int changed = db.update(TABLE, values, "_id = ?", new String[]{Long.toString(t.id)});
-        if (changed != 1) throw new IllegalStateException("Transaksi tidak ditemukan. Muat ulang dan coba lagi.");
-        return t.id;
+        db.beginTransaction();
+        try {
+            BigInteger savingsBefore = savingsBalance(db);
+            if (t.id > 0) {
+                try (Cursor cursor = db.query(TABLE, new String[]{"type", "savings_amount"}, "_id = ?",
+                        new String[]{Long.toString(t.id)}, null, null, null)) {
+                    if (!cursor.moveToFirst()) throw new IllegalStateException("Transaksi tidak ditemukan. Muat ulang dan coba lagi.");
+                    BigInteger oldAllocation = BigInteger.valueOf(cursor.getLong(1));
+                    savingsBefore = Transaction.INCOME.equals(cursor.getString(0))
+                            ? savingsBefore.subtract(oldAllocation) : savingsBefore.add(oldAllocation);
+                }
+            }
+            if (Transaction.EXPENSE.equals(t.type)
+                    && savingsBefore.compareTo(BigInteger.valueOf(t.savingsAmount)) < 0)
+                throw new IllegalArgumentException("Saldo tabungan tidak cukup untuk bagian pengeluaran ini.");
+            long id;
+            if (t.id <= 0) {
+                String createdAt = timeSource.now();
+                if (!CreationTime.isValid(createdAt)) throw new IllegalStateException("Jam perangkat tidak valid.");
+                values.put("created_at", createdAt);
+                id = db.insertOrThrow(TABLE, null, values);
+            } else {
+                // Never overwrite the creation time when a transaction is edited.
+                int changed = db.update(TABLE, values, "_id = ?", new String[]{Long.toString(t.id)});
+                if (changed != 1) throw new IllegalStateException("Transaksi tidak ditemukan. Muat ulang dan coba lagi.");
+                id = t.id;
+            }
+            db.setTransactionSuccessful();
+            return id;
+        } finally { db.endTransaction(); }
     }
 
     /** Create debt received (adds cash) or receivable lent (uses cash), outside income/expense. */
@@ -253,6 +282,12 @@ public final class FinanceStore extends SQLiteOpenHelper {
 
     private static BigInteger savingsBalance(SQLiteDatabase db) {
         BigInteger balance = BigInteger.ZERO;
+        try (Cursor cursor = db.rawQuery("SELECT type, savings_amount FROM transactions", null)) {
+            while (cursor.moveToNext()) {
+                BigInteger amount = BigInteger.valueOf(cursor.getLong(1));
+                balance = Transaction.INCOME.equals(cursor.getString(0)) ? balance.add(amount) : balance.subtract(amount);
+            }
+        }
         try (Cursor cursor = db.rawQuery("SELECT type, amount FROM savings_movements", null)) {
             while (cursor.moveToNext()) {
                 BigInteger amount = BigInteger.valueOf(cursor.getLong(1));
@@ -262,21 +297,28 @@ public final class FinanceStore extends SQLiteOpenHelper {
         return balance;
     }
 
-    /** Available cash includes ordinary income/expenses and debt flows, less savings deposits. */
+    /** Available cash includes the non-savings portion of transactions and all debt/transfer flows. */
     BigInteger availableFunds() { return cashBalance(getReadableDatabase()); }
 
     private static BigInteger cashBalance(SQLiteDatabase db) {
         BigInteger balance = BigInteger.ZERO;
-        String sql = "SELECT type, amount AS value FROM transactions "
-                + "UNION ALL SELECT type, remaining AS value FROM debt_records "
-                + "UNION ALL SELECT type, amount AS value FROM savings_movements";
-        try (Cursor cursor = db.rawQuery(sql, null)) {
+        try (Cursor cursor = db.rawQuery("SELECT type, amount, savings_amount FROM transactions", null)) {
             while (cursor.moveToNext()) {
-                String type = cursor.getString(0);
+                BigInteger cashPortion = BigInteger.valueOf(cursor.getLong(1) - cursor.getLong(2));
+                balance = Transaction.INCOME.equals(cursor.getString(0))
+                        ? balance.add(cashPortion) : balance.subtract(cashPortion);
+            }
+        }
+        try (Cursor cursor = db.rawQuery("SELECT type, remaining FROM debt_records", null)) {
+            while (cursor.moveToNext()) {
                 BigInteger amount = BigInteger.valueOf(cursor.getLong(1));
-                boolean increasesCash = Transaction.INCOME.equals(type) || DebtRecord.DEBT.equals(type)
-                        || "withdrawal".equals(type);
-                balance = increasesCash ? balance.add(amount) : balance.subtract(amount);
+                balance = DebtRecord.DEBT.equals(cursor.getString(0)) ? balance.add(amount) : balance.subtract(amount);
+            }
+        }
+        try (Cursor cursor = db.rawQuery("SELECT type, amount FROM savings_movements", null)) {
+            while (cursor.moveToNext()) {
+                BigInteger amount = BigInteger.valueOf(cursor.getLong(1));
+                balance = "withdrawal".equals(cursor.getString(0)) ? balance.add(amount) : balance.subtract(amount);
             }
         }
         return balance;
@@ -313,6 +355,6 @@ public final class FinanceStore extends SQLiteOpenHelper {
 
     private static Transaction read(Cursor c) {
         return new Transaction(c.getLong(0), c.getString(1), c.getLong(2), c.getString(3),
-                c.getString(4), c.getString(5), c.getString(6), c.getString(7), c.getInt(8) != 0);
+                c.getString(4), c.getString(5), c.getString(6), c.getString(7), c.getInt(9) != 0, c.getLong(8));
     }
 }

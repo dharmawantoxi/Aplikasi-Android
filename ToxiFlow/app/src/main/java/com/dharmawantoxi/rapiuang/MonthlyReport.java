@@ -160,6 +160,8 @@ final class MonthlyReport {
                 add(lines, tr("Nama: ", "Name: ") + t.title, Style.BODY, 2, false);
                 add(lines, tr("Kategori: ", "Category: ") + Categories.label(t.category, language), Style.BODY, 1, false);
                 add(lines, tr("Nominal: ", "Amount: ") + Money.signed(t.amount, income), Style.BODY, 1, false);
+                if (t.savingsAmount > 0) add(lines, (income ? tr("Masuk ke tabungan: ", "Added to savings: ")
+                        : tr("Diambil dari tabungan: ", "Paid from savings: ")) + Money.format(t.savingsAmount), Style.BODY, 1, false);
                 add(lines, tr("Dibuat: ", "Created: ") + CreationTime.display(t.createdAt, language), Style.CAPTION, 1, false);
                 if (t.hasPhoto) {
                     photoNumber++;
