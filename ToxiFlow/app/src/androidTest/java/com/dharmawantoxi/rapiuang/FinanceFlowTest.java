@@ -20,6 +20,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
+import android.content.Intent;
 import android.database.sqlite.SQLiteDatabase;
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.core.app.ApplicationProvider;
@@ -35,16 +36,24 @@ import java.util.Calendar;
 public final class FinanceFlowTest {
     private static final String TEST_DB = "rapiuang-ui-test.db";
     private Context context;
+    private LanguageTestPreference testLanguage;
 
     @Before public void useIsolatedDatabase() {
         context = ApplicationProvider.getApplicationContext();
+        testLanguage = new LanguageTestPreference(context, AppLanguage.INDONESIAN);
         context.deleteDatabase(TEST_DB);
         FinanceStore.useDatabaseForUiTests(context, true);
     }
 
     @After public void removeIsolatedDatabase() {
+        if (testLanguage != null) testLanguage.close();
         FinanceStore.useDatabaseForUiTests(context, false);
         context.deleteDatabase(TEST_DB);
+    }
+
+    // Exercise the home screen directly; launcher behavior is covered by SplashActivityTest.
+    private ActivityScenario<MainActivity> launchHome() {
+        return ActivityScenario.launch(new Intent(context, MainActivity.class));
     }
 
     private Transaction onlySavedTransaction() {
@@ -59,7 +68,7 @@ public final class FinanceFlowTest {
     }
 
     @Test public void recordIncomePersistsAndCanBeDeleted() {
-        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+        try (ActivityScenario<MainActivity> scenario = launchHome()) {
             onView(withText("ToxiFlow")).check(matches(isDisplayed()));
             onView(withText("Catat transaksi")).perform(scrollTo(), click());
             onView(withText("Pemasukan")).perform(click());
@@ -84,7 +93,7 @@ public final class FinanceFlowTest {
     }
 
     @Test public void expenseCanBeEditedAndAppearsInReport() {
-        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+        try (ActivityScenario<MainActivity> scenario = launchHome()) {
             onView(withText("Catat transaksi")).perform(scrollTo(), click());
             onView(withContentDescription("Nominal transaksi dalam rupiah")).perform(typeText("25000"), closeSoftKeyboard());
             onView(withHint("Contoh: Makan siang")).perform(typeText("Makan malam"), closeSoftKeyboard());
@@ -107,7 +116,7 @@ public final class FinanceFlowTest {
     }
 
     @Test public void invalidPastedNominalIsNotSilentlySaved() {
-        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+        try (ActivityScenario<MainActivity> scenario = launchHome()) {
             onView(withText("Catat transaksi")).perform(scrollTo(), click());
             onView(withContentDescription("Nominal transaksi dalam rupiah")).perform(replaceText("12.500"), closeSoftKeyboard());
             onView(withHint("Contoh: Makan siang")).perform(typeText("Makan"), closeSoftKeyboard());
@@ -133,7 +142,7 @@ public final class FinanceFlowTest {
         } finally {
             legacy.close();
         }
-        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+        try (ActivityScenario<MainActivity> scenario = launchHome()) {
             onView(withText("Jam pembuatan tidak tercatat")).perform(scrollTo()).check(matches(isDisplayed()));
             onView(withText("Catatan lama")).perform(scrollTo(), click());
             onView(withText("Pengeluaran · Lainnya\n\nRp500\nTanggal transaksi: " + Dates.display(Dates.today())
@@ -160,7 +169,7 @@ public final class FinanceFlowTest {
         } finally {
             seed.close();
         }
-        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+        try (ActivityScenario<MainActivity> scenario = launchHome()) {
             onView(withText("Laporan")).perform(click());
             onView(withText("Sorotan bulanan")).perform(scrollTo()).check(matches(isDisplayed()));
             onView(withText("Transaksi: Buku")).perform(scrollTo()).check(matches(isDisplayed()));
@@ -183,7 +192,7 @@ public final class FinanceFlowTest {
         Calendar selected = Calendar.getInstance();
         selected.add(Calendar.MONTH, -1);
         String period = Dates.monthLabel(selected.get(Calendar.YEAR), selected.get(Calendar.MONTH));
-        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+        try (ActivityScenario<MainActivity> scenario = launchHome()) {
             onView(withText("Laporan")).perform(click());
             onView(withContentDescription("Bulan sebelumnya")).perform(click());
             onView(withContentDescription("Cetak laporan bulanan " + period)).perform(scrollTo(), click());

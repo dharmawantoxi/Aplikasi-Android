@@ -29,8 +29,12 @@ final class MonthlyReport {
     final FinanceMath.Summary summary;
     final List<FinanceMath.CategoryTotal> categories;
     final FinanceInsights insights;
+    final AppLanguage language;
 
-    private MonthlyReport(int year, int month, List<Transaction> all) {
+    private String tr(String indonesian, String english) { return language.text(indonesian, english); }
+
+    private MonthlyReport(int year, int month, List<Transaction> all, AppLanguage language) {
+        this.language = language;
         if (year < Dates.MIN_YEAR || year > Dates.MAX_YEAR || month < 0 || month > 11)
             throw new IllegalArgumentException("Periode tidak valid");
         this.year = year;
@@ -46,15 +50,19 @@ final class MonthlyReport {
         transactions = Collections.unmodifiableList(selected);
         summary = FinanceMath.summarize(transactions);
         categories = Collections.unmodifiableList(FinanceMath.expenseCategories(transactions));
-        insights = FinanceInsights.forMonth(year, month, all);
+        insights = FinanceInsights.forMonth(year, month, all, language);
     }
 
     static MonthlyReport forMonth(int year, int month, List<Transaction> all) {
-        return new MonthlyReport(year, month, all);
+        return forMonth(year, month, all, AppLanguage.INDONESIAN);
     }
 
-    String period() { return Dates.monthLabel(year, month); }
-    String fileName() { return "ToxiFlow-Laporan-" + Dates.monthKey(year, month) + ".pdf"; }
+    static MonthlyReport forMonth(int year, int month, List<Transaction> all, AppLanguage language) {
+        return new MonthlyReport(year, month, all, language);
+    }
+
+    String period() { return Dates.monthLabel(year, month, language); }
+    String fileName() { return tr("ToxiFlow-Laporan-", "ToxiFlow-Report-") + Dates.monthKey(year, month) + ".pdf"; }
 
     /** Photo pages follow the same date and insertion order as the transaction history. */
     List<Transaction> photoTransactions() {
@@ -68,94 +76,95 @@ final class MonthlyReport {
 
     List<Paragraph> paragraphs(boolean includePhotos) {
         List<Paragraph> lines = new ArrayList<>();
-        add(lines, "Laporan bulanan", Style.TITLE, 0, true);
-        add(lines, "Periode: " + period(), Style.SUBTITLE, 2, false);
-        add(lines, "Ringkasan periode", Style.SECTION, 16, true);
-        add(lines, "Pemasukan: " + Money.format(summary.income), Style.BODY, 3, false);
-        add(lines, "Pengeluaran: " + Money.format(summary.expense), Style.BODY, 2, false);
-        add(lines, "Selisih periode: " + Money.format(summary.balance), Style.STRONG, 2, false);
-        add(lines, "Jumlah transaksi: " + transactions.size(), Style.BODY, 2, false);
-        add(lines, "Selisih hanya menghitung bulan ini, tanpa saldo awal atau transaksi bulan lain.",
+        add(lines, tr("Laporan bulanan", "Monthly report"), Style.TITLE, 0, true);
+        add(lines, tr("Periode: ", "Period: ") + period(), Style.SUBTITLE, 2, false);
+        add(lines, tr("Ringkasan periode", "Period summary"), Style.SECTION, 16, true);
+        add(lines, tr("Pemasukan: ", "Income: ") + Money.format(summary.income), Style.BODY, 3, false);
+        add(lines, tr("Pengeluaran: ", "Expenses: ") + Money.format(summary.expense), Style.BODY, 2, false);
+        add(lines, tr("Selisih periode: ", "Period balance: ") + Money.format(summary.balance), Style.STRONG, 2, false);
+        add(lines, tr("Jumlah transaksi: ", "Number of transactions: ") + transactions.size(), Style.BODY, 2, false);
+        add(lines, tr("Selisih hanya menghitung bulan ini, tanpa saldo awal atau transaksi bulan lain.", "The period balance includes only this month, without an opening balance or transactions from other months."),
                 Style.CAPTION, 4, false);
 
-        add(lines, "Pengeluaran per kategori", Style.SECTION, 16, true);
+        add(lines, tr("Pengeluaran per kategori", "Expenses by category"), Style.SECTION, 16, true);
         if (categories.isEmpty()) {
-            add(lines, "Belum ada pengeluaran pada periode ini.", Style.CAPTION, 3, false);
+            add(lines, tr("Belum ada pengeluaran pada periode ini.", "No expenses in this period."), Style.CAPTION, 3, false);
         } else {
             for (FinanceMath.CategoryTotal category : categories)
-                add(lines, category.category + ": " + Money.format(category.amount), Style.BODY, 3, false);
+                add(lines, Categories.label(category.category, language) + ": " + Money.format(category.amount), Style.BODY, 3, false);
         }
 
-        add(lines, "Sorotan bulanan", Style.SECTION, 16, true);
+        add(lines, tr("Sorotan bulanan", "Monthly insights"), Style.SECTION, 16, true);
         if (insights.largestExpense == null) {
-            add(lines, "Belum ada pengeluaran pada periode ini.", Style.CAPTION, 3, false);
+            add(lines, tr("Belum ada pengeluaran pada periode ini.", "No expenses in this period."), Style.CAPTION, 3, false);
         } else {
             Transaction largest = insights.largestExpense;
-            add(lines, "Pengeluaran terbesar (transaksi): " + largest.title + " · " + largest.category
-                    + " · " + Dates.display(largest.date) + " · " + Money.format(largest.amount), Style.BODY, 3, false);
+            add(lines, tr("Pengeluaran terbesar (transaksi): ", "Largest expense (transaction): ") + largest.title + " · " + Categories.label(largest.category, language)
+                    + " · " + Dates.display(largest.date, language) + " · " + Money.format(largest.amount), Style.BODY, 3, false);
             FinanceMath.CategoryTotal category = insights.largestExpenseCategory;
             int percent = FinanceMath.percent(category.amount, insights.summary.expense);
-            add(lines, "Kategori pengeluaran terbesar: " + category.category + " · " + Money.format(category.amount)
-                    + " (" + percent + "% dari pengeluaran)", Style.BODY, 2, false);
+            add(lines, tr("Kategori pengeluaran terbesar: ", "Largest expense category: ") + Categories.label(category.category, language) + " · " + Money.format(category.amount)
+                    + " (" + percent + tr("% dari pengeluaran)", "% of expenses)"), Style.BODY, 2, false);
         }
         if (insights.largestIncome == null) {
-            add(lines, "Belum ada pemasukan pada periode ini.", Style.CAPTION, 3, false);
+            add(lines, tr("Belum ada pemasukan pada periode ini.", "No income in this period."), Style.CAPTION, 3, false);
         } else {
             Transaction largest = insights.largestIncome;
-            add(lines, "Pemasukan terbesar (transaksi): " + largest.title + " · " + largest.category
-                    + " · " + Dates.display(largest.date) + " · " + Money.format(largest.amount), Style.BODY, 3, false);
+            add(lines, tr("Pemasukan terbesar (transaksi): ", "Largest income (transaction): ") + largest.title + " · " + Categories.label(largest.category, language)
+                    + " · " + Dates.display(largest.date, language) + " · " + Money.format(largest.amount), Style.BODY, 3, false);
             FinanceInsights.Group source = insights.largestIncomeSource;
-            add(lines, "Sumber pemasukan terbesar: " + source.title + " · " + source.category + " · "
-                    + Money.format(source.total) + " (" + source.count + " transaksi bulan ini)", Style.BODY, 2, false);
-            add(lines, "Sumber dikelompokkan menurut nama dan kategori yang sama.", Style.CAPTION, 2, false);
+            add(lines, tr("Sumber pemasukan terbesar: ", "Largest income source: ") + source.title + " · " + Categories.label(source.category, language) + " · "
+                    + Money.format(source.total) + " (" + source.count + tr(" transaksi bulan ini)",
+                    source.count == 1 ? " transaction this month)" : " transactions this month)"), Style.BODY, 2, false);
+            add(lines, tr("Sumber dikelompokkan menurut nama dan kategori yang sama.", "Sources are grouped by the same name and category."), Style.CAPTION, 2, false);
         }
 
-        add(lines, "Pengeluaran berulang", Style.SECTION, 16, true);
-        add(lines, "Nama dan kategori sama: minimal dua kali bulan ini atau pada dua bulan dalam rentang yang diperiksa.",
+        add(lines, tr("Pengeluaran berulang", "Recurring expenses"), Style.SECTION, 16, true);
+        add(lines, tr("Nama dan kategori sama: minimal dua kali bulan ini atau pada dua bulan dalam rentang yang diperiksa.", "Same name and category: at least twice this month, or in two months within the checked window."),
                 Style.CAPTION, 3, false);
-        add(lines, "Rentang: bulan terpilih dan hingga dua bulan sebelumnya. Pola ini tidak memastikan jadwal rutin.",
+        add(lines, tr("Rentang: bulan terpilih dan hingga dua bulan sebelumnya. Pola ini tidak memastikan jadwal rutin.", "Window: the selected month and up to two previous months. This pattern does not guarantee a regular schedule."),
                 Style.CAPTION, 2, false);
         if (insights.recurringExpenses.isEmpty()) {
-            add(lines, "Belum ada pengeluaran berulang yang terdeteksi pada periode ini.", Style.CAPTION, 3, false);
+            add(lines, tr("Belum ada pengeluaran berulang yang terdeteksi pada periode ini.", "No recurring expenses were detected in this period."), Style.CAPTION, 3, false);
         } else {
             int shown = Math.min(FinanceInsights.MAX_RECURRING_SHOWN, insights.recurringExpenses.size());
             for (int i = 0; i < shown; i++) {
                 FinanceInsights.Group group = insights.recurringExpenses.get(i);
-                add(lines, group.title + " · " + group.category + " · Total bulan ini: " + Money.format(group.total),
+                add(lines, group.title + " · " + Categories.label(group.category, language) + tr(" · Total bulan ini: ", " · Total this month: ") + Money.format(group.total),
                         Style.BODY, 4, false);
                 add(lines, insights.recurringEvidence(group), Style.CAPTION, 1, false);
             }
             if (insights.recurringExpenses.size() > shown) {
-                add(lines, "Menampilkan " + shown + " dari " + insights.recurringExpenses.size()
-                        + " teratas berdasarkan total bulan ini.", Style.CAPTION, 3, false);
+                add(lines, tr("Menampilkan ", "Showing ") + shown + tr(" dari ", " of ") + insights.recurringExpenses.size()
+                        + tr(" teratas berdasarkan total bulan ini.", " top entries by this month’s total."), Style.CAPTION, 3, false);
             }
         }
 
-        add(lines, "Saran sederhana", Style.SECTION, 16, true);
+        add(lines, tr("Saran sederhana", "Simple suggestions"), Style.SECTION, 16, true);
         for (String suggestion : insights.suggestions) add(lines, "• " + suggestion, Style.BODY, 4, false);
-        add(lines, "Saran otomatis berdasarkan catatan yang tersedia, bukan nasihat keuangan profesional.",
+        add(lines, tr("Saran otomatis berdasarkan catatan yang tersedia, bukan nasihat keuangan profesional.", "Automatic suggestions are based on available records and are not professional financial advice."),
                 Style.CAPTION, 4, false);
 
-        add(lines, "Transaksi periode ini", Style.SECTION, 16, true);
+        add(lines, tr("Transaksi periode ini", "Transactions in this period"), Style.SECTION, 16, true);
         if (transactions.isEmpty()) {
-            add(lines, "Belum ada transaksi pada periode ini.", Style.CAPTION, 3, false);
+            add(lines, tr("Belum ada transaksi pada periode ini.", "No transactions in this period."), Style.CAPTION, 3, false);
         } else {
             int photoNumber = 0;
             for (Transaction t : transactions) {
                 boolean income = Transaction.INCOME.equals(t.type);
-                add(lines, Dates.display(t.date) + " · " + (income ? "Pemasukan" : "Pengeluaran"),
+                add(lines, Dates.display(t.date, language) + " · " + (income ? tr("Pemasukan", "Income") : tr("Pengeluaran", "Expense")),
                         Style.STRONG, 10, true);
-                add(lines, "Nama: " + t.title, Style.BODY, 2, false);
-                add(lines, "Kategori: " + t.category, Style.BODY, 1, false);
-                add(lines, "Nominal: " + Money.signed(t.amount, income), Style.BODY, 1, false);
-                add(lines, "Dibuat: " + CreationTime.display(t.createdAt), Style.CAPTION, 1, false);
+                add(lines, tr("Nama: ", "Name: ") + t.title, Style.BODY, 2, false);
+                add(lines, tr("Kategori: ", "Category: ") + Categories.label(t.category, language), Style.BODY, 1, false);
+                add(lines, tr("Nominal: ", "Amount: ") + Money.signed(t.amount, income), Style.BODY, 1, false);
+                add(lines, tr("Dibuat: ", "Created: ") + CreationTime.display(t.createdAt, language), Style.CAPTION, 1, false);
                 if (t.hasPhoto) {
                     photoNumber++;
-                    add(lines, includePhotos ? "Foto: Lampiran " + photoNumber
-                            : "Foto tidak disertakan dalam laporan ini.", Style.CAPTION, 1, false);
+                    add(lines, includePhotos ? tr("Foto: Lampiran ", "Photo: Appendix ") + photoNumber
+                            : tr("Foto tidak disertakan dalam laporan ini.", "Photo not included in this report."), Style.CAPTION, 1, false);
                 }
                 if (t.note != null && !t.note.isEmpty())
-                    add(lines, "Catatan: " + t.note, Style.BODY, 1, false);
+                    add(lines, tr("Catatan: ", "Note: ") + t.note, Style.BODY, 1, false);
             }
         }
         return lines;

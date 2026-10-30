@@ -68,13 +68,15 @@ final class MonthlyPrintLayout {
     static final class Plan {
         final Rect content;
         final String period;
+        final AppLanguage language;
         // Text pages are retained separately so callers/tests can verify wrapping without images.
         final List<List<Line>> pages;
         final List<PhotoPage> photoPages;
 
-        Plan(Rect content, String period, List<List<Line>> pages, List<PhotoPage> photoPages) {
+        Plan(Rect content, String period, AppLanguage language, List<List<Line>> pages, List<PhotoPage> photoPages) {
             this.content = content;
             this.period = period;
+            this.language = language;
             this.pages = pages;
             this.photoPages = photoPages;
         }
@@ -115,7 +117,7 @@ final class MonthlyPrintLayout {
             } else {
                 PhotoPage attachment = photoPage(pageIndex);
                 if (photo == null) throw new IllegalStateException("Foto lampiran tidak tersedia.");
-                canvas.drawText("Lampiran foto " + attachment.number, 0, HEADER_HEIGHT + 12,
+                canvas.drawText(language.text("Lampiran foto ", "Photo appendix ") + attachment.number, 0, HEADER_HEIGHT + 12,
                         paint(12, true, Color.BLACK));
                 int textSave = canvas.save();
                 canvas.translate(0, HEADER_HEIGHT + 18);
@@ -133,8 +135,8 @@ final class MonthlyPrintLayout {
             }
 
             canvas.drawLine(0, height - 20, width, height - 20, rule);
-            String pageNumber = "Halaman " + (pageIndex + 1) + " / " + pageCount();
-            canvas.drawText("Dokumen pribadi", 0, height - 6, small);
+            String pageNumber = language.text("Halaman ", "Page ") + (pageIndex + 1) + " / " + pageCount();
+            canvas.drawText(language.text("Dokumen pribadi", "Private document"), 0, height - 6, small);
             canvas.drawText(pageNumber, width - small.measureText(pageNumber), height - 6, small);
             canvas.restoreToCount(save);
         }
@@ -185,12 +187,16 @@ final class MonthlyPrintLayout {
             for (Transaction t : report.photoTransactions()) {
                 cancellation.throwIfCanceled();
                 if (pages.size() + photos.size() >= MAX_PAGES) throw new PrintPagination.TooManyPagesException();
-                String type = Transaction.INCOME.equals(t.type) ? "Pemasukan" : "Pengeluaran";
+                AppLanguage language = report.language;
+                String type = Transaction.INCOME.equals(t.type)
+                        ? language.text("Pemasukan", "Income") : language.text("Pengeluaran", "Expense");
                 // The complete name remains in the history; normalize whitespace in this label so
                 // pasted newlines cannot push the photo off a small printable page.
                 String title = t.title.replaceAll("\\s+", " ").trim();
-                String caption = "Nama: " + title + "\nTanggal: " + Dates.display(t.date) + " · " + type
-                        + "\nKategori: " + t.category + " · Nominal: " + Money.format(t.amount);
+                String caption = language.text("Nama: ", "Name: ") + title
+                        + language.text("\nTanggal: ", "\nDate: ") + Dates.display(t.date, language) + " · " + type
+                        + language.text("\nKategori: ", "\nCategory: ") + Categories.label(t.category, language)
+                        + language.text(" · Nominal: ", " · Amount: ") + Money.format(t.amount);
                 StaticLayout label = textLayout(caption, paints.get(MonthlyReport.Style.BODY), content.width());
                 float imageTop = HEADER_HEIGHT + 18 + label.getHeight() + 8;
                 float imageBottom = content.height() - FOOTER_HEIGHT - 4;
@@ -198,7 +204,7 @@ final class MonthlyPrintLayout {
                 photos.add(new PhotoPage(t, photos.size() + 1, label, imageTop, imageBottom));
             }
         }
-        return new Plan(content, report.period(), pages, photos);
+        return new Plan(content, report.period(), report.language, pages, photos);
     }
 
     /** Backward-compatible helper for a report with no photo pages. */

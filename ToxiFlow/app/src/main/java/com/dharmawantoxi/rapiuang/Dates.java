@@ -12,6 +12,14 @@ public final class Dates {
             "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus",
             "September", "Oktober", "November", "Desember"
     };
+    private static final String[] MONTHS_EN = {
+            "January", "February", "March", "April", "May", "June", "July", "August",
+            "September", "October", "November", "December"
+    };
+
+    private static String[] months(AppLanguage language) {
+        return language == AppLanguage.ENGLISH ? MONTHS_EN : MONTHS;
+    }
 
     private Dates() { }
 
@@ -47,7 +55,11 @@ public final class Dates {
     }
 
     public static String monthLabel(int year, int monthZeroBased) {
-        return MONTHS[monthZeroBased] + " " + year;
+        return monthLabel(year, monthZeroBased, AppLanguage.INDONESIAN);
+    }
+
+    static String monthLabel(int year, int monthZeroBased, AppLanguage language) {
+        return months(language)[monthZeroBased] + " " + year;
     }
 
     /** Use today's day number within the selected month, clamped for shorter months. */
@@ -62,15 +74,23 @@ public final class Dates {
     }
 
     public static String display(String date) {
+        return display(date, AppLanguage.INDONESIAN);
+    }
+
+    static String display(String date, AppLanguage language) {
         if (!isValid(date)) return date == null ? "" : date;
         return Integer.parseInt(date.substring(8, 10)) + " "
-                + MONTHS[Integer.parseInt(date.substring(5, 7)) - 1] + " " + date.substring(0, 4);
+                + months(language)[Integer.parseInt(date.substring(5, 7)) - 1] + " " + date.substring(0, 4);
     }
 
     public static String displayShort(String date) {
+        return displayShort(date, AppLanguage.INDONESIAN);
+    }
+
+    static String displayShort(String date, AppLanguage language) {
         if (!isValid(date)) return date == null ? "" : date;
         return Integer.parseInt(date.substring(8, 10)) + " "
-                + MONTHS[Integer.parseInt(date.substring(5, 7)) - 1].substring(0, 3);
+                + months(language)[Integer.parseInt(date.substring(5, 7)) - 1].substring(0, 3);
     }
 
     public static Calendar calendarFor(String date) {

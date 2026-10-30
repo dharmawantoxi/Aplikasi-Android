@@ -39,18 +39,22 @@ final class CreationTime {
         }
     }
 
-    static String display(String value) {
-        if (!isValid(value)) return UNAVAILABLE;
-        return Dates.display(value.substring(0, 10)) + ", " + value.substring(11, 16);
+    static String display(String value) { return display(value, AppLanguage.INDONESIAN); }
+
+    static String display(String value, AppLanguage language) {
+        if (!isValid(value)) return language.text(UNAVAILABLE, "Not recorded");
+        return Dates.display(value.substring(0, 10), language) + ", " + value.substring(11, 16);
     }
 
     /** Put the hour first so it remains visible when a narrow list row is ellipsized. */
-    static String listLabel(String value) {
-        if (!isValid(value)) return "Jam pembuatan tidak tercatat";
+    static String listLabel(String value) { return listLabel(value, AppLanguage.INDONESIAN); }
+
+    static String listLabel(String value, AppLanguage language) {
+        if (!isValid(value)) return language.text("Jam pembuatan tidak tercatat", "Creation time not recorded");
         String date = value.substring(0, 10);
-        String shortDate = Dates.displayShort(date);
+        String shortDate = Dates.displayShort(date, language);
         if (!shortDate.equals(date)) shortDate += " " + value.substring(0, 4);
-        return value.substring(11, 16) + " · dibuat " + shortDate;
+        return value.substring(11, 16) + language.text(" · dibuat ", " · created ") + shortDate;
     }
 
     private CreationTime() { }

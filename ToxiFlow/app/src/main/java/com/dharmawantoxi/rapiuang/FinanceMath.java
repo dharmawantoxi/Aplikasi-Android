@@ -38,20 +38,25 @@ public final class FinanceMath {
 
     public static ValidationError validate(String type, String rawAmount, String title,
                                            String category, String date, String note) {
+        return validate(type, rawAmount, title, category, date, note, AppLanguage.INDONESIAN);
+    }
+
+    static ValidationError validate(String type, String rawAmount, String title,
+                                    String category, String date, String note, AppLanguage language) {
         if (!Transaction.EXPENSE.equals(type) && !Transaction.INCOME.equals(type))
-            return new ValidationError("type", "Pilih jenis transaksi.");
-        try { Money.parseAmount(rawAmount); }
+            return new ValidationError("type", language.text("Pilih jenis transaksi.", "Choose a transaction type."));
+        try { Money.parseAmount(rawAmount, language); }
         catch (IllegalArgumentException e) { return new ValidationError("amount", e.getMessage()); }
         if (title == null || title.trim().isEmpty())
-            return new ValidationError("title", "Isi nama transaksi terlebih dahulu.");
+            return new ValidationError("title", language.text("Isi nama transaksi terlebih dahulu.", "Enter a transaction name."));
         if (title.trim().length() > 80)
-            return new ValidationError("title", "Nama transaksi maksimal 80 karakter.");
+            return new ValidationError("title", language.text("Nama transaksi maksimal 80 karakter.", "The transaction name can have at most 80 characters."));
         if (!Categories.validForType(type, category))
-            return new ValidationError("category", "Pilih kategori yang sesuai.");
+            return new ValidationError("category", language.text("Pilih kategori yang sesuai.", "Choose a valid category."));
         if (!Dates.isValid(date))
-            return new ValidationError("date", "Pilih tanggal yang valid (1900–2100).");
+            return new ValidationError("date", language.text("Pilih tanggal yang valid (1900–2100).", "Choose a valid date (1900–2100)."));
         if (note == null || note.length() > 300)
-            return new ValidationError("note", "Catatan maksimal 300 karakter.");
+            return new ValidationError("note", language.text("Catatan maksimal 300 karakter.", "The note can have at most 300 characters."));
         return null;
     }
 
@@ -73,12 +78,17 @@ public final class FinanceMath {
     }
 
     public static List<Transaction> filter(List<Transaction> transactions, String type, String query) {
+        return filter(transactions, type, query, AppLanguage.INDONESIAN);
+    }
+
+    static List<Transaction> filter(List<Transaction> transactions, String type, String query, AppLanguage language) {
         String q = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
         List<Transaction> result = new ArrayList<>();
         for (Transaction t : transactions) {
             if (type != null && !type.isEmpty() && !type.equals(t.type)) continue;
             if (!q.isEmpty() && !t.title.toLowerCase(Locale.ROOT).contains(q)
                     && !t.category.toLowerCase(Locale.ROOT).contains(q)
+                    && !Categories.label(t.category, language).toLowerCase(Locale.ROOT).contains(q)
                     && !t.note.toLowerCase(Locale.ROOT).contains(q)) continue;
             result.add(t);
         }

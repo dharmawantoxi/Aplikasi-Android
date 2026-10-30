@@ -1,3 +1,8 @@
 <resources>
     <string name="app_name">ToxiFlow</string>
+    <string name="splash_logo_description">Logo DharmawanToxi</string>
+    <string name="splash_version">Versi %1$s</string>
+    <string name="splash_loading">Memuat aplikasi...</string>
+    <string name="splash_progress_description">Animasi pembuka</string>
+    <string name="splash_copyright">© 2026 DharmawanToxi. Hak cipta dilindungi.</string>
 </resources>

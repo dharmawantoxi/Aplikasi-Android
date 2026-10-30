@@ -59,9 +59,19 @@ public final class TransactionFormActivity extends Activity {
     private Future<?> importTask;
     private long importGeneration, previewGeneration;
     private boolean photoBusy, destroyed, stateSaved, pendingRechooseMessage;
+    private AppLanguage language = AppLanguage.INDONESIAN;
+
+    @Override protected void attachBaseContext(Context base) {
+        super.attachBaseContext(LanguageSettings.wrap(base));
+    }
+
+    private String tr(String indonesian, String english) {
+        return language.text(indonesian, english);
+    }
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        language = LanguageSettings.get(this);
         store = new FinanceStore(this);
         photoExecutor = Executors.newSingleThreadExecutor();
         PhotoFiles.pruneOld(this);
@@ -69,11 +79,11 @@ public final class TransactionFormActivity extends Activity {
         if (transactionId > 0) {
             try { original = store.get(transactionId); }
             catch (RuntimeException e) {
-                showFatalError("Data transaksi belum bisa dibuka. Coba lagi.");
+                showFatalError(tr("Data transaksi belum bisa dibuka. Coba lagi.", "The transaction could not be opened. Try again."));
                 return;
             }
             if (original == null) {
-                showFatalError("Transaksi tidak ditemukan atau sudah dihapus.");
+                showFatalError(tr("Transaksi tidak ditemukan atau sudah dihapus.", "The transaction was not found or has already been deleted."));
                 return;
             }
         }
@@ -105,8 +115,8 @@ public final class TransactionFormActivity extends Activity {
     }
 
     private void showFatalError(String message) {
-        new AlertDialog.Builder(this).setTitle("Tidak dapat membuka transaksi")
-                .setMessage(message).setPositiveButton("Tutup", (d, w) -> finish())
+        new AlertDialog.Builder(this).setTitle(tr("Tidak dapat membuka transaksi", "Unable to open transaction"))
+                .setMessage(message).setPositiveButton(tr("Tutup", "Close"), (d, w) -> finish())
                 .setOnCancelListener(d -> finish()).show();
     }
 
@@ -119,14 +129,14 @@ public final class TransactionFormActivity extends Activity {
         LinearLayout header = Ui.row(this);
         Ui.pad(header, 18, 13, 22, 12);
         FrameLayout back = Ui.iconBox(this, "back", Ui.GREEN, Ui.WHITE, 48, 20, 14);
-        back.setContentDescription("Kembali");
+        back.setContentDescription(tr("Kembali", "Back"));
         Ui.clickable(back, Ui.outlined(this, Ui.WHITE, Ui.LINE, 14), v -> onBackPressed());
         header.addView(back);
         LinearLayout headerText = Ui.column(this);
         LinearLayout.LayoutParams headerParams = Ui.weighted(0, -2, 1);
         headerParams.leftMargin = Ui.dp(this, 14);
-        headerText.addView(Ui.text(this, original == null ? "Catat transaksi" : "Ubah transaksi", 17, Ui.INK, true));
-        headerText.addView(Ui.text(this, "SATU LANGKAH LEBIH RAPI", 9, Ui.MUTED, true));
+        headerText.addView(Ui.text(this, original == null ? tr("Catat transaksi", "Add transaction") : tr("Ubah transaksi", "Edit transaction"), 17, Ui.INK, true));
+        headerText.addView(Ui.text(this, tr("SATU LANGKAH LEBIH RAPI", "ONE STEP TOWARD CLARITY"), 9, Ui.MUTED, true));
         header.addView(headerText, headerParams);
         root.addView(header);
 
@@ -138,15 +148,15 @@ public final class TransactionFormActivity extends Activity {
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
         root.addView(scroll, Ui.weighted(-1, 0, 1));
 
-        content.addView(Ui.display(this, original == null ? "Buat catatan baru." : "Perbarui catatan.", 26));
+        content.addView(Ui.display(this, original == null ? tr("Buat catatan baru.", "Create a new entry.") : tr("Perbarui catatan.", "Update this entry."), 26));
         content.addView(Ui.gap(this, 4));
-        content.addView(Ui.text(this, "Setiap transaksi kecil berarti.", 13, Ui.MUTED, false));
+        content.addView(Ui.text(this, tr("Setiap transaksi kecil berarti.", "Every small transaction counts."), 13, Ui.MUTED, false));
         content.addView(Ui.gap(this, 19));
         LinearLayout tabs = Ui.row(this);
         tabs.setBackground(Ui.shape(this, 0xffe9eee7, 16));
         Ui.pad(tabs, 4, 4, 4, 4);
-        expenseTab = typeTab("Pengeluaran");
-        incomeTab = typeTab("Pemasukan");
+        expenseTab = typeTab(tr("Pengeluaran", "Expense"));
+        incomeTab = typeTab(tr("Pemasukan", "Income"));
         tabs.addView(expenseTab, Ui.weighted(0, Ui.dp(this, 42), 1));
         tabs.addView(incomeTab, Ui.weighted(0, Ui.dp(this, 42), 1));
         expenseTab.setOnClickListener(v -> changeType(Transaction.EXPENSE));
@@ -154,7 +164,7 @@ public final class TransactionFormActivity extends Activity {
         content.addView(tabs);
         content.addView(Ui.gap(this, 21));
 
-        content.addView(fieldLabel("NOMINAL TRANSAKSI", false));
+        content.addView(fieldLabel(tr("NOMINAL TRANSAKSI", "TRANSACTION AMOUNT"), false));
         content.addView(Ui.gap(this, 7));
         LinearLayout amountBox = Ui.row(this);
         amountBox.setBackground(Ui.outlined(this, Ui.PALE, 0xffdbe9d9, 18));
@@ -165,7 +175,7 @@ public final class TransactionFormActivity extends Activity {
         amountInput.setTextColor(Ui.INK);
         amountInput.setHintTextColor(0xffa7b9a9);
         amountInput.setHint("0");
-        amountInput.setContentDescription("Nominal transaksi dalam rupiah");
+        amountInput.setContentDescription(tr("Nominal transaksi dalam rupiah", "Transaction amount in rupiah"));
         amountInput.setSingleLine(true);
         amountInput.setBackgroundColor(Color.TRANSPARENT);
         // Show a numeric keyboard but keep pasted punctuation visible so validation can reject it.
@@ -179,59 +189,59 @@ public final class TransactionFormActivity extends Activity {
         amountBox.addView(amountInput, Ui.weighted(0, Ui.dp(this, 55), 1));
         content.addView(amountBox);
         content.addView(Ui.gap(this, 5));
-        content.addView(Ui.text(this, "Rupiah penuh, maksimal 12 digit, tanpa titik atau koma.", 11, Ui.MUTED, false));
+        content.addView(Ui.text(this, tr("Rupiah penuh, maksimal 12 digit, tanpa titik atau koma.", "Whole rupiah only, up to 12 digits, without dots or commas."), 11, Ui.MUTED, false));
         content.addView(Ui.gap(this, 19));
 
-        content.addView(fieldLabel("NAMA TRANSAKSI", false));
+        content.addView(fieldLabel(tr("NAMA TRANSAKSI", "TRANSACTION NAME"), false));
         content.addView(Ui.gap(this, 7));
-        titleInput = input("Contoh: Makan siang", true, 80);
-        titleInput.setContentDescription("Nama transaksi");
+        titleInput = input(tr("Contoh: Makan siang", "Example: Lunch"), true, 80);
+        titleInput.setContentDescription(tr("Nama transaksi", "Transaction name"));
         titleInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         titleInput.setImeOptions(EditorInfo.IME_ACTION_NEXT);
         titleInput.setText(title);
         content.addView(inputBox(titleInput, 49));
         content.addView(Ui.gap(this, 17));
 
-        content.addView(fieldLabel("KATEGORI", false));
+        content.addView(fieldLabel(tr("KATEGORI", "CATEGORY"), false));
         content.addView(Ui.gap(this, 7));
         LinearLayout categoryBox = Ui.row(this);
         categoryBox.setBackground(Ui.outlined(this, Ui.WHITE, Ui.LINE, 15));
         Ui.pad(categoryBox, 15, 0, 14, 0);
         categoryInput = new Spinner(this);
         categoryInput.setBackgroundColor(Color.TRANSPARENT);
-        categoryInput.setContentDescription("Kategori transaksi");
+        categoryInput.setContentDescription(tr("Kategori transaksi", "Transaction category"));
         categoryBox.addView(categoryInput, Ui.weighted(0, Ui.dp(this, 49), 1));
         categoryBox.addView(new IconView(this, "down", Ui.GREEN), Ui.lp(Ui.dp(this, 18), Ui.dp(this, 18)));
         categoryBox.setOnClickListener(v -> categoryInput.performClick());
         content.addView(categoryBox);
         content.addView(Ui.gap(this, 17));
 
-        content.addView(fieldLabel("TANGGAL TRANSAKSI", false));
+        content.addView(fieldLabel(tr("TANGGAL TRANSAKSI", "TRANSACTION DATE"), false));
         content.addView(Ui.gap(this, 7));
         LinearLayout dateBox = Ui.row(this);
         Ui.pad(dateBox, 15, 0, 15, 0);
         Ui.clickable(dateBox, Ui.outlined(this, Ui.WHITE, Ui.LINE, 15), v -> chooseDate());
         dateBox.setMinimumHeight(Ui.dp(this, 49));
         dateBox.addView(new IconView(this, "calendar", Ui.GREEN), Ui.lp(Ui.dp(this, 20), Ui.dp(this, 20)));
-        dateText = Ui.text(this, Dates.display(selectedDate), 14, Ui.INK, true);
+        dateText = Ui.text(this, Dates.display(selectedDate, language), 14, Ui.INK, true);
         LinearLayout.LayoutParams dateParams = Ui.weighted(0, -2, 1);
         dateParams.leftMargin = Ui.dp(this, 11);
         dateBox.addView(dateText, dateParams);
         dateBox.addView(new IconView(this, "down", Ui.GREEN), Ui.lp(Ui.dp(this, 18), Ui.dp(this, 18)));
-        dateBox.setContentDescription("Pilih tanggal, " + Dates.display(selectedDate));
+        dateBox.setContentDescription(tr("Pilih tanggal, ", "Choose date, ") + Dates.display(selectedDate, language));
         dateText.setTag(dateBox);
         content.addView(dateBox);
         content.addView(Ui.gap(this, 6));
         String createdHint = original == null
-                ? "Jam pembuatan dicatat otomatis saat disimpan, sesuai jam perangkat."
-                : "Dibuat: " + CreationTime.display(original.createdAt) + ". Waktu ini tidak berubah saat diedit.";
+                ? tr("Jam pembuatan dicatat otomatis saat disimpan, sesuai jam perangkat.", "Creation time is recorded automatically using the device time when saved.")
+                : tr("Dibuat: ", "Created: ") + CreationTime.display(original.createdAt, language) + tr(". Waktu ini tidak berubah saat diedit.", ". This time does not change when edited.");
         content.addView(Ui.text(this, createdHint, 11, Ui.MUTED, false));
         content.addView(Ui.gap(this, 17));
 
-        content.addView(fieldLabel("CATATAN", true));
+        content.addView(fieldLabel(tr("CATATAN", "NOTE"), true));
         content.addView(Ui.gap(this, 7));
-        noteInput = input("Tambahkan catatan jika perlu", false, 300);
-        noteInput.setContentDescription("Catatan tambahan, opsional");
+        noteInput = input(tr("Tambahkan catatan jika perlu", "Add a note if needed"), false, 300);
+        noteInput.setContentDescription(tr("Catatan tambahan, opsional", "Additional note, optional"));
         noteInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
         noteInput.setGravity(Gravity.TOP | Gravity.START);
         noteInput.setText(note);
@@ -241,43 +251,43 @@ public final class TransactionFormActivity extends Activity {
         noteBox.addView(noteInput, Ui.lp(-1, Ui.dp(this, 62)));
         content.addView(noteBox);
         content.addView(Ui.gap(this, 19));
-        content.addView(fieldLabel("FOTO TRANSAKSI", true));
+        content.addView(fieldLabel(tr("FOTO TRANSAKSI", "TRANSACTION PHOTO"), true));
         content.addView(Ui.gap(this, 7));
-        content.addView(Ui.text(this, "Satu foto struk atau bukti, boleh dikosongkan. Foto diperkecil dan disimpan di perangkat.",
+        content.addView(Ui.text(this, tr("Satu foto struk atau bukti, boleh dikosongkan. Foto diperkecil dan disimpan di perangkat.", "One optional receipt or proof photo. It is resized and stored on the device."),
                 11, Ui.MUTED, false));
         content.addView(Ui.gap(this, 8));
-        photoStatus = Ui.text(this, "Belum ada foto.", 12, Ui.INK, false);
+        photoStatus = Ui.text(this, tr("Belum ada foto.", "No photo attached."), 12, Ui.INK, false);
         photoStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         content.addView(photoStatus);
         content.addView(Ui.gap(this, 8));
         photoPreview = new ImageView(this);
-        photoPreview.setContentDescription("Pratinjau foto transaksi");
+        photoPreview.setContentDescription(tr("Pratinjau foto transaksi", "Transaction photo preview"));
         photoPreview.setScaleType(ImageView.ScaleType.FIT_CENTER);
         photoPreview.setBackground(Ui.outlined(this, Ui.WHITE, Ui.LINE, 14));
         photoPreview.setVisibility(View.GONE);
         content.addView(photoPreview, Ui.lp(-1, Ui.dp(this, 175)));
         LinearLayout photoActions = Ui.row(this);
-        choosePhotoButton = photoButton("Pilih foto", v -> pickPhoto());
-        takePhotoButton = photoButton("Ambil foto", v -> takePhoto());
+        choosePhotoButton = photoButton(tr("Pilih foto", "Choose photo"), v -> pickPhoto());
+        takePhotoButton = photoButton(tr("Ambil foto", "Take photo"), v -> takePhoto());
         photoActions.addView(choosePhotoButton, Ui.weighted(0, Ui.dp(this, 48), 1));
         photoActions.addView(Ui.gap(this, 8), Ui.lp(Ui.dp(this, 8), 1));
         photoActions.addView(takePhotoButton, Ui.weighted(0, Ui.dp(this, 48), 1));
         content.addView(photoActions);
-        removePhotoButton = photoButton("Hapus foto", v -> removePhoto());
+        removePhotoButton = photoButton(tr("Hapus foto", "Remove photo"), v -> removePhoto());
         LinearLayout.LayoutParams photoButtonMargin = Ui.lp(-1, Ui.dp(this, 48));
         photoButtonMargin.topMargin = Ui.dp(this, 8);
         content.addView(removePhotoButton, photoButtonMargin);
-        restorePhotoButton = photoButton("Gunakan foto semula", v -> restorePhoto());
+        restorePhotoButton = photoButton(tr("Gunakan foto semula", "Use original photo"), v -> restorePhoto());
         LinearLayout.LayoutParams restoreMargin = Ui.lp(-1, Ui.dp(this, 48));
         restoreMargin.topMargin = Ui.dp(this, 8);
         content.addView(restorePhotoButton, restoreMargin);
         content.addView(Ui.gap(this, 12));
-        content.addView(Ui.text(this, "Data hanya tersimpan di perangkat ini.", 11, Ui.MUTED, false));
+        content.addView(Ui.text(this, tr("Data hanya tersimpan di perangkat ini.", "Data is stored only on this device."), 11, Ui.MUTED, false));
 
         LinearLayout footer = Ui.column(this);
         footer.setBackgroundColor(Ui.WHITE);
         Ui.pad(footer, 22, 12, 22, 14);
-        saveButton = Ui.text(this, "Simpan transaksi", 15, Ui.WHITE, true);
+        saveButton = Ui.text(this, tr("Simpan transaksi", "Save transaction"), 15, Ui.WHITE, true);
         saveButton.setGravity(Gravity.CENTER);
         Ui.clickable(saveButton, Ui.shape(this, Ui.GREEN, 16), v -> save());
         footer.addView(saveButton, Ui.lp(-1, Ui.dp(this, 52)));
@@ -297,7 +307,7 @@ public final class TransactionFormActivity extends Activity {
     private View fieldLabel(String title, boolean optional) {
         LinearLayout label = Ui.row(this);
         label.addView(Ui.overline(this, title, Ui.INK), Ui.weighted(0, -2, 1));
-        if (optional) label.addView(Ui.text(this, "Opsional", 11, Ui.MUTED, false));
+        if (optional) label.addView(Ui.text(this, tr("Opsional", "Optional"), 11, Ui.MUTED, false));
         return label;
     }
 
@@ -326,11 +336,11 @@ public final class TransactionFormActivity extends Activity {
         boolean expense = Transaction.EXPENSE.equals(type);
         expenseTab.setTextColor(expense ? Ui.WHITE : Ui.MUTED);
         expenseTab.setBackground(Ui.shape(this, expense ? Ui.GREEN : 0x00000000, 13));
-        expenseTab.setContentDescription("Pengeluaran" + (expense ? ", dipilih" : ""));
+        expenseTab.setContentDescription(tr("Pengeluaran", "Expense") + (expense ? tr(", dipilih", ", selected") : ""));
         incomeTab.setTextColor(expense ? Ui.MUTED : Ui.WHITE);
         incomeTab.setBackground(Ui.shape(this, expense ? 0x00000000 : Ui.GREEN, 13));
-        incomeTab.setContentDescription("Pemasukan" + (!expense ? ", dipilih" : ""));
-        if (titleInput != null) titleInput.setHint(expense ? "Contoh: Makan siang" : "Contoh: Gaji bulanan");
+        incomeTab.setContentDescription(tr("Pemasukan", "Income") + (!expense ? tr(", dipilih", ", selected") : ""));
+        if (titleInput != null) titleInput.setHint(expense ? tr("Contoh: Makan siang", "Example: Lunch") : tr("Contoh: Gaji bulanan", "Example: Monthly salary"));
     }
 
     private void changeType(String newType) {
@@ -345,12 +355,12 @@ public final class TransactionFormActivity extends Activity {
         String[] categories = Categories.forType(type);
         ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, categories) {
             @Override public View getView(int position, View convertView, ViewGroup parent) {
-                TextView text = Ui.text(TransactionFormActivity.this, getItem(position), 14, Ui.INK, true);
+                TextView text = Ui.text(TransactionFormActivity.this, Categories.label(getItem(position), language), 14, Ui.INK, true);
                 text.setGravity(Gravity.CENTER_VERTICAL);
                 return text;
             }
             @Override public View getDropDownView(int position, View convertView, ViewGroup parent) {
-                TextView text = Ui.text(TransactionFormActivity.this, getItem(position), 15, Ui.INK, false);
+                TextView text = Ui.text(TransactionFormActivity.this, Categories.label(getItem(position), language), 15, Ui.INK, false);
                 Ui.pad(text, 18, 13, 18, 13);
                 return text;
             }
@@ -368,11 +378,11 @@ public final class TransactionFormActivity extends Activity {
         Calendar selected = Dates.calendarFor(selectedDate);
         DatePickerDialog dialog = new DatePickerDialog(this, (view, year, month, day) -> {
             selectedDate = Dates.iso(year, month, day);
-            dateText.setText(Dates.display(selectedDate));
+            dateText.setText(Dates.display(selectedDate, language));
             View parent = (View) dateText.getTag();
-            parent.setContentDescription("Pilih tanggal, " + Dates.display(selectedDate));
+            parent.setContentDescription(tr("Pilih tanggal, ", "Choose date, ") + Dates.display(selectedDate, language));
         }, selected.get(Calendar.YEAR), selected.get(Calendar.MONTH), selected.get(Calendar.DAY_OF_MONTH));
-        dialog.setTitle("Pilih tanggal transaksi");
+        dialog.setTitle(tr("Pilih tanggal transaksi", "Choose transaction date"));
         dialog.getDatePicker().setMinDate(Dates.calendarFor("1900-01-01").getTimeInMillis());
         dialog.getDatePicker().setMaxDate(Dates.calendarFor("2100-12-31").getTimeInMillis());
         dialog.show();
@@ -393,12 +403,12 @@ public final class TransactionFormActivity extends Activity {
     private void updatePhotoUi() {
         if (photoStatus == null) return;
         boolean hasPhoto = hasCurrentPhoto();
-        if (photoBusy) photoStatus.setText("Memproses foto…");
-        else if (photoAction == FinanceStore.PhotoAction.REMOVE) photoStatus.setText("Foto akan dihapus saat transaksi disimpan.");
-        else if (photoAction == FinanceStore.PhotoAction.REPLACE) photoStatus.setText("Foto baru siap disimpan.");
-        else if (hasPhoto) photoStatus.setText("Foto tersimpan pada transaksi.");
-        else photoStatus.setText("Belum ada foto.");
-        choosePhotoButton.setText(hasPhoto ? "Ganti foto" : "Pilih foto");
+        if (photoBusy) photoStatus.setText(tr("Memproses foto…", "Processing photo…"));
+        else if (photoAction == FinanceStore.PhotoAction.REMOVE) photoStatus.setText(tr("Foto akan dihapus saat transaksi disimpan.", "The photo will be removed when the transaction is saved."));
+        else if (photoAction == FinanceStore.PhotoAction.REPLACE) photoStatus.setText(tr("Foto baru siap disimpan.", "The new photo is ready to save."));
+        else if (hasPhoto) photoStatus.setText(tr("Foto tersimpan pada transaksi.", "A photo is saved with this transaction."));
+        else photoStatus.setText(tr("Belum ada foto.", "No photo attached."));
+        choosePhotoButton.setText(hasPhoto ? tr("Ganti foto", "Replace photo") : tr("Pilih foto", "Choose photo"));
         removePhotoButton.setVisibility(hasPhoto ? View.VISIBLE : View.GONE);
         restorePhotoButton.setVisibility(original != null && original.hasPhoto
                 && photoAction != FinanceStore.PhotoAction.KEEP ? View.VISIBLE : View.GONE);
@@ -450,10 +460,10 @@ public final class TransactionFormActivity extends Activity {
                 }
                 activity.setPhotoBitmap(result);
                 if (result == null && !activity.photoBusy) {
-                    if (!fromDraft) activity.photoStatus.setText("Foto tersimpan, tetapi pratinjau tidak tersedia. Foto tidak diubah.");
+                    if (!fromDraft) activity.photoStatus.setText(activity.tr("Foto tersimpan, tetapi pratinjau tidak tersedia. Foto tidak diubah.", "The photo is saved, but its preview is unavailable. The photo was not changed."));
                     else if (activity.original != null && activity.original.hasPhoto)
-                        activity.photoStatus.setText("Foto pilihan tidak tersedia. Pilih ulang atau gunakan foto semula.");
-                    else activity.photoStatus.setText("Foto pilihan tidak tersedia. Pilih ulang atau hapus foto.");
+                        activity.photoStatus.setText(activity.tr("Foto pilihan tidak tersedia. Pilih ulang atau gunakan foto semula.", "The selected photo is unavailable. Choose it again or use the original photo."));
+                    else activity.photoStatus.setText(activity.tr("Foto pilihan tidak tersedia. Pilih ulang atau hapus foto.", "The selected photo is unavailable. Choose it again or remove the photo."));
                 }
             }) && result != null && !result.isRecycled()) result.recycle();
         });
@@ -467,7 +477,7 @@ public final class TransactionFormActivity extends Activity {
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         try { startActivityForResult(intent, PICK_PHOTO); }
         catch (ActivityNotFoundException | SecurityException e) {
-            Toast.makeText(this, "Pemilih foto tidak tersedia di perangkat ini.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, tr("Pemilih foto tidak tersedia di perangkat ini.", "A photo picker is not available on this device."), Toast.LENGTH_LONG).show();
         }
     }
 
@@ -478,13 +488,13 @@ public final class TransactionFormActivity extends Activity {
             Uri uri = PhotoCaptureProvider.uri(this, captureName);
             Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
             intent.putExtra(MediaStore.EXTRA_OUTPUT, uri);
-            intent.setClipData(ClipData.newRawUri("Foto transaksi", uri));
+            intent.setClipData(ClipData.newRawUri(tr("Foto transaksi", "Transaction photo"), uri));
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             startActivityForResult(intent, TAKE_PHOTO);
         } catch (IOException | ActivityNotFoundException | SecurityException e) {
             discardCapture(captureName);
             captureName = null;
-            Toast.makeText(this, "Kamera tidak tersedia. Pilih foto dari perangkat.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, tr("Kamera tidak tersedia. Pilih foto dari perangkat.", "The camera is unavailable. Choose a photo from the device."), Toast.LENGTH_LONG).show();
         }
     }
 
@@ -582,10 +592,10 @@ public final class TransactionFormActivity extends Activity {
     }
 
     private void showPhotoError() {
-        new AlertDialog.Builder(this).setTitle("Foto belum bisa dipakai")
-                .setMessage("Pilih foto yang dapat dibuka dan berukuran maksimal 20 MiB, lalu coba lagi. "
-                        + "Foto baru tidak digunakan; pilihan sebelumnya tetap seperti semula.")
-                .setPositiveButton("Tutup", null).show();
+        new AlertDialog.Builder(this).setTitle(tr("Foto belum bisa dipakai", "Photo cannot be used"))
+                .setMessage(tr("Pilih foto yang dapat dibuka dan berukuran maksimal 20 MiB, lalu coba lagi. ", "Choose a photo that can be opened and is no larger than 20 MiB, then try again. ")
+                        + tr("Foto baru tidak digunakan; pilihan sebelumnya tetap seperti semula.", "The new photo was not used; the previous selection is unchanged."))
+                .setPositiveButton(tr("Tutup", "Close"), null).show();
     }
 
     private void removePhoto() {
@@ -613,7 +623,7 @@ public final class TransactionFormActivity extends Activity {
         stateSaved = false;
         if (pendingRechooseMessage) {
             pendingRechooseMessage = false;
-            Toast.makeText(this, "Pemrosesan foto terhenti. Pilih kembali; foto sebelumnya tidak diubah.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, tr("Pemrosesan foto terhenti. Pilih kembali; foto sebelumnya tidak diubah.", "Photo processing was interrupted. Choose again; the previous photo was not changed."), Toast.LENGTH_LONG).show();
         }
     }
 
@@ -622,7 +632,7 @@ public final class TransactionFormActivity extends Activity {
         String title = titleInput.getText().toString();
         String note = noteInput.getText().toString();
         String category = selectedCategory();
-        FinanceMath.ValidationError error = FinanceMath.validate(type, rawAmount, title, category, selectedDate, note);
+        FinanceMath.ValidationError error = FinanceMath.validate(type, rawAmount, title, category, selectedDate, note, language);
         if (error != null) {
             if ("amount".equals(error.field)) { amountInput.setError(error.message); amountInput.requestFocus(); }
             else if ("title".equals(error.field)) { titleInput.setError(error.message); titleInput.requestFocus(); }
@@ -631,7 +641,7 @@ public final class TransactionFormActivity extends Activity {
             return;
         }
         if (photoBusy) {
-            Toast.makeText(this, "Tunggu sampai foto selesai diproses.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, tr("Tunggu sampai foto selesai diproses.", "Wait until the photo finishes processing."), Toast.LENGTH_SHORT).show();
             return;
         }
         saveButton.setEnabled(false);
@@ -644,18 +654,18 @@ public final class TransactionFormActivity extends Activity {
             Intent result = new Intent();
             result.putExtra("saved_date", selectedDate);
             setResult(RESULT_OK, result);
-            Toast.makeText(this, original == null ? "Transaksi tersimpan" : "Transaksi diperbarui", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, original == null ? tr("Transaksi tersimpan", "Transaction saved") : tr("Transaksi diperbarui", "Transaction updated"), Toast.LENGTH_SHORT).show();
             finish();
         } catch (IOException e) {
             saveButton.setEnabled(true);
-            new AlertDialog.Builder(this).setTitle("Foto pilihan tidak tersedia")
-                    .setMessage("Transaksi belum disimpan. Pilih ulang foto, gunakan foto semula, atau hapus foto sebelum menyimpan.")
-                    .setPositiveButton("Tutup", null).show();
+            new AlertDialog.Builder(this).setTitle(tr("Foto pilihan tidak tersedia", "Selected photo is unavailable"))
+                    .setMessage(tr("Transaksi belum disimpan. Pilih ulang foto, gunakan foto semula, atau hapus foto sebelum menyimpan.", "The transaction was not saved. Choose the photo again, use the original, or remove it before saving."))
+                    .setPositiveButton(tr("Tutup", "Close"), null).show();
         } catch (RuntimeException e) {
             saveButton.setEnabled(true);
-            new AlertDialog.Builder(this).setTitle("Belum bisa menyimpan")
-                    .setMessage("Transaksi belum tersimpan. Periksa ruang penyimpanan dan coba lagi.")
-                    .setPositiveButton("Tutup", null).show();
+            new AlertDialog.Builder(this).setTitle(tr("Belum bisa menyimpan", "Unable to save"))
+                    .setMessage(tr("Transaksi belum tersimpan. Periksa ruang penyimpanan dan coba lagi.", "The transaction was not saved. Check device storage and try again."))
+                    .setPositiveButton(tr("Tutup", "Close"), null).show();
         }
     }
 
@@ -693,10 +703,10 @@ public final class TransactionFormActivity extends Activity {
 
     @Override public void onBackPressed() {
         if (!hasChanges()) { super.onBackPressed(); return; }
-        new AlertDialog.Builder(this).setTitle("Buang perubahan?")
-                .setMessage("Perubahan yang belum disimpan akan hilang.")
-                .setPositiveButton("Buang", (dialog, which) -> finish())
-                .setNegativeButton("Lanjutkan mengisi", null).show();
+        new AlertDialog.Builder(this).setTitle(tr("Buang perubahan?", "Discard changes?"))
+                .setMessage(tr("Perubahan yang belum disimpan akan hilang.", "Unsaved changes will be lost."))
+                .setPositiveButton(tr("Buang", "Discard"), (dialog, which) -> finish())
+                .setNegativeButton(tr("Lanjutkan mengisi", "Keep editing"), null).show();
     }
 
     @Override protected void onDestroy() {

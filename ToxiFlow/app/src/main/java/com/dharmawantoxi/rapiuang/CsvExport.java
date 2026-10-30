@@ -18,14 +18,21 @@ public final class CsvExport {
     }
 
     public static void write(Writer writer, List<Transaction> transactions) throws IOException {
-        writer.write('\ufeff'); // UTF-8 BOM helps spreadsheet programs detect Indonesian text.
-        writer.write("Tanggal,Jenis,Kategori,Nama,Nominal (Rp),Catatan,Dibuat (waktu perangkat),Foto terlampir (foto tidak disertakan)\r\n");
+        write(writer, transactions, AppLanguage.INDONESIAN);
+    }
+
+    static void write(Writer writer, List<Transaction> transactions, AppLanguage language) throws IOException {
+        writer.write('\ufeff'); // UTF-8 BOM helps spreadsheet programs detect text correctly.
+        writer.write(language.text(
+                "Tanggal,Jenis,Kategori,Nama,Nominal (Rp),Catatan,Dibuat (waktu perangkat),Foto terlampir (foto tidak disertakan)\r\n",
+                "Date,Type,Category,Name,Amount (Rp),Note,Created (device time),Photo attached (image not included)\r\n"));
         for (Transaction t : transactions) {
             writer.write(cell(t.date));
             writer.write(',');
-            writer.write(cell(Transaction.INCOME.equals(t.type) ? "Pemasukan" : "Pengeluaran"));
+            writer.write(cell(Transaction.INCOME.equals(t.type)
+                    ? language.text("Pemasukan", "Income") : language.text("Pengeluaran", "Expense")));
             writer.write(',');
-            writer.write(cell(t.category));
+            writer.write(cell(Categories.label(t.category, language)));
             writer.write(',');
             writer.write(cell(t.title));
             writer.write(',');
@@ -35,7 +42,7 @@ public final class CsvExport {
             writer.write(',');
             writer.write(cell(t.createdAt)); // Empty for transactions created before this feature.
             writer.write(',');
-            writer.write(cell(t.hasPhoto ? "Ada" : "Tidak"));
+            writer.write(cell(t.hasPhoto ? language.text("Ada", "Yes") : language.text("Tidak", "No")));
             writer.write("\r\n");
         }
         writer.flush();

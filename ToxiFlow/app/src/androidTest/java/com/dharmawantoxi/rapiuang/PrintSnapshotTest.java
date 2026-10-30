@@ -87,6 +87,22 @@ public final class PrintSnapshotTest {
         catch (IOException expected) { }
     }
 
+    @Test public void snapshotRetainsRequestedLanguageAndCanonicalRecords() throws Exception {
+        long id = store.save(transaction(0, Transaction.EXPENSE, 25000, "Struk", "Belanja", "2026-10-01"));
+        try (PrintSnapshot snapshot = PrintSnapshot.create(context, new FinanceStore(context, DB),
+                2026, 9, false, AppLanguage.ENGLISH, new CancellationSignal())) {
+            assertEquals(AppLanguage.ENGLISH, snapshot.report.language);
+            assertEquals("October 2026", snapshot.report.period());
+            assertEquals("ToxiFlow-Report-2026-10.pdf", snapshot.report.fileName());
+            assertEquals(id, snapshot.report.transactions.get(0).id);
+            assertEquals("Belanja", snapshot.report.transactions.get(0).category);
+            boolean translated = false;
+            for (MonthlyReport.Paragraph p : snapshot.report.paragraphs(false))
+                if (p.text.equals("Category: Shopping")) translated = true;
+            assertTrue(translated);
+        }
+    }
+
     @Test public void optingOutSkipsPhotosEvenIfAnOldBlobIsCorrupt() throws Exception {
         byte[] corrupt = {(byte) 0xff, (byte) 0xd8, 1, (byte) 0xff, (byte) 0xd9};
         store.save(transaction(0, Transaction.EXPENSE, 1, "Struk", "Belanja", "2026-10-01"),

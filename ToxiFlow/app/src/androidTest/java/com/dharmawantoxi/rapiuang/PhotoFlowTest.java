@@ -42,14 +42,17 @@ public final class PhotoFlowTest {
     private static final String TEST_DB = "rapiuang-ui-test.db";
     private static final int PICK_PHOTO = 31;
     private Context context;
+    private LanguageTestPreference testLanguage;
 
     @Before public void setUp() {
         context = ApplicationProvider.getApplicationContext();
+        testLanguage = new LanguageTestPreference(context, AppLanguage.INDONESIAN);
         context.deleteDatabase(TEST_DB);
         FinanceStore.useDatabaseForUiTests(context, true);
     }
 
     @After public void tearDown() {
+        if (testLanguage != null) testLanguage.close();
         FinanceStore.useDatabaseForUiTests(context, false);
         context.deleteDatabase(TEST_DB);
     }
@@ -147,7 +150,7 @@ public final class PhotoFlowTest {
             id = seed.save(new Transaction(0, Transaction.EXPENSE, 25000, "Struk kopi", "Makan & minum",
                     Dates.today(), "bukti"), FinanceStore.PhotoAction.REPLACE, original);
         } finally { seed.close(); }
-        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(new Intent(context, MainActivity.class))) {
             onView(withText("Struk kopi")).perform(scrollTo(), click());
             onView(withText("Lihat foto")).perform(scrollTo(), click());
             onView(withContentDescription("Perbesar foto")).check(matches(isDisplayed())).perform(click());

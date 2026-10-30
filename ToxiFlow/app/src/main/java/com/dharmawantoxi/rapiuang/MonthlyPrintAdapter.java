@@ -50,7 +50,7 @@ final class MonthlyPrintAdapter extends PrintDocumentAdapter {
             return;
         }
         if (newAttributes == null) {
-            callback.onLayoutFailed("Pengaturan kertas tidak tersedia.");
+            callback.onLayoutFailed(tr("Pengaturan kertas tidak tersedia.", "Paper settings are unavailable."));
             return;
         }
         try {
@@ -60,7 +60,7 @@ final class MonthlyPrintAdapter extends PrintDocumentAdapter {
                     attributes = null;
                     layout = null;
                     if (snapshot == null) snapshot = PrintSnapshot.create(context, snapshotReader,
-                            requestedReport.year, requestedReport.month, includePhotos, cancellation);
+                            requestedReport.year, requestedReport.month, includePhotos, requestedReport.language, cancellation);
                     MonthlyPrintLayout.Plan result = MonthlyPrintLayout.create(context, newAttributes,
                             snapshot.report, includePhotos, cancellation);
                     cancellation.throwIfCanceled();
@@ -85,7 +85,7 @@ final class MonthlyPrintAdapter extends PrintDocumentAdapter {
                 }
             });
         } catch (RejectedExecutionException e) {
-            callback.onLayoutFailed("Layanan cetak sudah ditutup. Coba lagi.");
+            callback.onLayoutFailed(tr("Layanan cetak sudah ditutup. Coba lagi.", "The print service is closed. Try again."));
         }
     }
 
@@ -100,7 +100,7 @@ final class MonthlyPrintAdapter extends PrintDocumentAdapter {
             worker.execute(() -> write(ranges, destination, cancellation, callback));
         } catch (RejectedExecutionException e) {
             closeQuietly(destination);
-            callback.onWriteFailed("Layanan cetak sudah ditutup. Coba lagi.");
+            callback.onWriteFailed(tr("Layanan cetak sudah ditutup. Coba lagi.", "The print service is closed. Try again."));
         }
     }
 
@@ -111,9 +111,9 @@ final class MonthlyPrintAdapter extends PrintDocumentAdapter {
         try (OutputStream output = new ParcelFileDescriptor.AutoCloseOutputStream(destination)) {
             cancellation.throwIfCanceled();
             if (layout == null || attributes == null)
-                throw new IllegalStateException("Tata letak belum tersedia");
+                throw new IllegalStateException(tr("Tata letak belum tersedia", "Layout is not available"));
             List<int[]> ranges = PrintPagination.normalizeRanges(layout.pageCount(), requested);
-            if (ranges.isEmpty()) throw new IllegalArgumentException("Tidak ada halaman yang dipilih");
+            if (ranges.isEmpty()) throw new IllegalArgumentException(tr("Tidak ada halaman yang dipilih", "No pages selected"));
             MonthlyPrintLayout.writePdf(context, attributes, layout, ranges, snapshot,
                     new CancellableOutputStream(output, cancellation), cancellation);
             written = new PageRange[ranges.size()];
@@ -148,30 +148,34 @@ final class MonthlyPrintAdapter extends PrintDocumentAdapter {
         worker.shutdown();
     }
 
-    private static String layoutError(Throwable e) {
-        if (e instanceof PrintPagination.TooManyPagesException)
-            return "Laporan lebih dari " + MonthlyPrintLayout.MAX_PAGES
-                    + " halaman. Coba tanpa foto atau gunakan CSV untuk teks transaksi.";
-        if (e instanceof PrintSnapshot.PhotoUnavailableException)
-            return "Ada foto transaksi yang tidak dapat dibuka. Periksa fotonya atau cetak tanpa foto.";
-        if (e instanceof MonthlyPrintLayout.PageTooSmallException || e instanceof IllegalArgumentException)
-            return "Ukuran kertas terlalu kecil atau tidak tersedia. Pilih A4 atau Letter dan coba lagi.";
-        if (e instanceof OutOfMemoryError)
-            return "Memori perangkat tidak cukup. Coba cetak tanpa foto atau tutup aplikasi lain.";
-        if (e instanceof IOException)
-            return "Salinan laporan belum bisa disiapkan. Periksa ruang penyimpanan dan coba lagi.";
-        return "Laporan belum bisa disiapkan. Coba pilih ukuran kertas lain atau coba lagi.";
+    private String tr(String indonesian, String english) {
+        return requestedReport.language.text(indonesian, english);
     }
 
-    private static String writeError(Throwable e) {
-        if (e instanceof MonthlyPrintLayout.TooManyPhotoPagesException)
-            return "Maksimal " + PhotoPrintPolicy.MAX_PHOTOS_PER_WRITE
-                    + " foto per proses. Pilih rentang halaman lebih kecil atau cetak tanpa foto.";
+    private String layoutError(Throwable e) {
+        if (e instanceof PrintPagination.TooManyPagesException)
+            return tr("Laporan lebih dari ", "The report exceeds ") + MonthlyPrintLayout.MAX_PAGES
+                    + tr(" halaman. Coba tanpa foto atau gunakan CSV untuk teks transaksi.", " pages. Try without photos or use CSV for transaction text.");
         if (e instanceof PrintSnapshot.PhotoUnavailableException)
-            return "Foto lampiran tidak tersedia. Mulai cetak lagi atau pilih tanpa foto.";
+            return tr("Ada foto transaksi yang tidak dapat dibuka. Periksa fotonya atau cetak tanpa foto.", "A transaction photo could not be opened. Check the photo or print without photos.");
+        if (e instanceof MonthlyPrintLayout.PageTooSmallException || e instanceof IllegalArgumentException)
+            return tr("Ukuran kertas terlalu kecil atau tidak tersedia. Pilih A4 atau Letter dan coba lagi.", "The paper size is too small or unavailable. Choose A4 or Letter and try again.");
         if (e instanceof OutOfMemoryError)
-            return "Memori perangkat tidak cukup. Pilih lebih sedikit halaman atau cetak tanpa foto.";
-        return "Laporan belum bisa dibuat. Periksa penyimpanan dan coba lagi.";
+            return tr("Memori perangkat tidak cukup. Coba cetak tanpa foto atau tutup aplikasi lain.", "Not enough device memory. Try printing without photos or close other apps.");
+        if (e instanceof IOException)
+            return tr("Salinan laporan belum bisa disiapkan. Periksa ruang penyimpanan dan coba lagi.", "The report snapshot could not be prepared. Check storage and try again.");
+        return tr("Laporan belum bisa disiapkan. Coba pilih ukuran kertas lain atau coba lagi.", "The report could not be prepared. Choose another paper size or try again.");
+    }
+
+    private String writeError(Throwable e) {
+        if (e instanceof MonthlyPrintLayout.TooManyPhotoPagesException)
+            return tr("Maksimal ", "Maximum ") + PhotoPrintPolicy.MAX_PHOTOS_PER_WRITE
+                    + tr(" foto per proses. Pilih rentang halaman lebih kecil atau cetak tanpa foto.", " photos per job. Choose a smaller page range or print without photos.");
+        if (e instanceof PrintSnapshot.PhotoUnavailableException)
+            return tr("Foto lampiran tidak tersedia. Mulai cetak lagi atau pilih tanpa foto.", "An attachment photo is unavailable. Start printing again or choose no photos.");
+        if (e instanceof OutOfMemoryError)
+            return tr("Memori perangkat tidak cukup. Pilih lebih sedikit halaman atau cetak tanpa foto.", "Not enough device memory. Select fewer pages or print without photos.");
+        return tr("Laporan belum bisa dibuat. Periksa penyimpanan dan coba lagi.", "The report could not be created. Check storage and try again.");
     }
 
     private static void closeQuietly(ParcelFileDescriptor descriptor) {
