@@ -18,6 +18,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
@@ -212,7 +213,7 @@ public final class FinanceFlowTest {
         }
     }
 
-    @Test public void cashAndSavingsShareOneBalanceUpdatedByRegularTransactions() {
+    @Test public void savingsStaySeparateAndCanBeMovedToAndFromAvailableFunds() {
         String today = Dates.today();
         FinanceStore seed = new FinanceStore(context);
         try {
@@ -223,13 +224,110 @@ public final class FinanceFlowTest {
 
         try (ActivityScenario<MainActivity> scenario = launchHome()) {
             onView(withContentDescription("Dana")).perform(click());
-            onView(withText("Cash dan tabungan menggunakan satu saldo.")).check(matches(isDisplayed()));
+            onView(withText("Atur bagian transaksi yang masuk ke atau diambil dari tabungan.")).check(matches(isDisplayed()));
             onView(withContentDescription("Dana siap pakai Rp75.000")).check(matches(isDisplayed()));
-            onView(withText("Pemasukan bulan ini")).check(matches(isDisplayed()));
-            onView(withText("Pengeluaran bulan ini")).check(matches(isDisplayed()));
+            onView(withContentDescription("Saldo tabungan Rp0")).check(matches(isDisplayed()));
             onView(withText("Gaji cash")).perform(scrollTo()).check(matches(isDisplayed()));
             onView(withText("Belanja cash")).perform(scrollTo()).check(matches(isDisplayed()));
+
+            onView(withText("Tambah tabungan")).perform(scrollTo(), click());
+            onView(withContentDescription("Nominal perpindahan tabungan dalam rupiah")).inRoot(isDialog())
+                    .perform(replaceText("30000"), closeSoftKeyboard());
+            onView(withText("Simpan")).inRoot(isDialog()).perform(click());
+            onView(withContentDescription("Dana siap pakai Rp45.000")).check(matches(isDisplayed()));
+            onView(withContentDescription("Saldo tabungan Rp30.000")).check(matches(isDisplayed()));
+
+            onView(withText("Ambil dari tabungan")).perform(scrollTo(), click());
+            onView(withContentDescription("Nominal perpindahan tabungan dalam rupiah")).inRoot(isDialog())
+                    .perform(replaceText("10000"), closeSoftKeyboard());
+            onView(withText("Ambil")).inRoot(isDialog()).perform(click());
+            onView(withContentDescription("Dana siap pakai Rp55.000")).check(matches(isDisplayed()));
+            onView(withContentDescription("Saldo tabungan Rp20.000")).check(matches(isDisplayed()));
+            onView(withText("Laporan")).perform(click());
+            onView(withText("TABUNGAN BULAN INI")).perform(scrollTo()).check(matches(isDisplayed()));
+            onView(withText(containsString("pindah ke tabungan"))).perform(scrollTo()).check(matches(isDisplayed()));
+            onView(withText(containsString("pindah ke dana tersedia"))).perform(scrollTo()).check(matches(isDisplayed()));
         }
+        FinanceStore reader = new FinanceStore(context);
+        try {
+            assertEquals("55000", reader.availableFunds().toString());
+            assertEquals("20000", reader.savingsBalance().toString());
+            assertEquals("75000", FinanceMath.summarize(reader.all()).balance.toString());
+        } finally { reader.close(); }
+    }
+
+    @Test public void openingSavingsBalanceDoesNotCreateIncomeOrReduceAvailableFunds() {
+        try (ActivityScenario<MainActivity> scenario = launchHome()) {
+            onView(withContentDescription("Dana")).perform(click());
+            onView(withText("Catat saldo awal tabungan")).perform(scrollTo(), click());
+            onView(withContentDescription("Saldo awal tabungan dalam rupiah")).inRoot(isDialog())
+                    .perform(typeText("50000"), closeSoftKeyboard());
+            onView(withText("Simpan")).inRoot(isDialog()).perform(click());
+            onView(withContentDescription("Dana siap pakai Rp0")).check(matches(isDisplayed()));
+            onView(withContentDescription("Saldo tabungan Rp50.000")).check(matches(isDisplayed()));
+            onView(withText("Laporan")).perform(click());
+            onView(withText(containsString("saldo awal dicatat"))).perform(scrollTo()).check(matches(isDisplayed()));
+            onView(withText(containsString("Saldo akhir tabungan"))).perform(scrollTo()).check(matches(isDisplayed()));
+        }
+        FinanceStore reader = new FinanceStore(context);
+        try {
+            assertTrue(reader.all().isEmpty());
+            assertEquals("0", reader.availableFunds().toString());
+            assertEquals("50000", reader.savingsBalance().toString());
+            assertEquals("0", FinanceMath.summarize(reader.all()).income.toString());
+        } finally { reader.close(); }
+    }
+
+    @Test public void openingCashBalanceIsAvailableWithoutCountingAsIncome() {
+        try (ActivityScenario<MainActivity> scenario = launchHome()) {
+            onView(withContentDescription("Dana")).perform(click());
+            onView(withText("Catat saldo awal dana tersedia")).perform(scrollTo(), click());
+            onView(withContentDescription("Saldo awal dana tersedia dalam rupiah")).inRoot(isDialog())
+                    .perform(typeText("80000"), closeSoftKeyboard());
+            onView(withText("Simpan")).inRoot(isDialog()).perform(click());
+            onView(withContentDescription("Dana siap pakai Rp80.000")).check(matches(isDisplayed()));
+            onView(withContentDescription("Saldo tabungan Rp0")).check(matches(isDisplayed()));
+            onView(withText("Laporan")).perform(click());
+            onView(withText("DANA TERSEDIA BULAN INI")).perform(scrollTo()).check(matches(isDisplayed()));
+            onView(withText(containsString("Saldo awal dicatat"))).perform(scrollTo()).check(matches(isDisplayed()));
+        }
+        FinanceStore reader = new FinanceStore(context);
+        try {
+            assertTrue(reader.all().isEmpty());
+            assertEquals("80000", reader.availableFunds().toString());
+            assertEquals("0", reader.savingsBalance().toString());
+            assertNotNull(reader.getCashOpeningBalance());
+            assertEquals("0", FinanceMath.summarize(reader.all()).income.toString());
+        } finally { reader.close(); }
+    }
+
+    @Test public void incomeAndExpenseTransactionsCanAllocatePartToSavings() {
+        try (ActivityScenario<MainActivity> scenario = launchHome()) {
+            onView(withText("Catat transaksi")).perform(scrollTo(), click());
+            onView(withText("Pemasukan")).perform(click());
+            onView(withContentDescription("Nominal transaksi dalam rupiah")).perform(typeText("100000"), closeSoftKeyboard());
+            onView(withContentDescription("Nominal transaksi yang ditambahkan ke atau diambil dari tabungan, opsional"))
+                    .perform(typeText("40000"), closeSoftKeyboard());
+            onView(withHint("Contoh: Gaji bulanan")).perform(typeText("Gaji"), closeSoftKeyboard());
+            onView(withText("Simpan transaksi")).perform(click());
+
+            onView(withText("Catat transaksi")).perform(scrollTo(), click());
+            onView(withContentDescription("Nominal transaksi dalam rupiah")).perform(typeText("30000"), closeSoftKeyboard());
+            onView(withContentDescription("Nominal transaksi yang ditambahkan ke atau diambil dari tabungan, opsional"))
+                    .perform(typeText("10000"), closeSoftKeyboard());
+            onView(withHint("Contoh: Makan siang")).perform(typeText("Belanja"), closeSoftKeyboard());
+            onView(withText("Simpan transaksi")).perform(click());
+
+            onView(withContentDescription("Dana")).perform(click());
+            onView(withContentDescription("Dana siap pakai Rp40.000")).check(matches(isDisplayed()));
+            onView(withContentDescription("Saldo tabungan Rp30.000")).check(matches(isDisplayed()));
+        }
+        FinanceStore reader = new FinanceStore(context);
+        try {
+            assertEquals("40000", reader.availableFunds().toString());
+            assertEquals("30000", reader.savingsBalance().toString());
+            assertEquals("70000", FinanceMath.summarize(reader.all()).balance.toString());
+        } finally { reader.close(); }
     }
 
     @Test public void debtAndReceivablePaymentsUpdateCashWithoutBecomingTransactions() {

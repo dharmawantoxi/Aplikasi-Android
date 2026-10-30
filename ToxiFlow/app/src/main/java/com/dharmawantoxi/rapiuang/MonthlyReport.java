@@ -29,6 +29,19 @@ final class MonthlyReport {
     final int year;
     final int month;
     final List<Transaction> transactions;
+    final List<SavingsMovement> savingsMovements;
+    final BigInteger savingsOpeningBalance;
+    final BigInteger savingsOpeningEntry;
+    final String savingsOpeningEntryDate;
+    final BigInteger savingsAdded;
+    final BigInteger savingsWithdrawn;
+    final BigInteger savingsClosingBalance;
+    final BigInteger cashOpeningBalance;
+    final BigInteger cashOpeningEntry;
+    final String cashOpeningEntryDate;
+    final BigInteger cashAdded;
+    final BigInteger cashSpent;
+    final BigInteger cashClosingBalance;
     final FinanceMath.Summary summary;
     final List<FinanceMath.CategoryTotal> categories;
     final FinanceInsights insights;
@@ -36,7 +49,10 @@ final class MonthlyReport {
 
     private String tr(String indonesian, String english) { return language.text(indonesian, english); }
 
-    private MonthlyReport(int year, int month, List<Transaction> all, AppLanguage language) {
+    private MonthlyReport(int year, int month, List<Transaction> all,
+                          List<SavingsMovement> allSavingsMovements,
+                          SavingsOpeningBalance openingSavings, CashOpeningBalance openingCash,
+                          AppLanguage language) {
         this.language = language;
         if (year < Dates.MIN_YEAR || year > Dates.MAX_YEAR || month < 0 || month > 11)
             throw new IllegalArgumentException("Periode tidak valid");
@@ -54,14 +70,128 @@ final class MonthlyReport {
         summary = FinanceMath.summarize(transactions);
         categories = Collections.unmodifiableList(FinanceMath.expenseCategories(transactions));
         insights = FinanceInsights.forMonth(year, month, all, language);
+
+        String selectedMonth = Dates.monthKey(year, month);
+        BigInteger opening = BigInteger.ZERO;
+        BigInteger added = BigInteger.ZERO;
+        BigInteger withdrawn = BigInteger.ZERO;
+        for (Transaction transaction : all) {
+            BigInteger portion = BigInteger.valueOf(transaction.savingsAmount);
+            boolean income = Transaction.INCOME.equals(transaction.type);
+            String transactionMonth = transaction.date.substring(0, 7);
+            if (transactionMonth.compareTo(selectedMonth) < 0)
+                opening = income ? opening.add(portion) : opening.subtract(portion);
+            else if (transactionMonth.equals(selectedMonth)) {
+                if (income) added = added.add(portion);
+                else withdrawn = withdrawn.add(portion);
+            }
+        }
+        List<SavingsMovement> selectedMovements = new ArrayList<>();
+        for (SavingsMovement movement : allSavingsMovements) {
+            String movementMonth = movement.date.substring(0, 7);
+            BigInteger amount = BigInteger.valueOf(movement.amount);
+            boolean deposit = SavingsMovement.DEPOSIT.equals(movement.type);
+            if (movementMonth.compareTo(selectedMonth) < 0)
+                opening = deposit ? opening.add(amount) : opening.subtract(amount);
+            else if (movementMonth.equals(selectedMonth)) {
+                selectedMovements.add(movement);
+                if (deposit) added = added.add(amount);
+                else withdrawn = withdrawn.add(amount);
+            }
+        }
+        BigInteger openingEntry = BigInteger.ZERO;
+        String openingEntryDate = null;
+        if (openingSavings != null) {
+            String openingMonth = openingSavings.date.substring(0, 7);
+            BigInteger openingAmount = BigInteger.valueOf(openingSavings.amount);
+            if (openingMonth.compareTo(selectedMonth) < 0) opening = opening.add(openingAmount);
+            else if (openingMonth.equals(selectedMonth)) {
+                openingEntry = openingAmount;
+                openingEntryDate = openingSavings.date;
+            }
+        }
+        Collections.sort(selectedMovements, new Comparator<SavingsMovement>() {
+            @Override public int compare(SavingsMovement a, SavingsMovement b) {
+                int date = a.date.compareTo(b.date);
+                return date != 0 ? date : Long.compare(a.id, b.id);
+            }
+        });
+        savingsMovements = Collections.unmodifiableList(selectedMovements);
+        savingsOpeningBalance = opening;
+        savingsOpeningEntry = openingEntry;
+        savingsOpeningEntryDate = openingEntryDate;
+        savingsAdded = added;
+        savingsWithdrawn = withdrawn;
+        savingsClosingBalance = opening.add(openingEntry).add(added).subtract(withdrawn);
+
+        BigInteger cashOpening = BigInteger.ZERO;
+        BigInteger cashIn = BigInteger.ZERO;
+        BigInteger cashOut = BigInteger.ZERO;
+        for (Transaction transaction : all) {
+            BigInteger portion = BigInteger.valueOf(transaction.amount).subtract(BigInteger.valueOf(transaction.savingsAmount));
+            boolean income = Transaction.INCOME.equals(transaction.type);
+            String transactionMonth = transaction.date.substring(0, 7);
+            if (transactionMonth.compareTo(selectedMonth) < 0)
+                cashOpening = income ? cashOpening.add(portion) : cashOpening.subtract(portion);
+            else if (transactionMonth.equals(selectedMonth)) {
+                if (income) cashIn = cashIn.add(portion);
+                else cashOut = cashOut.add(portion);
+            }
+        }
+        for (SavingsMovement movement : allSavingsMovements) {
+            String movementMonth = movement.date.substring(0, 7);
+            BigInteger amount = BigInteger.valueOf(movement.amount);
+            boolean withdrawal = SavingsMovement.WITHDRAWAL.equals(movement.type);
+            if (movementMonth.compareTo(selectedMonth) < 0)
+                cashOpening = withdrawal ? cashOpening.add(amount) : cashOpening.subtract(amount);
+            else if (movementMonth.equals(selectedMonth)) {
+                if (withdrawal) cashIn = cashIn.add(amount);
+                else cashOut = cashOut.add(amount);
+            }
+        }
+        BigInteger cashEntry = BigInteger.ZERO;
+        String cashEntryDate = null;
+        if (openingCash != null) {
+            String openingMonth = openingCash.date.substring(0, 7);
+            BigInteger openingAmount = BigInteger.valueOf(openingCash.amount);
+            if (openingMonth.compareTo(selectedMonth) < 0) cashOpening = cashOpening.add(openingAmount);
+            else if (openingMonth.equals(selectedMonth)) {
+                cashEntry = openingAmount;
+                cashEntryDate = openingCash.date;
+            }
+        }
+        cashOpeningBalance = cashOpening;
+        cashOpeningEntry = cashEntry;
+        cashOpeningEntryDate = cashEntryDate;
+        cashAdded = cashIn;
+        cashSpent = cashOut;
+        cashClosingBalance = cashOpening.add(cashEntry).add(cashIn).subtract(cashOut);
     }
 
     static MonthlyReport forMonth(int year, int month, List<Transaction> all) {
-        return forMonth(year, month, all, AppLanguage.INDONESIAN);
+        return forMonth(year, month, all, Collections.<SavingsMovement>emptyList(), AppLanguage.INDONESIAN);
     }
 
     static MonthlyReport forMonth(int year, int month, List<Transaction> all, AppLanguage language) {
-        return new MonthlyReport(year, month, all, language);
+        return forMonth(year, month, all, Collections.<SavingsMovement>emptyList(), language);
+    }
+
+    static MonthlyReport forMonth(int year, int month, List<Transaction> all,
+                                  List<SavingsMovement> savingsMovements, AppLanguage language) {
+        return forMonth(year, month, all, savingsMovements, null, language);
+    }
+
+    static MonthlyReport forMonth(int year, int month, List<Transaction> all,
+                                  List<SavingsMovement> savingsMovements,
+                                  SavingsOpeningBalance openingSavings, AppLanguage language) {
+        return forMonth(year, month, all, savingsMovements, openingSavings, null, language);
+    }
+
+    static MonthlyReport forMonth(int year, int month, List<Transaction> all,
+                                  List<SavingsMovement> savingsMovements,
+                                  SavingsOpeningBalance openingSavings, CashOpeningBalance openingCash,
+                                  AppLanguage language) {
+        return new MonthlyReport(year, month, all, savingsMovements, openingSavings, openingCash, language);
     }
 
     String period() { return Dates.monthLabel(year, month, language); }
@@ -88,6 +218,37 @@ final class MonthlyReport {
         add(lines, tr("Jumlah transaksi", "Transactions") + ": " + transactions.size(), Style.META, 3, false);
         add(lines, tr("Selisih hanya menghitung bulan ini, tanpa saldo awal atau transaksi bulan lain.", "The period balance includes only this month, without an opening balance or transactions from other months."),
                 Style.CAPTION, 4, false);
+
+        add(lines, tr("Pergerakan dana tersedia", "Available-funds activity"), Style.SECTION, 16, true);
+        add(lines, tr("Saldo awal dana tersedia: ", "Opening available funds: ") + Money.format(cashOpeningBalance), Style.BODY, 3, false);
+        if (cashOpeningEntry.signum() > 0)
+            add(lines, tr("Saldo awal dana dicatat: ", "Starting cash balance entered: ") + Money.format(cashOpeningEntry)
+                    + " · " + Dates.display(cashOpeningEntryDate, language), Style.BODY, 1, false);
+        add(lines, tr("Masuk ke dana tersedia: ", "Added to available funds: ") + Money.format(cashAdded), Style.BODY, 1, false);
+        add(lines, tr("Keluar dari dana tersedia: ", "Spent from available funds: ") + Money.format(cashSpent), Style.BODY, 1, false);
+        add(lines, tr("Saldo akhir dana tersedia: ", "Closing available funds: ") + Money.format(cashClosingBalance), Style.STRONG, 2, false);
+        add(lines, tr("Tidak termasuk pokok hutang/piutang.", "Excludes debt/receivable principal."), Style.CAPTION, 1, false);
+
+        add(lines, tr("Pergerakan tabungan", "Savings activity"), Style.SECTION, 16, true);
+        add(lines, tr("Saldo awal tabungan: ", "Opening savings balance: ") + Money.format(savingsOpeningBalance), Style.BODY, 3, false);
+        if (savingsOpeningEntry.signum() > 0)
+            add(lines, tr("Saldo awal dicatat: ", "Starting balance entered: ") + Money.format(savingsOpeningEntry)
+                    + tr(" · ", " · ") + Dates.display(savingsOpeningEntryDate, language), Style.BODY, 1, false);
+        add(lines, tr("Ditambahkan ke tabungan: ", "Added to savings: ") + Money.format(savingsAdded), Style.BODY, 1, false);
+        add(lines, tr("Diambil dari tabungan: ", "Withdrawn from savings: ") + Money.format(savingsWithdrawn), Style.BODY, 1, false);
+        add(lines, tr("Saldo akhir tabungan: ", "Closing savings balance: ") + Money.format(savingsClosingBalance), Style.STRONG, 2, false);
+        int savingsAllocationCount = 0;
+        for (Transaction transaction : transactions) if (transaction.savingsAmount > 0) savingsAllocationCount++;
+        int savingsActivityCount = savingsAllocationCount + savingsMovements.size()
+                + (savingsOpeningEntry.signum() > 0 ? 1 : 0);
+        add(lines, tr("Jumlah aktivitas tabungan: ", "Savings activities: ") + savingsActivityCount, Style.META, 2, false);
+        if (savingsActivityCount == 0)
+            add(lines, tr("Belum ada alokasi atau perpindahan tabungan pada periode ini.", "No savings allocations or transfers in this period."), Style.CAPTION, 1, false);
+        for (SavingsMovement movement : savingsMovements)
+            add(lines, Dates.display(movement.date, language) + " · "
+                    + (SavingsMovement.DEPOSIT.equals(movement.type)
+                    ? tr("Pindah ke tabungan", "Transfer to savings") : tr("Pindah ke dana tersedia", "Transfer to available funds"))
+                    + " · " + Money.format(movement.amount), Style.BODY, 1, false);
 
         add(lines, tr("Pengeluaran per kategori", "Expenses by category"), Style.SECTION, 16, true);
         if (categories.isEmpty()) {
@@ -160,6 +321,11 @@ final class MonthlyReport {
                 add(lines, tr("Nama: ", "Name: ") + t.title, Style.BODY, 2, false);
                 add(lines, tr("Kategori: ", "Category: ") + Categories.label(t.category, language), Style.BODY, 1, false);
                 add(lines, tr("Nominal: ", "Amount: ") + Money.signed(t.amount, income), Style.BODY, 1, false);
+                long cashPortion = t.amount - t.savingsAmount;
+                if (cashPortion > 0) add(lines, (income ? tr("Masuk ke dana tersedia: ", "Added to available funds: ")
+                        : tr("Dibayar dari dana tersedia: ", "Paid from available funds: ")) + Money.format(cashPortion), Style.BODY, 1, false);
+                if (t.savingsAmount > 0) add(lines, (income ? tr("Masuk ke tabungan: ", "Added to savings: ")
+                        : tr("Diambil dari tabungan: ", "Paid from savings: ")) + Money.format(t.savingsAmount), Style.BODY, 1, false);
                 add(lines, tr("Dibuat: ", "Created: ") + CreationTime.display(t.createdAt, language), Style.CAPTION, 1, false);
                 if (t.hasPhoto) {
                     photoNumber++;

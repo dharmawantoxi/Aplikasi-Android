@@ -95,6 +95,38 @@ public final class DomainChecks {
         eq(2, january.transactions.size(), "print includes both month boundaries only");
         eq(new BigInteger("-5"), january.summary.balance, "print negative difference");
         check(reportText(january).contains("Selisih periode: −Rp5"), "negative print difference formatted");
+
+        List<Transaction> savingsTransactions = Arrays.asList(
+                new Transaction(30, Transaction.INCOME, 50000, "Gaji lalu", "Gaji", "2026-09-20", "", null, false, 10000),
+                new Transaction(31, Transaction.INCOME, 50000, "Gaji", "Gaji", "2026-10-05", "", null, false, 20000),
+                new Transaction(32, Transaction.EXPENSE, 10000, "Belanja", "Belanja", "2026-10-10", "", null, false, 3000),
+                new Transaction(33, Transaction.INCOME, 30000, "Bonus nanti", "Gaji", "2026-11-02", "", null, false, 9000));
+        List<SavingsMovement> savingsTransfers = Arrays.asList(
+                new SavingsMovement(1, SavingsMovement.DEPOSIT, 5000, "2026-09-25", "2026-09-25 10:00:00"),
+                new SavingsMovement(2, SavingsMovement.DEPOSIT, 4000, "2026-10-12", "2026-10-12 10:00:00"),
+                new SavingsMovement(3, SavingsMovement.WITHDRAWAL, 2000, "2026-10-15", "2026-10-15 10:00:00"),
+                new SavingsMovement(4, SavingsMovement.DEPOSIT, 8000, "2026-11-03", "2026-11-03 10:00:00"));
+        MonthlyReport savingsReport = MonthlyReport.forMonth(2026, 9, savingsTransactions, savingsTransfers,
+                AppLanguage.INDONESIAN);
+        eq(new BigInteger("15000"), savingsReport.savingsOpeningBalance, "monthly savings opening balance includes earlier allocations and transfers");
+        eq(new BigInteger("24000"), savingsReport.savingsAdded, "monthly savings added includes income allocations and deposits");
+        eq(new BigInteger("5000"), savingsReport.savingsWithdrawn, "monthly savings out includes expense allocations and transfers");
+        eq(new BigInteger("34000"), savingsReport.savingsClosingBalance, "monthly savings closing balance");
+        eq(2, savingsReport.savingsMovements.size(), "monthly report filters transfers by month");
+        List<String> savingsText = reportText(savingsReport);
+        check(savingsText.contains("Saldo awal tabungan: Rp15.000"), "monthly report includes opening savings balance");
+        check(savingsText.contains("Saldo akhir tabungan: Rp34.000"), "monthly report includes closing savings balance");
+        check(savingsText.contains("Pindah ke tabungan · Rp4.000"), "monthly report lists manual savings transfer");
+        check(savingsText.contains("Diambil dari tabungan: Rp3.000"), "monthly report lists expense savings allocation");
+        MonthlyReport initialSavingsReport = MonthlyReport.forMonth(2026, 9, Collections.<Transaction>emptyList(),
+                Collections.<SavingsMovement>emptyList(),
+                new SavingsOpeningBalance(25000, "2026-10-01"), AppLanguage.INDONESIAN);
+        eq(BigInteger.ZERO, initialSavingsReport.savingsOpeningBalance, "starting entry is not misreported as prior-month balance");
+        eq(new BigInteger("25000"), initialSavingsReport.savingsOpeningEntry, "starting balance is recorded in its entry month");
+        eq(new BigInteger("25000"), initialSavingsReport.savingsClosingBalance, "starting amount contributes to closing savings");
+        check(reportText(initialSavingsReport).contains("Saldo awal dicatat: Rp25.000 · 1 Oktober 2026"),
+                "monthly report identifies the entered opening amount and date");
+
         char[] longNote = new char[300]; Arrays.fill(longNote, 'x');
         String note = "baris pertama\n" + new String(longNote) + " 🧾";
         MonthlyReport longText = MonthlyReport.forMonth(2026, 9, Collections.singletonList(
@@ -606,7 +638,7 @@ public final class DomainChecks {
 
         List<Transaction> entries = new ArrayList<>(Arrays.asList(
                 new Transaction(1, Transaction.EXPENSE, 100, "Makan bersama", "Makan & minum", "2026-01-05",
-                        "Catatan, tetap sama", "2026-01-05 14:05:07", true),
+                        "Catatan, tetap sama", "2026-01-05 14:05:07", true, 25),
                 t(2, Transaction.EXPENSE, 200, "Makan bersama", "Makan & minum", "2026-01-10", ""),
                 t(3, Transaction.EXPENSE, 50, "Makan bersama", "Makan & minum", "2025-12-10", ""),
                 t(4, Transaction.INCOME, 1000, "Gaji utama", "Gaji", "2026-01-01", "")));
@@ -628,8 +660,8 @@ public final class DomainChecks {
         StringWriter csv = new StringWriter();
         CsvExport.write(csv, englishReport.transactions, en);
         String exported = csv.toString();
-        check(exported.startsWith("\ufeffDate,Type,Category,Name,Amount (Rp),Note,"), "English CSV header");
-        check(exported.contains("\"2026-01-05\",\"Expense\",\"Food & drink\",\"Makan bersama\",100,\"Catatan, tetap sama\",\"2026-01-05 14:05:07\",\"Yes\""),
+        check(exported.startsWith("\ufeffDate,Type,Category,Name,Amount (Rp),Savings portion (Rp),Note,"), "English CSV header");
+        check(exported.contains("\"2026-01-05\",\"Expense\",\"Food & drink\",\"Makan bersama\",100,25,\"Catatan, tetap sama\",\"2026-01-05 14:05:07\",\"Yes\""),
                 "English CSV labels change but ISO dates, user text and photo flag remain accurate");
         eq("January 2026", englishReport.period(), "English report period");
         eq("ToxiFlow-Report-2026-01.pdf", englishReport.fileName(), "English report filename");
@@ -639,6 +671,7 @@ public final class DomainChecks {
         check(report.contains("Period: January 2026"), "English report period text");
         check(report.contains("Category: Food & drink"), "English report displays translated category");
         check(report.contains("Name: Makan bersama"), "English report preserves user title");
+        check(report.contains("Paid from savings: Rp25"), "English report shows the savings-paid portion");
         check(report.contains("Note: Catatan, tetap sama"), "English report preserves user note");
         check(report.contains("Photo: Appendix 1"), "English report references photo appendix");
         boolean omitted = false;

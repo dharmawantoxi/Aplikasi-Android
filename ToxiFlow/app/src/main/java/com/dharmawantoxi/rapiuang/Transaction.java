@@ -8,6 +8,8 @@ public final class Transaction {
     public final long id;
     public final String type;
     public final long amount;
+    /** Portion of the transaction allocated to savings; remainder changes available cash. */
+    public final long savingsAmount;
     public final String title;
     public final String category;
     public final String date; // Local calendar date in ISO yyyy-MM-dd; never a UTC timestamp.
@@ -24,14 +26,20 @@ public final class Transaction {
 
     public Transaction(long id, String type, long amount, String title, String category,
                        String date, String note, String createdAt) {
-        this(id, type, amount, title, category, date, note, createdAt, false);
+        this(id, type, amount, title, category, date, note, createdAt, false, 0);
     }
 
     public Transaction(long id, String type, long amount, String title, String category,
                        String date, String note, String createdAt, boolean hasPhoto) {
+        this(id, type, amount, title, category, date, note, createdAt, hasPhoto, 0);
+    }
+
+    public Transaction(long id, String type, long amount, String title, String category,
+                       String date, String note, String createdAt, boolean hasPhoto, long savingsAmount) {
         this.id = id;
         this.type = type;
         this.amount = amount;
+        this.savingsAmount = savingsAmount;
         this.title = title;
         this.category = category;
         this.date = date;

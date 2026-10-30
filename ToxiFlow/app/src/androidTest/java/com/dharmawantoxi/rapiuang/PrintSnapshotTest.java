@@ -60,8 +60,10 @@ public final class PrintSnapshotTest {
         byte[] red = jpeg(Color.RED), green = jpeg(Color.GREEN), blue = jpeg(Color.BLUE);
         long expense = store.save(transaction(0, Transaction.EXPENSE, 25000, "Struk", "Belanja", "2026-10-01"),
                 FinanceStore.PhotoAction.REPLACE, red);
-        long income = store.save(transaction(0, Transaction.INCOME, 75000, "Bonus", "Gaji", "2026-10-02"),
+        long income = store.save(new Transaction(0, Transaction.INCOME, 75000, "Bonus", "Gaji",
+                        "2026-10-02", "catatan", null, false, 5000),
                 FinanceStore.PhotoAction.REPLACE, green);
+        store.saveSavingsMovement(SavingsMovement.WITHDRAWAL, 1000, "2026-10-02");
         store.save(transaction(0, Transaction.INCOME, 10000, "Tanpa foto", "Gaji", "2026-10-03"));
         long otherMonth = store.save(transaction(0, Transaction.EXPENSE, 500, "Bulan lain", "Belanja", "2026-09-30"),
                 FinanceStore.PhotoAction.REPLACE, blue);
@@ -71,6 +73,10 @@ public final class PrintSnapshotTest {
         try {
             assertEquals(3, snapshot.report.transactions.size());
             assertEquals(2, snapshot.report.photoTransactions().size());
+            assertEquals(1, snapshot.report.savingsMovements.size());
+            assertEquals("5000", snapshot.report.savingsAdded.toString());
+            assertEquals("1000", snapshot.report.savingsWithdrawn.toString());
+            assertEquals("4000", snapshot.report.savingsClosingBalance.toString());
             assertEquals(expense, snapshot.report.photoTransactions().get(0).id);
             assertEquals(income, snapshot.report.photoTransactions().get(1).id);
             assertNotNull(directory);

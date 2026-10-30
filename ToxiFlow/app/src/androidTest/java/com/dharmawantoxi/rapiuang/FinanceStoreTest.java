@@ -106,7 +106,7 @@ public final class FinanceStoreTest {
             legacy.close();
         }
         store = new FinanceStore(context, TEST_DB, () -> "2026-11-10 11:22:33");
-        assertEquals(4, store.getReadableDatabase().getVersion());
+        assertEquals(8, store.getReadableDatabase().getVersion());
         assertEquals(2, store.all().size());
         Transaction oldExpense = store.get(1);
         assertEquals("Makan", oldExpense.title);
@@ -147,7 +147,7 @@ public final class FinanceStoreTest {
             legacy.setVersion(2);
         } finally { legacy.close(); }
         store = new FinanceStore(context, TEST_DB);
-        assertEquals(4, store.getReadableDatabase().getVersion());
+        assertEquals(8, store.getReadableDatabase().getVersion());
         assertEquals(2, store.all().size());
         assertEquals("2026-10-02 08:12:00", store.get(1).createdAt);
         assertNull(store.get(2).createdAt);
@@ -196,6 +196,118 @@ public final class FinanceStoreTest {
         assertEquals(1, store.paymentsForDebt(receivable).size());
     }
 
+    @Test public void savingsTransfersStaySeparateFromOrdinaryTransactions() {
+        store.save(new Transaction(0, Transaction.INCOME, 100000,
+                "Gaji", "Gaji", "2026-10-01", ""));
+        store.save(new Transaction(0, Transaction.EXPENSE, 30000,
+                "Belanja", "Belanja", "2026-10-02", ""));
+        assertEquals("70000", store.availableFunds().toString());
+        store.saveSavingsMovement("deposit", 40000, "2026-10-03");
+        assertEquals("30000", store.availableFunds().toString());
+        store.save(new Transaction(0, Transaction.EXPENSE, 5000,
+                "Kopi", "Makan & minum", "2026-10-03", ""));
+        assertEquals("40000", store.savingsBalance().toString());
+        assertEquals("25000", store.availableFunds().toString());
+        assertEquals("40000", store.savingsBalance().toString());
+        assertEquals("65000", FinanceMath.summarize(store.all()).balance.toString());
+        try {
+            store.saveSavingsMovement("deposit", 25001, "2026-10-03");
+            fail("Deposit exceeding available cash accepted");
+        } catch (IllegalArgumentException expected) { }
+        try {
+            store.saveSavingsMovement("withdrawal", 40001, "2026-10-03");
+            fail("Withdrawal exceeding savings accepted");
+        } catch (IllegalArgumentException expected) { }
+        store.saveSavingsMovement("withdrawal", 10000, "2026-10-04");
+        assertEquals("35000", store.availableFunds().toString());
+        assertEquals("30000", store.savingsBalance().toString());
+        store.close();
+        store = new FinanceStore(context, TEST_DB);
+        assertEquals("35000", store.availableFunds().toString());
+        assertEquals("30000", store.savingsBalance().toString());
+        assertEquals("65000", FinanceMath.summarize(store.all()).balance.toString());
+    }
+
+    @Test public void transactionCanSplitIncomeAndExpenseBetweenAvailableFundsAndSavings() {
+        long incomeId = store.save(new Transaction(0, Transaction.INCOME, 100000,
+                "Gaji", "Gaji", "2026-10-01", "", null, false, 40000));
+        assertEquals("60000", store.availableFunds().toString());
+        assertEquals("40000", store.savingsBalance().toString());
+
+        long expenseId = store.save(new Transaction(0, Transaction.EXPENSE, 30000,
+                "Belanja", "Belanja", "2026-10-02", "", null, false, 10000));
+        assertEquals("40000", store.availableFunds().toString());
+        assertEquals("30000", store.savingsBalance().toString());
+        assertEquals("70000", FinanceMath.summarize(store.all()).balance.toString());
+        assertEquals(10000, store.get(expenseId).savingsAmount);
+
+        try {
+            store.save(new Transaction(0, Transaction.EXPENSE, 50000,
+                    "Liburan", "Hiburan", "2026-10-03", "", null, false, 35000));
+            fail("Expense exceeding savings balance accepted");
+        } catch (IllegalArgumentException expected) { }
+        try {
+            store.save(new Transaction(expenseId, Transaction.EXPENSE, 30000,
+                    "Belanja", "Belanja", "2026-10-02", "", null, false, 45000));
+            fail("Edited expense exceeding savings balance accepted");
+        } catch (IllegalArgumentException expected) { }
+        assertEquals("30000", store.savingsBalance().toString());
+        assertTrue(store.delete(expenseId));
+        assertEquals("60000", store.availableFunds().toString());
+        assertEquals("40000", store.savingsBalance().toString());
+        assertEquals(100000, store.get(incomeId).amount);
+    }
+
+    @Test public void openingSavingsBalanceIsSeparateFromCashAndIncomeReports() {
+        store.save(new Transaction(0, Transaction.INCOME, 100000,
+                "Gaji", "Gaji", "2026-10-01", ""));
+        store.setSavingsOpeningBalance(50000);
+        assertEquals("100000", store.availableFunds().toString());
+        assertEquals("50000", store.savingsBalance().toString());
+        assertEquals("100000", FinanceMath.summarize(store.all()).income.toString());
+        SavingsOpeningBalance opening = store.getSavingsOpeningBalance();
+        assertNotNull(opening);
+        assertEquals(50000, opening.amount);
+        assertTrue(Dates.isValid(opening.date));
+
+        store.setSavingsOpeningBalance(60000); // Correcting the baseline replaces it, not adds another.
+        assertEquals("100000", store.availableFunds().toString());
+        assertEquals("60000", store.savingsBalance().toString());
+        assertEquals(opening.date, store.getSavingsOpeningBalance().date);
+        assertEquals("100000", FinanceMath.summarize(store.all()).income.toString());
+    }
+
+    @Test public void openingCashBalanceIsSeparateFromSavingsAndIncomeReports() {
+        String today = Dates.today();
+        store.save(new Transaction(0, Transaction.INCOME, 100000,
+                "Gaji", "Gaji", today, ""));
+        store.setCashOpeningBalance(60000);
+        assertEquals("160000", store.availableFunds().toString());
+        assertEquals("0", store.savingsBalance().toString());
+        assertEquals("100000", FinanceMath.summarize(store.all()).income.toString());
+        CashOpeningBalance opening = store.getCashOpeningBalance();
+        assertNotNull(opening);
+        assertEquals(60000, opening.amount);
+        assertEquals(today, opening.date);
+
+        store.saveSavingsMovement(SavingsMovement.DEPOSIT, 50000, today);
+        assertEquals("110000", store.availableFunds().toString());
+        assertEquals("50000", store.savingsBalance().toString());
+        store.setCashOpeningBalance(70000); // Baseline correction replaces, rather than duplicates, the amount.
+        assertEquals("120000", store.availableFunds().toString());
+        assertEquals("50000", store.savingsBalance().toString());
+        assertEquals(today, store.getCashOpeningBalance().date);
+        assertEquals("100000", FinanceMath.summarize(store.all()).income.toString());
+
+        MonthlyReport report = MonthlyReport.forMonth(Integer.parseInt(today.substring(0, 4)),
+                Integer.parseInt(today.substring(5, 7)) - 1, store.all(), store.allSavingsMovements(),
+                store.getSavingsOpeningBalance(), store.getCashOpeningBalance(), AppLanguage.INDONESIAN);
+        assertEquals("70000", report.cashOpeningEntry.toString());
+        assertEquals("100000", report.cashAdded.toString());
+        assertEquals("50000", report.cashSpent.toString());
+        assertEquals("120000", report.cashClosingBalance.toString());
+    }
+
     @Test public void upgradingVersionThreeAddsDebtTablesWithoutChangingTransactions() {
         store.close();
         SQLiteDatabase legacy = context.openOrCreateDatabase(TEST_DB, Context.MODE_PRIVATE, null);
@@ -210,7 +322,7 @@ public final class FinanceStoreTest {
             legacy.setVersion(3);
         } finally { legacy.close(); }
         store = new FinanceStore(context, TEST_DB);
-        assertEquals(4, store.getReadableDatabase().getVersion());
+        assertEquals(8, store.getReadableDatabase().getVersion());
         assertEquals(1, store.all().size());
         assertEquals("tetap", store.get(1).note);
         assertTrue(store.allDebtRecords().isEmpty());

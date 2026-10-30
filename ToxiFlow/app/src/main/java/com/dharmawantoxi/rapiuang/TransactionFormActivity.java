@@ -49,7 +49,8 @@ public final class TransactionFormActivity extends Activity {
     private String type = Transaction.EXPENSE;
     private String selectedDate;
     private String initialDate;
-    private EditText amountInput, titleInput, noteInput;
+    private EditText amountInput, savingsAmountInput, titleInput, noteInput;
+    private TextView savingsAllocationHelp;
     private Spinner categoryInput;
     private TextView dateText, expenseTab, incomeTab, saveButton;
     private static final int PICK_PHOTO = 31, TAKE_PHOTO = 32;
@@ -96,6 +97,7 @@ public final class TransactionFormActivity extends Activity {
         type = original == null ? Transaction.EXPENSE : original.type;
         selectedDate = initialDate;
         String initialAmount = original == null ? "" : Long.toString(original.amount);
+        String initialSavingsAmount = original == null || original.savingsAmount == 0 ? "" : Long.toString(original.savingsAmount);
         String initialTitle = original == null ? "" : original.title;
         String initialNote = original == null ? "" : original.note;
         String initialCategory = original == null ? Categories.forType(type)[0] : original.category;
@@ -103,6 +105,7 @@ public final class TransactionFormActivity extends Activity {
             type = savedInstanceState.getString("type", type);
             selectedDate = savedInstanceState.getString("date", selectedDate);
             initialAmount = savedInstanceState.getString("amount", initialAmount);
+            initialSavingsAmount = savedInstanceState.getString("savings_amount", initialSavingsAmount);
             initialTitle = savedInstanceState.getString("title", initialTitle);
             initialNote = savedInstanceState.getString("note", initialNote);
             initialCategory = savedInstanceState.getString("category", initialCategory);
@@ -112,7 +115,7 @@ public final class TransactionFormActivity extends Activity {
             captureName = savedInstanceState.getString("photo_capture");
             pendingRechooseMessage = savedInstanceState.getBoolean("photo_importing", false);
         }
-        buildForm(initialAmount, initialTitle, initialCategory, initialNote);
+        buildForm(initialAmount, initialSavingsAmount, initialTitle, initialCategory, initialNote);
         if (savedInstanceState != null) {
             int start = savedInstanceState.getInt("amount_selection_start", -1);
             int end = savedInstanceState.getInt("amount_selection_end", -1);
@@ -131,7 +134,7 @@ public final class TransactionFormActivity extends Activity {
                 .setOnCancelListener(d -> finish()).show();
     }
 
-    private void buildForm(String amount, String title, String category, String note) {
+    private void buildForm(String amount, String savingsAmount, String title, String category, String note) {
         LinearLayout root = Ui.column(this);
         root.setBackgroundColor(Ui.BG);
         Ui.setupWindow(this, root);
@@ -204,6 +207,19 @@ public final class TransactionFormActivity extends Activity {
         content.addView(Ui.gap(this, 5));
         content.addView(Ui.text(this, tr("Rupiah penuh, maksimal 12 digit. Titik ribuan otomatis; tanpa koma atau desimal.",
                 "Whole rupiah, up to 12 digits. Thousands dots appear automatically; no commas or decimals."), 11, Ui.MUTED, false));
+        content.addView(Ui.gap(this, 12));
+        content.addView(fieldLabel(tr("ALOKASI TABUNGAN", "SAVINGS ALLOCATION"), true));
+        content.addView(Ui.gap(this, 5));
+        savingsAmountInput = input(tr("0 jika tidak ada", "0 if none"), true, AmountInput.MAX_TEXT_LENGTH);
+        savingsAmountInput.setContentDescription(tr("Nominal transaksi yang ditambahkan ke atau diambil dari tabungan, opsional",
+                "Optional transaction amount added to or taken from savings"));
+        savingsAmountInput.setInputType(InputType.TYPE_CLASS_NUMBER);
+        savingsAmountInput.setRawInputType(InputType.TYPE_CLASS_NUMBER);
+        savingsAmountInput.setText(savingsAmount);
+        content.addView(inputBox(savingsAmountInput, 49));
+        content.addView(Ui.gap(this, 4));
+        savingsAllocationHelp = Ui.text(this, "", 11, Ui.MUTED, false);
+        content.addView(savingsAllocationHelp);
         content.addView(Ui.gap(this, 19));
 
         content.addView(fieldLabel(tr("NAMA TRANSAKSI", "TRANSACTION NAME"), false));
@@ -394,6 +410,11 @@ public final class TransactionFormActivity extends Activity {
         incomeTab.setBackground(Ui.shape(this, expense ? 0x00000000 : Ui.GREEN, 13));
         incomeTab.setContentDescription(tr("Pemasukan", "Income") + (!expense ? tr(", dipilih", ", selected") : ""));
         if (titleInput != null) titleInput.setHint(expense ? tr("Contoh: Makan siang", "Example: Lunch") : tr("Contoh: Gaji bulanan", "Example: Monthly salary"));
+        if (savingsAllocationHelp != null) savingsAllocationHelp.setText(expense
+                ? tr("Bagian ini diambil dari saldo tabungan; sisanya mengurangi dana tersedia.",
+                        "This portion is taken from savings; the remainder reduces available funds.")
+                : tr("Bagian ini menambah saldo tabungan; sisanya menambah dana tersedia.",
+                        "This portion is added to savings; the remainder increases available funds."));
     }
 
     private void changeType(String newType) {
@@ -697,18 +718,44 @@ public final class TransactionFormActivity extends Activity {
             Toast.makeText(this, tr("Tunggu sampai foto selesai diproses.", "Wait until the photo finishes processing."), Toast.LENGTH_SHORT).show();
             return;
         }
+        final long amountValue = Money.parseAmount(rawAmount, language);
+        final long savingsValue;
+        String rawSavings = savingsAmountInput.getText().toString().trim();
+        try {
+            String savingsDigits = AmountInput.digitsOrNull(rawSavings);
+            savingsValue = rawSavings.isEmpty() || (savingsDigits != null && savingsDigits.matches("0+"))
+                    ? 0 : Money.parseAmount(rawSavings, language);
+            if (savingsValue > amountValue) throw new IllegalArgumentException(tr(
+                    "Bagian tabungan tidak boleh melebihi nominal transaksi.",
+                    "The savings portion cannot exceed the transaction amount."));
+        } catch (IllegalArgumentException allocationError) {
+            savingsAmountInput.setError(allocationError.getMessage());
+            savingsAmountInput.requestFocus();
+            return;
+        }
         saveButton.setEnabled(false);
         try {
             byte[] photo = photoAction == FinanceStore.PhotoAction.REPLACE
                     ? PhotoProcessor.readDraft(this, draftName) : null;
-            Transaction transaction = new Transaction(transactionId, type, Money.parseAmount(rawAmount),
-                    title.trim(), category, selectedDate, note.trim());
+            Transaction transaction = new Transaction(transactionId, type, amountValue,
+                    title.trim(), category, selectedDate, note.trim(), null, false, savingsValue);
             store.save(transaction, photoAction, photo);
             Intent result = new Intent();
             result.putExtra("saved_date", selectedDate);
             setResult(RESULT_OK, result);
             Toast.makeText(this, original == null ? tr("Transaksi tersimpan", "Transaction saved") : tr("Transaksi diperbarui", "Transaction updated"), Toast.LENGTH_SHORT).show();
             finish();
+        } catch (IllegalArgumentException e) {
+            saveButton.setEnabled(true);
+            String message = e.getMessage();
+            if (message != null && message.startsWith("Saldo tabungan tidak cukup"))
+                message = tr("Saldo tabungan tidak cukup untuk bagian pengeluaran ini.",
+                        "Not enough savings for this expense portion.");
+            else if (message != null && message.startsWith("Bagian tabungan harus"))
+                message = tr("Bagian tabungan harus antara Rp0 dan nominal transaksi.",
+                        "Savings portion must be between Rp0 and the transaction amount.");
+            savingsAmountInput.setError(message);
+            savingsAmountInput.requestFocus();
         } catch (IOException e) {
             saveButton.setEnabled(true);
             new AlertDialog.Builder(this).setTitle(tr("Foto pilihan tidak tersedia", "Selected photo is unavailable"))
@@ -729,6 +776,7 @@ public final class TransactionFormActivity extends Activity {
         out.putString("type", type);
         out.putString("date", selectedDate);
         out.putString("amount", amountInput.getText().toString());
+        out.putString("savings_amount", savingsAmountInput.getText().toString());
         out.putInt("amount_selection_start", amountInput.getSelectionStart());
         out.putInt("amount_selection_end", amountInput.getSelectionEnd());
         out.putString("title", titleInput.getText().toString());
@@ -751,6 +799,8 @@ public final class TransactionFormActivity extends Activity {
         return !amountInput.getText().toString().equals(originalAmount)
                 || !titleInput.getText().toString().equals(originalTitle)
                 || !noteInput.getText().toString().equals(originalNote)
+                || !savingsAmountInput.getText().toString().equals(original == null || original.savingsAmount == 0
+                        ? "" : Long.toString(original.savingsAmount))
                 || !type.equals(originalType) || !selectedDate.equals(initialDate)
                 || !selectedCategory().equals(originalCategory)
                 || photoAction != FinanceStore.PhotoAction.KEEP || photoBusy;
