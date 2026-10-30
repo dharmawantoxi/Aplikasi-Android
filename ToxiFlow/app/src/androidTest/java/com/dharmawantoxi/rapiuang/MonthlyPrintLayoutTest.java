@@ -60,6 +60,19 @@ public final class MonthlyPrintLayoutTest {
         MonthlyPrintLayout.Plan plan = MonthlyPrintLayout.create(context, attrs, report, signal);
         assertTrue("Several pages are expected", plan.pageCount() > 1);
         assertTrue("A4 portrait", plan.content.height() > plan.content.width());
+        boolean hasSectionBand = false, hasMetricCard = false, hasCategoryRow = false, hasTransactionBand = false;
+        for (List<MonthlyPrintLayout.Line> page : plan.pages) {
+            for (MonthlyPrintLayout.Line line : page) {
+                hasSectionBand |= line.style == MonthlyReport.Style.SECTION && line.firstInParagraph;
+                hasMetricCard |= line.style == MonthlyReport.Style.METRIC_BALANCE;
+                hasCategoryRow |= line.style == MonthlyReport.Style.CATEGORY;
+                hasTransactionBand |= line.style == MonthlyReport.Style.TRANSACTION_HEADER;
+            }
+        }
+        assertTrue("PDF layout has hierarchy bands", hasSectionBand);
+        assertTrue("PDF layout has a featured balance card", hasMetricCard);
+        assertTrue("PDF layout has tabular category rows", hasCategoryRow);
+        assertTrue("PDF layout has transaction entry bands", hasTransactionBand);
 
         // Reassemble every laid-out line, including those split across pages, and compare the
         // exact original paragraphs. This checks that wrapping never truncates long notes.
@@ -71,7 +84,7 @@ public final class MonthlyPrintLayoutTest {
             assertTrue("Every page has body text", !page.isEmpty());
             for (MonthlyPrintLayout.Line line : page) {
                 assertTrue("Line starts inside content", line.top >= 0);
-                assertTrue("Line fits between header and footer", line.top + line.height <= plan.content.height() - 59);
+                assertTrue("Line fits between header and footer", line.top + line.height <= plan.content.height() - 78);
                 if (line.layout != previous) {
                     if (current != null) actual.add(current.toString());
                     current = new StringBuilder();

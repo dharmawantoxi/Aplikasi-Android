@@ -60,6 +60,17 @@ public final class DomainChecks {
         check(text.contains("Periode: Oktober 2026"), "print content contains period");
         check(text.contains("Pemasukan: Rp500.000"), "print content contains income");
         check(text.contains("Pengeluaran: Rp130.000"), "print content contains expense");
+        boolean incomeCard = false, expenseCard = false, balanceCard = false, categoryRow = false, transactionHeader = false;
+        for (MonthlyReport.Paragraph paragraph : report.paragraphs()) {
+            incomeCard |= paragraph.style == MonthlyReport.Style.METRIC_INCOME;
+            expenseCard |= paragraph.style == MonthlyReport.Style.METRIC_EXPENSE;
+            balanceCard |= paragraph.style == MonthlyReport.Style.METRIC_BALANCE;
+            categoryRow |= paragraph.style == MonthlyReport.Style.CATEGORY;
+            transactionHeader |= paragraph.style == MonthlyReport.Style.TRANSACTION_HEADER;
+        }
+        check(incomeCard && expenseCard && balanceCard, "report summary exposes three presentation-ready KPI styles");
+        check(categoryRow, "category totals use tabular presentation style");
+        check(transactionHeader, "transaction history has distinct entry headings");
         check(text.contains("Selisih periode: Rp370.000"), "print labels difference as period only");
         check(text.contains("Belanja: Rp110.000"), "print content contains category total");
         check(text.contains("Nama: Belanja sayur"), "print content contains transaction");
