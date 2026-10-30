@@ -10,12 +10,13 @@ public final class Money {
     public static long parseAmount(String input) { return parseAmount(input, AppLanguage.INDONESIAN); }
 
     static long parseAmount(String input, AppLanguage language) {
-        if (input == null || !input.matches("[0-9]{1,12}")) {
+        String digits = AmountInput.digitsOrNull(input);
+        if (digits == null || digits.length() > 12) {
             throw new IllegalArgumentException(language.text(
-                    "Masukkan nominal rupiah tanpa titik atau koma (maksimal 12 digit).",
-                    "Enter a whole rupiah amount without dots or commas (maximum 12 digits)."));
+                    "Masukkan rupiah utuh (maksimal 12 digit); gunakan titik hanya sebagai pemisah ribuan, tanpa koma atau desimal.",
+                    "Enter whole rupiah (up to 12 digits); use dots only as thousands separators, without commas or decimals."));
         }
-        long value = Long.parseLong(input);
+        long value = Long.parseLong(digits);
         if (value <= 0 || value > MAX_TRANSACTION) {
             throw new IllegalArgumentException(language.text(
                     "Nominal harus lebih besar dari Rp0 dan maksimal Rp999.999.999.999.",

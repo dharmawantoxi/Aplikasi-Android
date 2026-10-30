@@ -5,8 +5,11 @@ import static org.junit.Assert.*;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.pdf.PdfRenderer;
 import android.os.CancellationSignal;
 import android.os.OperationCanceledException;
+import android.os.ParcelFileDescriptor;
+import android.print.PrintAttributes;
 
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -17,7 +20,10 @@ import org.junit.runner.RunWith;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.math.BigInteger;
+import java.util.Collections;
 
 @RunWith(AndroidJUnit4.class)
 public final class PrintSnapshotTest {
@@ -85,6 +91,58 @@ public final class PrintSnapshotTest {
         assertFalse(directory.exists());
         try { snapshot.readPhoto(expense); fail("Closed snapshot accepted"); }
         catch (IOException expected) { }
+    }
+
+    @Test public void databaseSnapshotProducesReadablePdfWithAndWithoutPhotos() throws Exception {
+        store.save(transaction(0, Transaction.EXPENSE, 25000, "Struk", "Belanja", "2026-10-01"),
+                FinanceStore.PhotoAction.REPLACE, jpeg(Color.RED));
+        store.save(transaction(0, Transaction.INCOME, 75000, "Bonus", "Gaji", "2026-10-02"));
+        store.save(transaction(0, Transaction.EXPENSE, 500, "Bulan lain", "Belanja", "2026-09-30"));
+        PrintAttributes attributes = new PrintAttributes.Builder()
+                .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                .setResolution(new PrintAttributes.Resolution("test", "Test", 300, 300))
+                .setMinMargins(new PrintAttributes.Margins(500, 500, 500, 500))
+                .setColorMode(PrintAttributes.COLOR_MODE_COLOR).build();
+        CancellationSignal signal = new CancellationSignal();
+        for (boolean includePhotos : new boolean[]{false, true}) {
+            File pdfFile = File.createTempFile("toxiflow-snapshot-report-", ".pdf", context.getCacheDir());
+            File photoDirectory = null;
+            try {
+                try (PrintSnapshot snapshot = PrintSnapshot.create(context, new FinanceStore(context, DB),
+                        2026, 9, includePhotos, signal)) {
+                    photoDirectory = snapshot.directory;
+                    assertEquals(2, snapshot.report.transactions.size());
+                    assertEquals(BigInteger.valueOf(25000), snapshot.report.summary.expense);
+                    assertEquals(BigInteger.valueOf(75000), snapshot.report.summary.income);
+                    MonthlyPrintLayout.Plan plan = MonthlyPrintLayout.create(context, attributes,
+                            snapshot.report, includePhotos, signal);
+                    assertEquals(includePhotos ? 1 : 0, plan.photoPages.size());
+                    try (FileOutputStream out = new FileOutputStream(pdfFile)) {
+                        MonthlyPrintLayout.writePdf(context, attributes, plan,
+                                Collections.singletonList(new int[]{0, plan.pageCount() - 1}), snapshot, out, signal);
+                    }
+                    try (PdfRenderer pdf = new PdfRenderer(ParcelFileDescriptor.open(pdfFile,
+                            ParcelFileDescriptor.MODE_READ_ONLY))) {
+                        assertEquals(plan.pageCount(), pdf.getPageCount());
+                        if (includePhotos) {
+                            MonthlyPrintLayout.PhotoPage photo = plan.photoPages.get(0);
+                            try (PdfRenderer.Page page = pdf.openPage(plan.pages.size())) {
+                                Bitmap bitmap = Bitmap.createBitmap(page.getWidth(), page.getHeight(), Bitmap.Config.ARGB_8888);
+                                try {
+                                    bitmap.eraseColor(Color.WHITE);
+                                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
+                                    int x = plan.content.left + plan.content.width() / 2;
+                                    int y = plan.content.top + Math.round((photo.imageTop + photo.imageBottom) / 2);
+                                    int pixel = bitmap.getPixel(x, y);
+                                    assertTrue("The stored photo appears in the PDF", Color.red(pixel) > 180 && Color.green(pixel) < 100);
+                                } finally { bitmap.recycle(); }
+                            }
+                        }
+                    }
+                }
+                if (photoDirectory != null) assertFalse(photoDirectory.exists());
+            } finally { pdfFile.delete(); }
+        }
     }
 
     @Test public void snapshotRetainsRequestedLanguageAndCanonicalRecords() throws Exception {

@@ -828,7 +828,7 @@ public final class MainActivity extends Activity {
 
     private void showPrintUnavailable() {
         new AlertDialog.Builder(this).setTitle(tr("Belum bisa mencetak", "Unable to print"))
-                .setMessage(tr("Layanan cetak Android tidak tersedia. Periksa layanan cetak perangkat dan coba lagi.", "The Android print service is unavailable. Check the device’s print service and try again."))
+                .setMessage(tr("Dialog cetak Android tidak dapat dibuka. Pastikan layanan cetak tersedia di perangkat, lalu coba lagi.", "The Android print dialog could not be opened. Check that the device’s print service is available and try again."))
                 .setPositiveButton(tr("Tutup", "Close"), null).show();
     }
 
