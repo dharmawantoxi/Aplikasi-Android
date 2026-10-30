@@ -202,7 +202,7 @@ public final class FinanceFlowTest {
                     .perform(replaceText("Cicilan motor"), closeSoftKeyboard());
             onView(withContentDescription("Kategori transaksi")).perform(scrollTo(), click());
             onView(withText("Cicilan")).perform(click());
-            onView(withText("Simpan transaksi")).perform(scrollTo(), click());
+            onView(withText("Simpan transaksi")).perform(click());
             Transaction saved = onlySavedTransaction();
             assertEquals(Transaction.EXPENSE, saved.type);
             assertEquals("Cicilan", saved.category);

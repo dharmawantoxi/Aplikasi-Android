@@ -11,9 +11,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.hasErrorText;
 import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
-import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
 import static org.junit.Assert.*;
-import static androidx.test.espresso.Espresso.pressBack;
 
 import android.content.Context;
 import android.content.Intent;
@@ -186,10 +184,15 @@ public final class AmountInputFlowTest {
             id = store.save(new Transaction(0, Transaction.EXPENSE, 50000, "Catatan lama", "Belanja", Dates.today(), ""));
         } finally { store.close(); }
         try (ActivityScenario<TransactionFormActivity> scenario = form(id)) {
-            onView(withContentDescription(AMOUNT)).check(matches(withText("50.000")));
-            pressBack();
-            InstrumentationRegistry.getInstrumentation().waitForIdleSync();
-            onView(withText("Buang perubahan?")).check(doesNotExist());
+            onView(withContentDescription(AMOUNT)).check(matches(withText("50.000")))
+                    .perform(replaceText("50000"), closeSoftKeyboard())
+                    .check(matches(withText("50.000")));
+            final boolean[] finishing = {false};
+            scenario.onActivity(activity -> {
+                activity.onBackPressed();
+                finishing[0] = activity.isFinishing();
+            });
+            assertTrue("Formatting-only edits should exit without a discard prompt", finishing[0]);
         }
         store = new FinanceStore(context);
         try { assertEquals(50000L, store.get(id).amount); } finally { store.close(); }
