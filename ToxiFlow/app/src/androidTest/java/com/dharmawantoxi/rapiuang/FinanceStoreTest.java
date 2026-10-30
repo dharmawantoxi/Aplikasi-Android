@@ -106,7 +106,7 @@ public final class FinanceStoreTest {
             legacy.close();
         }
         store = new FinanceStore(context, TEST_DB, () -> "2026-11-10 11:22:33");
-        assertEquals(4, store.getReadableDatabase().getVersion());
+        assertEquals(5, store.getReadableDatabase().getVersion());
         assertEquals(2, store.all().size());
         Transaction oldExpense = store.get(1);
         assertEquals("Makan", oldExpense.title);
@@ -147,7 +147,7 @@ public final class FinanceStoreTest {
             legacy.setVersion(2);
         } finally { legacy.close(); }
         store = new FinanceStore(context, TEST_DB);
-        assertEquals(4, store.getReadableDatabase().getVersion());
+        assertEquals(5, store.getReadableDatabase().getVersion());
         assertEquals(2, store.all().size());
         assertEquals("2026-10-02 08:12:00", store.get(1).createdAt);
         assertNull(store.get(2).createdAt);
@@ -196,6 +196,38 @@ public final class FinanceStoreTest {
         assertEquals(1, store.paymentsForDebt(receivable).size());
     }
 
+    @Test public void savingsTransfersStaySeparateFromOrdinaryTransactions() {
+        store.save(new Transaction(0, Transaction.INCOME, 100000,
+                "Gaji", "Gaji", "2026-10-01", ""));
+        store.save(new Transaction(0, Transaction.EXPENSE, 30000,
+                "Belanja", "Belanja", "2026-10-02", ""));
+        assertEquals("70000", store.availableFunds().toString());
+        store.saveSavingsMovement("deposit", 40000, "2026-10-03");
+        assertEquals("30000", store.availableFunds().toString());
+        store.save(new Transaction(0, Transaction.EXPENSE, 5000,
+                "Kopi", "Makan & minum", "2026-10-03", ""));
+        assertEquals("40000", store.savingsBalance().toString());
+        assertEquals("25000", store.availableFunds().toString());
+        assertEquals("40000", store.savingsBalance().toString());
+        assertEquals("65000", FinanceMath.summarize(store.all()).balance.toString());
+        try {
+            store.saveSavingsMovement("deposit", 25001, "2026-10-03");
+            fail("Deposit exceeding available cash accepted");
+        } catch (IllegalArgumentException expected) { }
+        try {
+            store.saveSavingsMovement("withdrawal", 40001, "2026-10-03");
+            fail("Withdrawal exceeding savings accepted");
+        } catch (IllegalArgumentException expected) { }
+        store.saveSavingsMovement("withdrawal", 10000, "2026-10-04");
+        assertEquals("35000", store.availableFunds().toString());
+        assertEquals("30000", store.savingsBalance().toString());
+        store.close();
+        store = new FinanceStore(context, TEST_DB);
+        assertEquals("35000", store.availableFunds().toString());
+        assertEquals("30000", store.savingsBalance().toString());
+        assertEquals("65000", FinanceMath.summarize(store.all()).balance.toString());
+    }
+
     @Test public void upgradingVersionThreeAddsDebtTablesWithoutChangingTransactions() {
         store.close();
         SQLiteDatabase legacy = context.openOrCreateDatabase(TEST_DB, Context.MODE_PRIVATE, null);
@@ -210,7 +242,7 @@ public final class FinanceStoreTest {
             legacy.setVersion(3);
         } finally { legacy.close(); }
         store = new FinanceStore(context, TEST_DB);
-        assertEquals(4, store.getReadableDatabase().getVersion());
+        assertEquals(5, store.getReadableDatabase().getVersion());
         assertEquals(1, store.all().size());
         assertEquals("tetap", store.get(1).note);
         assertTrue(store.allDebtRecords().isEmpty());

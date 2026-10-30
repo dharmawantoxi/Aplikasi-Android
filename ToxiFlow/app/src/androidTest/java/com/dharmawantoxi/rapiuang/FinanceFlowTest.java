@@ -212,7 +212,7 @@ public final class FinanceFlowTest {
         }
     }
 
-    @Test public void cashAndSavingsShareOneBalanceUpdatedByRegularTransactions() {
+    @Test public void savingsStaySeparateAndCanBeMovedToAndFromAvailableFunds() {
         String today = Dates.today();
         FinanceStore seed = new FinanceStore(context);
         try {
@@ -223,13 +223,32 @@ public final class FinanceFlowTest {
 
         try (ActivityScenario<MainActivity> scenario = launchHome()) {
             onView(withContentDescription("Dana")).perform(click());
-            onView(withText("Cash dan tabungan menggunakan satu saldo.")).check(matches(isDisplayed()));
+            onView(withText("Saldo tabungan terpisah dan tidak berubah oleh transaksi biasa.")).check(matches(isDisplayed()));
             onView(withContentDescription("Dana siap pakai Rp75.000")).check(matches(isDisplayed()));
-            onView(withText("Pemasukan bulan ini")).check(matches(isDisplayed()));
-            onView(withText("Pengeluaran bulan ini")).check(matches(isDisplayed()));
+            onView(withContentDescription("Saldo tabungan Rp0")).check(matches(isDisplayed()));
             onView(withText("Gaji cash")).perform(scrollTo()).check(matches(isDisplayed()));
             onView(withText("Belanja cash")).perform(scrollTo()).check(matches(isDisplayed()));
+
+            onView(withText("Tambah tabungan")).perform(scrollTo(), click());
+            onView(withContentDescription("Nominal perpindahan tabungan dalam rupiah")).inRoot(isDialog())
+                    .perform(replaceText("30000"), closeSoftKeyboard());
+            onView(withText("Simpan")).inRoot(isDialog()).perform(click());
+            onView(withContentDescription("Dana siap pakai Rp45.000")).check(matches(isDisplayed()));
+            onView(withContentDescription("Saldo tabungan Rp30.000")).check(matches(isDisplayed()));
+
+            onView(withText("Ambil dari tabungan")).perform(scrollTo(), click());
+            onView(withContentDescription("Nominal perpindahan tabungan dalam rupiah")).inRoot(isDialog())
+                    .perform(replaceText("10000"), closeSoftKeyboard());
+            onView(withText("Ambil")).inRoot(isDialog()).perform(click());
+            onView(withContentDescription("Dana siap pakai Rp55.000")).check(matches(isDisplayed()));
+            onView(withContentDescription("Saldo tabungan Rp20.000")).check(matches(isDisplayed()));
         }
+        FinanceStore reader = new FinanceStore(context);
+        try {
+            assertEquals("55000", reader.availableFunds().toString());
+            assertEquals("20000", reader.savingsBalance().toString());
+            assertEquals("75000", FinanceMath.summarize(reader.all()).balance.toString());
+        } finally { reader.close(); }
     }
 
     @Test public void debtAndReceivablePaymentsUpdateCashWithoutBecomingTransactions() {
