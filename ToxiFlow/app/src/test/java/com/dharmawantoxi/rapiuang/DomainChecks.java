@@ -314,7 +314,8 @@ public final class DomainChecks {
         String result = csv.toString();
         check(result.contains("Foto terlampir (foto tidak disertakan)"), "CSV discloses it omits image data");
         check(result.contains("\"2026-10-01 08:00:00\",\"Ada\"\r\n"), "CSV records photo presence");
-        check(result.contains("\"Bonus\",2000,\"\",\"\",\"Tidak\"\r\n"), "CSV records absence of photo");
+        check(result.contains("\"Bonus\",2000,0,\"\",\"\",\"Tidak\"\r\n"),
+                "CSV records absence of photo and zero savings allocation");
         Transaction secondPhoto = new Transaction(33, Transaction.INCOME, 3000, "Bukti bonus", "Gaji",
                 "2026-10-02", "", "2026-10-02 08:00:00", true);
         Transaction otherMonth = new Transaction(34, Transaction.EXPENSE, 500, "Luar bulan", "Belanja",
