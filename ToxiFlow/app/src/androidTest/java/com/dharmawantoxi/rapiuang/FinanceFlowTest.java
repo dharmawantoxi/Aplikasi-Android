@@ -124,7 +124,7 @@ public final class FinanceFlowTest {
         try (ActivityScenario<MainActivity> scenario = launchHome()) {
             onView(withText("Catat transaksi")).perform(scrollTo(), click());
             onView(withContentDescription("Nominal transaksi dalam rupiah")).perform(replaceText("12,50"), closeSoftKeyboard());
-            onView(withHint("Contoh: Makan siang")).perform(typeText("Makan"), closeSoftKeyboard());
+            onView(withHint("Contoh: Makan siang")).perform(click(), typeText("Makan"), closeSoftKeyboard());
             onView(withText("Simpan transaksi")).perform(click());
             onView(withContentDescription("Nominal transaksi dalam rupiah"))
                     .check(matches(withText("12,50")))
@@ -226,7 +226,7 @@ public final class FinanceFlowTest {
             onView(withContentDescription("Dana")).perform(click());
             onView(withText("Atur bagian transaksi yang masuk ke atau diambil dari tabungan.")).check(matches(isDisplayed()));
             onView(withContentDescription("Dana siap pakai Rp75.000")).check(matches(isDisplayed()));
-            onView(withContentDescription("Saldo tabungan Rp0")).check(matches(isDisplayed()));
+            onView(withContentDescription("Saldo tabungan Rp0")).perform(scrollTo()).check(matches(isDisplayed()));
             onView(withText("Gaji cash")).perform(scrollTo()).check(matches(isDisplayed()));
             onView(withText("Belanja cash")).perform(scrollTo()).check(matches(isDisplayed()));
 
@@ -235,14 +235,14 @@ public final class FinanceFlowTest {
                     .perform(replaceText("30000"), closeSoftKeyboard());
             onView(withText("Simpan")).inRoot(isDialog()).perform(click());
             onView(withContentDescription("Dana siap pakai Rp45.000")).check(matches(isDisplayed()));
-            onView(withContentDescription("Saldo tabungan Rp30.000")).check(matches(isDisplayed()));
+            onView(withContentDescription("Saldo tabungan Rp30.000")).perform(scrollTo()).check(matches(isDisplayed()));
 
             onView(withText("Ambil dari tabungan")).perform(scrollTo(), click());
             onView(withContentDescription("Nominal perpindahan tabungan dalam rupiah")).inRoot(isDialog())
                     .perform(replaceText("10000"), closeSoftKeyboard());
             onView(withText("Ambil")).inRoot(isDialog()).perform(click());
             onView(withContentDescription("Dana siap pakai Rp55.000")).check(matches(isDisplayed()));
-            onView(withContentDescription("Saldo tabungan Rp20.000")).check(matches(isDisplayed()));
+            onView(withContentDescription("Saldo tabungan Rp20.000")).perform(scrollTo()).check(matches(isDisplayed()));
             onView(withText("Laporan")).perform(click());
             onView(withText("TABUNGAN BULAN INI")).perform(scrollTo()).check(matches(isDisplayed()));
             onView(withText(containsString("pindah ke tabungan"))).perform(scrollTo()).check(matches(isDisplayed()));
@@ -264,7 +264,7 @@ public final class FinanceFlowTest {
                     .perform(typeText("50000"), closeSoftKeyboard());
             onView(withText("Simpan")).inRoot(isDialog()).perform(click());
             onView(withContentDescription("Dana siap pakai Rp0")).check(matches(isDisplayed()));
-            onView(withContentDescription("Saldo tabungan Rp50.000")).check(matches(isDisplayed()));
+            onView(withContentDescription("Saldo tabungan Rp50.000")).perform(scrollTo()).check(matches(isDisplayed()));
             onView(withText("Laporan")).perform(click());
             onView(withText(containsString("saldo awal dicatat"))).perform(scrollTo()).check(matches(isDisplayed()));
             onView(withText(containsString("Saldo akhir tabungan"))).perform(scrollTo()).check(matches(isDisplayed()));
@@ -286,7 +286,7 @@ public final class FinanceFlowTest {
                     .perform(typeText("80000"), closeSoftKeyboard());
             onView(withText("Simpan")).inRoot(isDialog()).perform(click());
             onView(withContentDescription("Dana siap pakai Rp80.000")).check(matches(isDisplayed()));
-            onView(withContentDescription("Saldo tabungan Rp0")).check(matches(isDisplayed()));
+            onView(withContentDescription("Saldo tabungan Rp0")).perform(scrollTo()).check(matches(isDisplayed()));
             onView(withText("Laporan")).perform(click());
             onView(withText("DANA TERSEDIA BULAN INI")).perform(scrollTo()).check(matches(isDisplayed()));
             onView(withText(containsString("Saldo awal dicatat"))).perform(scrollTo()).check(matches(isDisplayed()));
@@ -320,7 +320,7 @@ public final class FinanceFlowTest {
 
             onView(withContentDescription("Dana")).perform(click());
             onView(withContentDescription("Dana siap pakai Rp40.000")).check(matches(isDisplayed()));
-            onView(withContentDescription("Saldo tabungan Rp30.000")).check(matches(isDisplayed()));
+            onView(withContentDescription("Saldo tabungan Rp30.000")).perform(scrollTo()).check(matches(isDisplayed()));
         }
         FinanceStore reader = new FinanceStore(context);
         try {
