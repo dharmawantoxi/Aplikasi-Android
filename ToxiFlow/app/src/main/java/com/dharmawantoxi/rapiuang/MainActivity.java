@@ -18,8 +18,10 @@ import android.print.PrintJob;
 import android.print.PrintManager;
 import android.text.Editable;
 import android.text.InputFilter;
+import android.text.Selection;
 import android.text.TextUtils;
 import android.text.TextWatcher;
+import android.text.method.TextKeyListener;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.CheckBox;
@@ -622,10 +624,56 @@ public final class MainActivity extends Activity {
         if (maxLength == 300) { field.setMinLines(1); field.setMaxLines(3); }
         field.setFilters(new InputFilter[]{new InputFilter.LengthFilter(maxLength)});
         field.setInputType(inputType);
+        if ((inputType & android.text.InputType.TYPE_MASK_CLASS) == android.text.InputType.TYPE_CLASS_NUMBER) {
+            // Allow the formatter to insert Indonesian thousands separators while keeping a
+            // numeric keyboard. The underlying value remains digits-only for Money.parseAmount.
+            field.setKeyListener(TextKeyListener.getInstance());
+            field.setRawInputType(inputType);
+            installAmountFormatting(field);
+        }
         field.setTextSize(15);
         field.setPadding(Ui.dp(this, 12), Ui.dp(this, 9), Ui.dp(this, 12), Ui.dp(this, 9));
         field.setBackground(Ui.outlined(this, Ui.WHITE, Ui.LINE, 12));
         return field;
+    }
+
+    private void installAmountFormatting(EditText amount) {
+        amount.addTextChangedListener(new TextWatcher() {
+            private boolean formatting;
+            private String before = "";
+            private int start, removed, inserted, oldStart, oldEnd;
+
+            @Override public void beforeTextChanged(CharSequence text, int start, int count, int after) {
+                if (formatting) return;
+                before = text.toString();
+                this.start = start;
+                removed = count;
+                inserted = after;
+                oldStart = amount.getSelectionStart();
+                oldEnd = amount.getSelectionEnd();
+            }
+
+            @Override public void onTextChanged(CharSequence text, int start, int before, int count) { }
+
+            @Override public void afterTextChanged(Editable editable) {
+                if (formatting) return;
+                int selectionStart = Selection.getSelectionStart(editable);
+                int selectionEnd = Selection.getSelectionEnd(editable);
+                if (selectionStart < 0) selectionStart = start + inserted;
+                if (selectionEnd < 0) selectionEnd = selectionStart;
+                AmountInput.Edit edit = AmountInput.afterEdit(before, editable.toString(), start, removed, inserted,
+                        oldStart, oldEnd, selectionStart, selectionEnd);
+                if (edit.text.contentEquals(editable)) return;
+                formatting = true;
+                try {
+                    editable.replace(0, editable.length(), edit.text);
+                    Selection.setSelection(editable, Math.min(edit.selectionStart, editable.length()),
+                            Math.min(edit.selectionEnd, editable.length()));
+                } finally {
+                    formatting = false;
+                }
+            }
+        });
     }
 
     private void openDebtPayment(DebtRecord record) {
