@@ -407,7 +407,8 @@ public final class DomainChecks {
         check(output.contains("Catatan,Dibuat (waktu perangkat),Foto terlampir (foto tidak disertakan)\r\n"),
                 "CSV appends creation time and photo-presence columns");
         check(output.contains("\"Catatan\",\"2026-10-30 23:05:07\",\"Tidak\"\r\n"), "CSV exports full creation timestamp");
-        check(output.contains("\"Gaji\",\"Gaji\",50000,\"\",\"\",\"Tidak\"\r\n"), "legacy CSV time is empty");
+        check(output.contains("\"Gaji\",\"Gaji\",50000,0,\"\",\"\",\"Tidak\"\r\n"),
+                "legacy CSV time is empty and savings allocation defaults to zero");
         StringWriter hostileCsv = new StringWriter();
         CsvExport.write(hostileCsv, Collections.singletonList(new Transaction(22, Transaction.INCOME, 1,
                 "a", "Gaji", "2026-09-30", "", "=formula")));
