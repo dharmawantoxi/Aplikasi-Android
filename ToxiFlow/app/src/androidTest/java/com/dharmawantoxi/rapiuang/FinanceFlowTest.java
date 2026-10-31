@@ -124,7 +124,7 @@ public final class FinanceFlowTest {
         try (ActivityScenario<MainActivity> scenario = launchHome()) {
             onView(withText("Catat transaksi")).perform(scrollTo(), click());
             onView(withContentDescription("Nominal transaksi dalam rupiah")).perform(replaceText("12,50"), closeSoftKeyboard());
-            onView(withHint("Contoh: Makan siang")).perform(click(), typeText("Makan"), closeSoftKeyboard());
+            onView(withHint("Contoh: Makan siang")).perform(scrollTo(), click(), typeText("Makan"), closeSoftKeyboard());
             onView(withText("Simpan transaksi")).perform(click());
             onView(withContentDescription("Nominal transaksi dalam rupiah"))
                     .check(matches(withText("12,50")))

@@ -789,7 +789,7 @@ public final class TransactionFormActivity extends Activity {
         stateSaved = true;
     }
 
-    private boolean hasChanges() {
+    boolean hasChanges() {
         if (amountInput == null) return false;
         String currentAmount = amountInput.getText().toString();
         String currentDigits = AmountInput.digitsOrNull(currentAmount);
