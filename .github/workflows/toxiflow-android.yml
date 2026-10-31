@@ -159,18 +159,12 @@ jobs:
           target: google_apis
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-          script: |
-            set +e
-            adb shell settings put system screen_off_timeout 1800000
-            adb shell svc power stayon true
-            adb shell input keyevent KEYCODE_WAKEUP
-            adb shell input keyevent 82
-            adb shell wm dismiss-keyguard || true
-            cd ToxiFlow
-            ./gradlew connectedDebugAndroidTest --no-daemon --stacktrace --console=plain > "$RUNNER_TEMP/toxiflow-device-tests.log" 2>&1
-            result=$?
-            cat "$RUNNER_TEMP/toxiflow-device-tests.log"
-            exit "$result"
+          working-directory: ToxiFlow
+          # The action runs each non-empty script line in a separate shell. Keep
+          # related commands in one shell command and set the project directory
+          # through the action input rather than relying on `cd` persistence.
+          script: >-
+            set +e; adb shell settings put system screen_off_timeout 1800000; adb shell svc power stayon true; adb shell input keyevent KEYCODE_WAKEUP; adb shell input keyevent 82; adb shell wm dismiss-keyguard || true; ./gradlew connectedDebugAndroidTest --no-daemon --stacktrace --console=plain > "${RUNNER_TEMP:-/tmp}/toxiflow-device-tests.log" 2>&1; result=$?; cat "${RUNNER_TEMP:-/tmp}/toxiflow-device-tests.log"; exit "$result"
 
       - name: Summarize device-test failures
         if: always()
