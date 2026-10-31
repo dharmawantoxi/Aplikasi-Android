@@ -789,14 +789,17 @@ public final class TransactionFormActivity extends Activity {
         stateSaved = true;
     }
 
-    private boolean hasChanges() {
+    boolean hasChanges() {
         if (amountInput == null) return false;
-        String originalAmount = original == null ? "" : AmountInput.forDisplay(Long.toString(original.amount));
+        String currentAmount = amountInput.getText().toString();
+        String currentDigits = AmountInput.digitsOrNull(currentAmount);
+        if (currentDigits == null) currentDigits = currentAmount;
+        String originalAmount = original == null ? "" : Long.toString(original.amount);
         String originalTitle = original == null ? "" : original.title;
         String originalNote = original == null ? "" : original.note;
         String originalType = original == null ? Transaction.EXPENSE : original.type;
         String originalCategory = original == null ? Categories.forType(originalType)[0] : original.category;
-        return !amountInput.getText().toString().equals(originalAmount)
+        return !currentDigits.equals(originalAmount)
                 || !titleInput.getText().toString().equals(originalTitle)
                 || !noteInput.getText().toString().equals(originalNote)
                 || !savingsAmountInput.getText().toString().equals(original == null || original.savingsAmount == 0

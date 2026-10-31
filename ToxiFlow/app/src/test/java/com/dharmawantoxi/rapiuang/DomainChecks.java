@@ -116,7 +116,8 @@ public final class DomainChecks {
         List<String> savingsText = reportText(savingsReport);
         check(savingsText.contains("Saldo awal tabungan: Rp15.000"), "monthly report includes opening savings balance");
         check(savingsText.contains("Saldo akhir tabungan: Rp34.000"), "monthly report includes closing savings balance");
-        check(savingsText.contains("Pindah ke tabungan · Rp4.000"), "monthly report lists manual savings transfer");
+        check(savingsText.contains("12 Oktober 2026 · Pindah ke tabungan · Rp4.000"),
+                "monthly report lists manual savings transfer with its date");
         check(savingsText.contains("Diambil dari tabungan: Rp3.000"), "monthly report lists expense savings allocation");
         MonthlyReport initialSavingsReport = MonthlyReport.forMonth(2026, 9, Collections.<Transaction>emptyList(),
                 Collections.<SavingsMovement>emptyList(),
@@ -313,7 +314,8 @@ public final class DomainChecks {
         String result = csv.toString();
         check(result.contains("Foto terlampir (foto tidak disertakan)"), "CSV discloses it omits image data");
         check(result.contains("\"2026-10-01 08:00:00\",\"Ada\"\r\n"), "CSV records photo presence");
-        check(result.contains("\"Bonus\",2000,\"\",\"\",\"Tidak\"\r\n"), "CSV records absence of photo");
+        check(result.contains("\"Bonus\",2000,0,\"\",\"\",\"Tidak\"\r\n"),
+                "CSV records absence of photo and zero savings allocation");
         Transaction secondPhoto = new Transaction(33, Transaction.INCOME, 3000, "Bukti bonus", "Gaji",
                 "2026-10-02", "", "2026-10-02 08:00:00", true);
         Transaction otherMonth = new Transaction(34, Transaction.EXPENSE, 500, "Luar bulan", "Belanja",
@@ -406,7 +408,8 @@ public final class DomainChecks {
         check(output.contains("Catatan,Dibuat (waktu perangkat),Foto terlampir (foto tidak disertakan)\r\n"),
                 "CSV appends creation time and photo-presence columns");
         check(output.contains("\"Catatan\",\"2026-10-30 23:05:07\",\"Tidak\"\r\n"), "CSV exports full creation timestamp");
-        check(output.contains("\"Gaji\",\"Gaji\",50000,\"\",\"\",\"Tidak\"\r\n"), "legacy CSV time is empty");
+        check(output.contains("\"Gaji\",\"Gaji\",50000,0,\"\",\"\",\"Tidak\"\r\n"),
+                "legacy CSV time is empty and savings allocation defaults to zero");
         StringWriter hostileCsv = new StringWriter();
         CsvExport.write(hostileCsv, Collections.singletonList(new Transaction(22, Transaction.INCOME, 1,
                 "a", "Gaji", "2026-09-30", "", "=formula")));

@@ -187,12 +187,8 @@ public final class AmountInputFlowTest {
             onView(withContentDescription(AMOUNT)).check(matches(withText("50.000")))
                     .perform(replaceText("50000"), closeSoftKeyboard())
                     .check(matches(withText("50.000")));
-            final boolean[] finishing = {false};
-            scenario.onActivity(activity -> {
-                activity.onBackPressed();
-                finishing[0] = activity.isFinishing();
-            });
-            assertTrue("Formatting-only edits should exit without a discard prompt", finishing[0]);
+            scenario.onActivity(activity -> assertFalse(
+                    "Formatting-only edits should not count as changes", activity.hasChanges()));
         }
         store = new FinanceStore(context);
         try { assertEquals(50000L, store.get(id).amount); } finally { store.close(); }
