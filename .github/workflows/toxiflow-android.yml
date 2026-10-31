@@ -1,7 +1,9 @@
 name: ToxiFlow Android CI
 
-# Manual only: run this workflow from Actions when ready to validate a branch.
+# Run automatically for branch pushes and pull requests; manual dispatch remains available.
 on:
+  push:
+  pull_request:
   workflow_dispatch:
 
 permissions:

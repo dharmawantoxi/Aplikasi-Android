@@ -116,7 +116,8 @@ public final class DomainChecks {
         List<String> savingsText = reportText(savingsReport);
         check(savingsText.contains("Saldo awal tabungan: Rp15.000"), "monthly report includes opening savings balance");
         check(savingsText.contains("Saldo akhir tabungan: Rp34.000"), "monthly report includes closing savings balance");
-        check(savingsText.contains("Pindah ke tabungan · Rp4.000"), "monthly report lists manual savings transfer");
+        check(savingsText.contains("12 Oktober 2026 · Pindah ke tabungan · Rp4.000"),
+                "monthly report lists manual savings transfer with its date");
         check(savingsText.contains("Diambil dari tabungan: Rp3.000"), "monthly report lists expense savings allocation");
         MonthlyReport initialSavingsReport = MonthlyReport.forMonth(2026, 9, Collections.<Transaction>emptyList(),
                 Collections.<SavingsMovement>emptyList(),
