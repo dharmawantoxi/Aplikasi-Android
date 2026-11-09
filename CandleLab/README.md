@@ -6,6 +6,8 @@ Dibangun dengan **Python dan Tkinter**. Grafik digambar dengan Canvas, sedangkan
 
 ## Fitur
 
+- **Mode live tanpa screenshot berulang**: pilih area sekali dengan `F9`, lalu grafik dan probabilitas diperbarui otomatis setiap 2 detik.
+- Perubahan urutan candle dikonfirmasi dalam dua pembacaan konsisten; candle paling kanan yang masih terbentuk dapat diabaikan dari model.
 - **Baca langsung dari layar desktop**: pilih area chart dengan drag, deteksi candle hijau/teal dan merah, lalu verifikasi kotak deteksi sebelum mengimpor.
 - Tangkap ulang area yang sama dengan `Ctrl+F8`; area dan screenshot hanya berada di memori sesi berjalan.
 - Grafik hingga 64 candle terakhir dengan tooltip OHLC saat kursor diarahkan.
@@ -82,7 +84,20 @@ python3 candlelab.py
 5. Lihat skor pada **Eksperimen**. Ulangi hingga jumlah sampel memadai; beberapa tebakan benar tidak membuktikan model memiliki keunggulan.
 6. Gunakan **Ekspor CSV** untuk membuat salinan data candle. Ekspor tidak mencakup riwayat eksperimen.
 
-Pintasan: `Ctrl+N` tambah candle, `Ctrl+I` impor CSV, `Ctrl+S` ekspor CSV, `F5` muat ulang tampilan, **`F8` baca area layar baru**, dan **`Ctrl+F8` tangkap ulang area yang sama**.
+Pintasan: `Ctrl+N` tambah candle, `Ctrl+I` impor CSV, `Ctrl+S` ekspor CSV, `F5` muat ulang tampilan, **`F8` baca area layar baru**, **`Ctrl+F8` tangkap ulang area**, **`F9` mulai/stop live**, dan **`Ctrl+F9` pilih area live baru**.
+
+## Mode live — prediksi terus diperbarui
+
+1. Buka chart dan atur zoom/warna agar candle terlihat jelas.
+2. Tekan **`F9`** atau klik **Mulai live**. Jika belum ada area tersimpan, drag area price chart sekali.
+3. Kembalikan fokus ke CandleLab tanpa menutupi area chart. Aplikasi membaca area yang sama setiap **2 detik** dan memperbarui grafik serta probabilitas secara otomatis.
+4. **Ctrl+F9** memilih area baru; **F9** atau **Stop live** menghentikan monitor.
+5. Opsi **Abaikan candle paling kanan** aktif secara default. Candle yang masih terbentuk tetap tampil pada grafik tetapi tidak ikut prediksi. Ketika candle baru muncul dan urutan stabil, candle yang sudah selesai otomatis dihitung.
+6. Untuk eksperimen, klik **Kunci prediksi live & berhenti**. Snapshot yang sedang dihitung disimpan, monitor berhenti, dan prediksi dikunci. Jika live dihentikan tanpa dikunci, data set lama tidak berubah.
+
+Perubahan urutan warna harus terlihat dalam **dua pembacaan berturut-turut** sebelum diterima. Ini meredam satu pembacaan yang keliru dengan konsekuensi jeda sekitar satu interval. Selama live, jangan menutupi chart dengan jendela lain atau mengubah zoom/warna. Indikator konsistensi dan waktu pembacaan terakhir tampil pada status bar.
+
+Worker berjalan di background thread dan berhenti saat aplikasi ditutup. Antrean hanya menyimpan hasil terbaru agar UI tidak tertinggal. Screenshot/data live tidak ditulis ke disk setiap interval dan tidak dikirim ke internet.
 
 ## Membaca candle langsung dari layar
 
@@ -157,7 +172,7 @@ python -m pip install -r requirements.txt
 python -m unittest discover -s tests -v
 ```
 
-Cakupan meliputi validasi OHLC, arah/doji, rumus Bayesian, pola dan jendela, rentang metrik, pencegahan kebocoran data backtest, format CSV, round-trip ekspor, eksperimen benar/salah/doji, pembatalan, pemulihan penyimpanan, serta deteksi candle terisi/hollow, teal/merah, noise, gambar kosong, dan perubahan resolusi.
+Cakupan meliputi validasi OHLC, arah/doji, rumus Bayesian, pola dan jendela, rentang metrik, pencegahan kebocoran data backtest, format CSV, round-trip ekspor, eksperimen benar/salah/doji, pembatalan, pemulihan penyimpanan, deteksi candle terisi/hollow, teal/merah, noise, gambar kosong, perubahan resolusi, worker live berulang, antrean hasil terbaru, dan penanganan error tangkapan.
 
 Pada mesin desktop yang memiliki display, smoke test berikut membuka seluruh halaman dan menguji penguncian prediksi dengan folder data sementara:
 

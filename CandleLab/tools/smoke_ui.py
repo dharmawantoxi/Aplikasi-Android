@@ -14,6 +14,7 @@ with tempfile.TemporaryDirectory() as directory:
 
     from PIL import Image, ImageDraw
 
+    from candlelab.live_monitor import MonitorEvent
     from candlelab.model import GREEN, RED
     from candlelab.screen_capture import capture_region
     from candlelab.ui import CandleLabApp
@@ -56,6 +57,18 @@ with tempfile.TemporaryDirectory() as directory:
 
         app.after(400, close_preview)
         app._show_screen_result(result)
-        print("GUI smoke test passed: pages, prediction lock, screen capture, and vision preview.")
+
+        # Simulasikan event worker live tanpa memulai tangkapan kedua.
+        app.live_active = True
+        app.live_generation = 99
+        app.live_candles = []
+        app.live_sequence = ""
+        app.show_page("prediction")
+        app._process_live_result(MonitorEvent(99, result=result, elapsed=0.01))
+        app.update()
+        assert len(app._chart_candles()) == 24
+        assert len(app._source_candles()) == 23  # candle forming dikecualikan
+        app.stop_live_monitor(refresh=False)
+        print("GUI smoke test passed: pages, screen capture, vision preview, and live updates.")
     finally:
         app.destroy()

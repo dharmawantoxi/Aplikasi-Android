@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import queue
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import traceback
@@ -10,6 +11,7 @@ from . import APP_NAME, __version__
 from .charts import CandleChart, LogoMark, ProbabilityBar
 from .csv_io import export_csv, load_csv
 from .experiments import summarise
+from .live_monitor import LiveScreenMonitor, MonitorEvent
 from .model import (
     DOJI, GREEN as GREEN_DIRECTION, PRIOR_STRENGTH, RED as RED_DIRECTION,
     Candle, CandleModel, make_demo_candles,
@@ -38,6 +40,19 @@ class CandleLabApp(tk.Tk):
         self.store = JsonStore()
         self.state = self.store.load()
         self.screen_region = None
+        self.live_monitor = None
+        self.live_events = queue.Queue(maxsize=3)
+        self.live_generation = 0
+        self.live_active = False
+        self.live_candles = []
+        self.live_sequence = ""
+        self.live_pending_sequence = None
+        self.exclude_forming_var = tk.BooleanVar(value=True)
+        self.prediction_chart = None
+        self.forecast_panel = None
+        self.backtest_panel = None
+        self.data_badge_frame = None
+        self.data_badge_label = None
         self.current_page = "prediction"
         self.order_var = tk.StringVar(value="1 candle terakhir")
         self.window_var = tk.StringVar(value="60 candle")
@@ -87,6 +102,8 @@ class CandleLabApp(tk.Tk):
                         background=SURFACE, foreground=INK, arrowcolor=MUTED)
         style.configure("Vertical.TScrollbar", background=LINE, troughcolor=BG,
                         bordercolor=BG, arrowcolor=MUTED)
+        style.configure("Candle.TCheckbutton", background=SURFACE, foreground=INK,
+                        font=(FONT, 8), focuscolor=SURFACE)
 
     def _set_icon(self):
         try:
@@ -158,6 +175,8 @@ class CandleLabApp(tk.Tk):
         self.bind("<F5>", lambda _event: self.refresh())
         self.bind("<F8>", lambda _event: self.read_screen())
         self.bind("<Control-F8>", lambda _event: self.read_screen(reuse_region=True))
+        self.bind("<F9>", lambda _event: self.toggle_live())
+        self.bind("<Control-F9>", lambda _event: self.toggle_live(select_new=True))
 
     def _set_icon_buttons(self):
         for key, nav in self.nav_buttons.items():
@@ -169,8 +188,11 @@ class CandleLabApp(tk.Tk):
             )
 
     def _update_status(self):
-        kind = "simulasi" if self.state.is_demo else "data saya"
-        self.count_var.set(f"{len(self.state.candles)} candle  •  {kind}  •  tersimpan lokal")
+        if self.live_active:
+            self.count_var.set(f"LIVE  •  {len(self.live_candles)} candle  •  data tersimpan tidak berubah")
+        else:
+            kind = "simulasi" if self.state.is_demo else "data saya"
+            self.count_var.set(f"{len(self.state.candles)} candle  •  {kind}  •  tersimpan lokal")
 
     def set_status(self, message):
         self.status_var.set(message)
@@ -178,6 +200,11 @@ class CandleLabApp(tk.Tk):
 
     def show_page(self, name):
         self.current_page = name
+        self.prediction_chart = None
+        self.forecast_panel = None
+        self.backtest_panel = None
+        self.data_badge_frame = None
+        self.data_badge_label = None
         for child in self.page_host.winfo_children():
             child.destroy()
         self._set_icon_buttons()
@@ -200,8 +227,17 @@ class CandleLabApp(tk.Tk):
     def _window(self):
         return 0 if self.window_var.get().lower().startswith("semua") else int(self.window_var.get().split()[0])
 
+    def _chart_candles(self):
+        return self.live_candles if self.live_active else self.state.candles
+
+    def _source_candles(self):
+        candles = self._chart_candles()
+        if self.live_active and self.exclude_forming_var.get() and candles:
+            return candles[:-1]
+        return candles
+
     def _prediction(self):
-        return CandleModel.predict(self.state.candles, self._order(), self._window())
+        return CandleModel.predict(self._source_candles(), self._order(), self._window())
 
     def _save(self):
         try:
@@ -230,22 +266,29 @@ class CandleLabApp(tk.Tk):
         chart_title.pack(side="left")
         text(chart_title, "Pergerakan harga", 12, INK, "bold").pack(anchor="w")
         text(chart_title, "64 candle terakhir  •  Arahkan kursor untuk melihat OHLC", 8, MUTED).pack(anchor="w", pady=(3, 0))
-        badge_text = "DATA SIMULASI" if self.state.is_demo else "DATA SAYA"
-        badge_bg = WARNING_PALE if self.state.is_demo else GREEN_PALE
-        badge_fg = WARNING if self.state.is_demo else GREEN
+        badge_text = f"LIVE • {len(self.live_candles)} CANDLE" if self.live_active else "DATA SIMULASI" if self.state.is_demo else "DATA SAYA"
+        badge_bg = GREEN_PALE if self.live_active or not self.state.is_demo else WARNING_PALE
+        badge_fg = GREEN if self.live_active or not self.state.is_demo else WARNING
         badge = tk.Frame(chart_header, bg=badge_bg, padx=10, pady=6)
         badge.pack(side="right")
-        text(badge, badge_text, 8, badge_fg, "bold", badge_bg).pack()
+        self.data_badge_frame = badge
+        self.data_badge_label = text(badge, badge_text, 8, badge_fg, "bold", badge_bg)
+        self.data_badge_label.pack()
         button(chart_header, "▣  Baca layar", self.read_screen, "secondary").pack(side="right", padx=(0, 8))
+        live_button = button(chart_header, "■ Stop live" if self.live_active else "● Mulai live",
+                             self.toggle_live, "danger" if self.live_active else "primary")
+        live_button.pack(side="right", padx=(0, 8))
         chart = CandleChart(chart_card)
+        self.prediction_chart = chart
         chart.pack(fill="x", expand=True)
-        chart.set_data(self.state.candles)
+        chart.set_data(self._chart_candles())
 
         columns = tk.Frame(page, bg=BG)
         columns.pack(fill="x", pady=(0, 14))
         columns.grid_columnconfigure(0, weight=3, uniform="forecast")
         columns.grid_columnconfigure(1, weight=2, uniform="forecast")
         forecast = card(columns, bg=SIDEBAR, padding=22)
+        self.forecast_panel = forecast
         forecast.grid(row=0, column=0, sticky="nsew", padx=(0, 7))
         settings = card(columns, padding=20)
         settings.grid(row=0, column=1, sticky="nsew", padx=(7, 0))
@@ -266,9 +309,14 @@ class CandleLabApp(tk.Tk):
         if not prediction.available:
             text(parent, "Data belum cukup", 22, "#FFFFFF", "bold", SIDEBAR).pack(anchor="w", pady=(14, 7))
             text(parent, prediction.reason, 10, "#B8C9C1", bg=SIDEBAR, wraplength=340).pack(anchor="w")
-            text(parent, f"Minimal 20 candle dan 12 non-doji. Saat ini {len(self.state.candles)} candle.",
+            text(parent, f"Minimal 20 candle dan 12 non-doji. Saat ini {len(self._source_candles())} candle yang dihitung.",
                  9, "#82998F", bg=SIDEBAR).pack(anchor="w", pady=(16, 0))
-            button(parent, "Tambah candle", self.add_candle_dialog, "accent").pack(anchor="w", pady=(18, 0))
+            if self.live_active:
+                text(parent, "Pada mode live, tangkap minimal 21 candle jika candle paling kanan diabaikan.",
+                     8, ACCENT, bg=SIDEBAR, wraplength=340).pack(anchor="w", pady=(8, 0))
+                button(parent, "Stop live", self.toggle_live, "accent").pack(anchor="w", pady=(18, 0))
+            else:
+                button(parent, "Tambah candle", self.add_candle_dialog, "accent").pack(anchor="w", pady=(18, 0))
             return
 
         direction = prediction.predicted_direction
@@ -301,7 +349,8 @@ class CandleLabApp(tk.Tk):
                  8, "#B8C9C1", bg=SIDEBAR_SOFT).pack(anchor="w", pady=(3, 0))
             button(parent, "Tambah candle aktual", self.add_candle_dialog, "accent").pack(fill="x", pady=(10, 0))
         else:
-            button(parent, "Kunci prediksi untuk eksperimen", self.lock_prediction, "accent").pack(fill="x", pady=(14, 0))
+            lock_text = "Kunci prediksi live & berhenti" if self.live_active else "Kunci prediksi untuk eksperimen"
+            button(parent, lock_text, self.lock_prediction, "accent").pack(fill="x", pady=(14, 0))
 
     def _fill_settings(self, parent):
         text(parent, "Pengaturan model", 12, INK, "bold").pack(anchor="w")
@@ -323,14 +372,38 @@ class CandleLabApp(tk.Tk):
         text(parent, f"Prior Bayesian: {PRIOR_STRENGTH:g} observasi", 9, INK, "bold").pack(anchor="w")
         text(parent, "Mencegah probabilitas 0% atau 100% hanya karena pola jarang muncul. Doji diabaikan dalam pola.",
              8, MUTED, wraplength=230, justify="left").pack(anchor="w", pady=(5, 0))
+        live_separator = tk.Frame(parent, bg=LINE, height=1)
+        live_separator.pack(fill="x", pady=(13, 11))
+        text(parent, "MODE LIVE • 2 DETIK", 8, GREEN if self.live_active else MUTED, "bold").pack(anchor="w")
+        check = ttk.Checkbutton(
+            parent, text="Abaikan candle paling kanan\n(masih terbentuk)",
+            variable=self.exclude_forming_var, command=self._live_setting_changed,
+            style="Candle.TCheckbutton",
+        )
+        check.pack(anchor="w", pady=(7, 5))
+        text(parent, "Perubahan urutan diterima setelah 2 pembacaan konsisten." if self.live_active else "Pilih area sekali, lalu biarkan CandleLab membaca otomatis.",
+             8, MUTED, wraplength=240).pack(anchor="w", pady=(0, 8))
+        button(parent, "■ Stop live" if self.live_active else "● Mulai live",
+               self.toggle_live, "danger" if self.live_active else "secondary").pack(fill="x")
 
     def _model_changed(self, _event=None):
         self.refresh()
 
+    def _live_setting_changed(self):
+        self._refresh_live_panels(redraw_chart=False)
+
     def _fill_backtest(self, page):
-        result = CandleModel.backtest(self.state.candles, self._order(), self._window())
-        panel = card(page, padding=20)
-        panel.pack(fill="x", pady=(0, 14))
+        self.backtest_panel = card(page, padding=20)
+        self.backtest_panel.pack(fill="x", pady=(0, 14))
+        self._render_backtest()
+
+    def _render_backtest(self):
+        if self.backtest_panel is None:
+            return
+        panel = self.backtest_panel
+        for child in panel.winfo_children():
+            child.destroy()
+        result = CandleModel.backtest(self._source_candles(), self._order(), self._window())
         header = tk.Frame(panel, bg=SURFACE)
         header.pack(fill="x", pady=(0, 14))
         titles = tk.Frame(header, bg=SURFACE)
@@ -355,7 +428,18 @@ class CandleLabApp(tk.Tk):
 
     def lock_prediction(self):
         try:
-            self.state.lock_prediction(self._prediction())
+            prediction = self._prediction()
+            live_snapshot = list(self._source_candles())
+            if self.live_active:
+                if not messagebox.askyesno(
+                    "Kunci prediksi live?",
+                    "Mode live akan berhenti dan candle yang sedang dihitung akan disimpan sebagai data eksperimen. "
+                    "Candle paling kanan tidak ikut jika opsi abaikan aktif. Lanjutkan?", parent=self,
+                ):
+                    return
+                self.stop_live_monitor(refresh=False)
+                self.state.replace_candles(live_snapshot)
+            self.state.lock_prediction(prediction)
         except ValueError as exc:
             messagebox.showwarning("Belum dapat dikunci", str(exc), parent=self)
             return
@@ -505,8 +589,160 @@ class CandleLabApp(tk.Tk):
         first_entry.focus_set()
         dialog.wait_window()
 
+    def toggle_live(self, select_new=False):
+        if self.live_active:
+            self.stop_live_monitor(refresh=False)
+            if select_new:
+                self.start_live_monitor(select_new=True)
+            else:
+                self.refresh()
+        else:
+            self.start_live_monitor(select_new=select_new)
+
+    def start_live_monitor(self, select_new=False):
+        pending = self.state.pending
+        if pending:
+            if not messagebox.askyesno(
+                "Mulai mode live?",
+                "Prediksi yang masih menunggu akan dibatalkan agar tidak dinilai pada data yang berubah. Lanjutkan?",
+                parent=self,
+            ):
+                return
+            pending.cancel("Dibatalkan saat mode live dimulai")
+            if not self._save():
+                return
+        try:
+            self.configure(cursor="watch")
+            if select_new or not self.screen_region:
+                captured = select_and_capture(self)
+                if captured is None:
+                    return
+                image, box = captured
+            else:
+                box = self.screen_region
+                self.withdraw()
+                self.update()
+                try:
+                    image = capture_after_overlay_closed(box)
+                finally:
+                    self.deiconify()
+                    self.update()
+            initial = detect_candles(image)
+            self.screen_region = box
+        except (RuntimeError, ValueError, OSError) as exc:
+            messagebox.showerror("Mode live gagal", str(exc), parent=self)
+            return
+        finally:
+            self.configure(cursor="")
+            self.deiconify()
+
+        self.live_generation += 1
+        self.live_active = True
+        self.live_candles = list(initial.candles)
+        self.live_sequence = initial.sequence
+        self.live_pending_sequence = None
+        self.live_events = queue.Queue(maxsize=3)
+        self.live_monitor = LiveScreenMonitor(
+            self.live_events, self.screen_region, self.live_generation, interval=2.0,
+        )
+        self.live_monitor.start()
+        self.set_status(
+            f"LIVE aktif • {len(self.live_candles)} candle • jangan tutupi area grafik yang dipilih."
+        )
+        self.show_page("prediction")
+        self.after(120, self._poll_live_events)
+
+    def stop_live_monitor(self, refresh=True):
+        if self.live_monitor:
+            self.live_monitor.stop()
+        self.live_monitor = None
+        self.live_generation += 1
+        self.live_active = False
+        self.live_candles = []
+        self.live_sequence = ""
+        self.live_pending_sequence = None
+        self.live_events = queue.Queue(maxsize=3)
+        self.set_status("Mode live berhenti. Data tersimpan tidak berubah.")
+        if refresh:
+            self.refresh()
+
+    def _poll_live_events(self):
+        if not self.live_active:
+            return
+        latest = None
+        error = ""
+        while True:
+            try:
+                event = self.live_events.get_nowait()
+            except queue.Empty:
+                break
+            if event.generation != self.live_generation:
+                continue
+            if event.error:
+                error = event.error
+            else:
+                latest = event
+        if error:
+            self.stop_live_monitor(refresh=False)
+            self.refresh()
+            messagebox.showerror(
+                "Mode live berhenti",
+                "Pembacaan layar gagal. Pastikan area masih terlihat dan izin tangkapan layar tersedia.\n\n" + error,
+                parent=self,
+            )
+            return
+        if latest is not None:
+            self._process_live_result(latest)
+        if self.live_active:
+            self.after(120, self._poll_live_events)
+
+    def _process_live_result(self, event: MonitorEvent):
+        result = event.result
+        if result is None:
+            return
+        if not result.candles:
+            self.set_status("LIVE • candle belum terbaca; periksa ukuran/warna area grafik.")
+            return
+        sequence = result.sequence
+        if self.live_sequence and sequence != self.live_sequence:
+            if sequence != self.live_pending_sequence:
+                self.live_pending_sequence = sequence
+                self.set_status("LIVE • perubahan candle terdeteksi; menunggu pembacaan kedua untuk konfirmasi.")
+                return
+        self.live_pending_sequence = None
+        changed = sequence != self.live_sequence or not self.live_candles
+        self.live_candles = list(result.candles)
+        self.live_sequence = sequence
+        self.set_status(
+            f"LIVE • {len(self.live_candles)} candle • konsistensi {format_percent(result.confidence, 0)}"
+            f" • {event.elapsed:.1f} detik/baca • {datetime.now():%H:%M:%S}"
+        )
+        self._refresh_live_panels(redraw_chart=True, redraw_model=changed)
+
+    def _refresh_live_panels(self, redraw_chart=True, redraw_model=True):
+        if self.current_page != "prediction":
+            return
+        if redraw_chart and self.prediction_chart is not None:
+            self.prediction_chart.set_data(self._chart_candles())
+        if redraw_model and self.forecast_panel is not None:
+            for child in self.forecast_panel.winfo_children():
+                child.destroy()
+            self._fill_forecast(self.forecast_panel)
+            self._render_backtest()
+        if self.data_badge_label is not None:
+            if self.live_active:
+                badge_text, badge_bg, badge_fg = f"LIVE • {len(self.live_candles)} CANDLE", GREEN_PALE, GREEN
+            elif self.state.is_demo:
+                badge_text, badge_bg, badge_fg = "DATA SIMULASI", WARNING_PALE, WARNING
+            else:
+                badge_text, badge_bg, badge_fg = "DATA SAYA", GREEN_PALE, GREEN
+            self.data_badge_frame.configure(bg=badge_bg)
+            self.data_badge_label.configure(text=badge_text, bg=badge_bg, fg=badge_fg)
+
     def read_screen(self, reuse_region=False):
         """Tangkap area grafik dan selalu minta verifikasi sebelum impor."""
+        if self.live_active:
+            self.stop_live_monitor(refresh=False)
         try:
             self.configure(cursor="watch")
             if reuse_region and self.screen_region:
@@ -811,24 +1047,31 @@ class CandleLabApp(tk.Tk):
                 "Ctrl+F8 menangkap ulang area yang sama. Area hanya disimpan dalam memori selama aplikasi berjalan. Screenshot tidak disimpan ke disk dan tidak dikirim ke mana pun.",
                 "Skala OHLC hasil deteksi berasal dari posisi piksel, bukan harga aset sesungguhnya. Warna custom, candle yang saling menempel, chart kecil, atau anti-alias ekstrem dapat menurunkan akurasi deteksi. Di macOS diperlukan izin Screen Recording; Wayland dapat membatasi tangkapan layar.",
             ]),
-            ("03  Rumus probabilitas", [
+            ("03  Mode live tanpa screenshot berulang", [
+                "Tekan F9 atau klik ‘Mulai live’. Jika belum ada area, pilih area price chart sekali. Setelah itu worker membaca area yang sama setiap 2 detik dan probabilitas diperbarui otomatis; Anda tidak perlu mengambil screenshot manual.",
+                "Ctrl+F9 memilih area baru. Selama live, jangan menutupi area chart dengan CandleLab atau jendela lain dan jangan mengubah zoom/warna chart. Tekan ‘Stop live’ atau F9 untuk berhenti.",
+                "Perubahan urutan warna harus muncul pada dua pembacaan berturut-turut sebelum diterima. Ini meredam satu deteksi yang keliru, tetapi menambah jeda sekitar satu interval.",
+                "Opsi ‘Abaikan candle paling kanan’ aktif secara default karena candle tersebut biasanya masih terbentuk. Grafik tetap menampilkannya, tetapi prediksi memakai candle sebelumnya. Saat candle baru muncul, candle yang sudah selesai otomatis masuk perhitungan.",
+                "Data live dan screenshot hanya berada di memori; aplikasi tidak menulis data set setiap interval. ‘Kunci prediksi live & berhenti’ menyimpan snapshot yang sedang dihitung, menghentikan monitor, dan membuat prediksi eksperimen. Jika live dihentikan tanpa dikunci, data tersimpan sebelumnya tetap dipakai.",
+            ]),
+            ("04  Rumus probabilitas", [
                 "Candle hijau berarti close > open, merah berarti close < open, dan doji berarti close = open. Doji ditampilkan, tetapi diabaikan saat membentuk pola dan tidak dinilai.",
                 "Model mencari pola 1–3 arah terakhir di dalam jendela 30/60/100 atau semua data. Frekuensi dasar adalah proporsi hijau pada seluruh candle non-doji di jendela tersebut.",
                 "P(Hijau) = (jumlah hijau setelah pola + 6 × frekuensi dasar hijau) ÷ (jumlah pola + 6). Angka 6 adalah prior Bayesian agar pola langka tidak menghasilkan kepastian semu.",
                 "Contoh: pola muncul 4 kali dan 3 diikuti hijau bukan berarti peluang pasti 75%. Frekuensi dasar ikut menarik estimasi agar lebih hati-hati.",
             ]),
-            ("04  Backtest dan penilaian", [
+            ("05  Backtest dan penilaian", [
                 "Backtest walk-forward memprediksi setiap target hanya dari candle sebelum target. Model tidak melatih memakai candle masa depan.",
                 "Baseline menebak arah berdasarkan frekuensi dasar pada data pelatihan yang sama. Bandingkan akurasi model dengan baseline untuk melihat apakah pola menambah informasi.",
                 "Brier score adalah rata-rata (P(Hijau) − aktual hijau)², dengan aktual hijau bernilai 1 dan merah 0. Nilai mendekati 0 lebih baik. Probabilitas 50%–50% memperoleh skor arah 0,5.",
                 "Backtest pada data yang dipakai berulang untuk memilih pengaturan tetap dapat overfit. Idealnya gunakan data baru yang belum pernah dilihat untuk eksperimen terkunci.",
             ]),
-            ("05  Format CSV", [
+            ("06  Format CSV", [
                 "Header yang disarankan: timestamp,open,high,low,close. Kolom timestamp bersifat opsional; open, high, low, close wajib. Header bahasa Inggris dan Indonesia umum dikenali.",
                 "Pemisah koma, titik-koma, atau tab didukung. File tanpa header dapat berisi open,high,low,close; jika ada lima kolom, kolom pertama dianggap waktu.",
                 "Encoding harus UTF-8, ukuran maksimal 4 MiB, dan maksimal 2.000 candle. Semua baris divalidasi sebelum data set diganti; impor yang gagal tidak mengubah data.",
             ]),
-            ("06  Batasan & privasi", [
+            ("07  Batasan & privasi", [
                 "Ini adalah model statistik sederhana untuk eksperimen, bukan kecerdasan buatan yang mengetahui masa depan. Harga, volume, berita, spread, likuiditas, dan kondisi pasar lain tidak dianalisis.",
                 "Aplikasi tidak memiliki koneksi bursa, tidak mengambil harga live, dan tidak memberi rekomendasi beli/jual. Probabilitas tinggi tetap dapat menghasilkan prediksi salah.",
                 "Semua data dan riwayat disimpan lokal sebagai JSON tanpa enkripsi. Tidak ada akun atau sinkronisasi. Ekspor CSV secara berkala jika perlu cadangan.",
@@ -842,6 +1085,8 @@ class CandleLabApp(tk.Tk):
                 text(panel, paragraph, 9, INK, wraplength=650, justify="left").pack(anchor="w", fill="x", pady=4)
 
     def _close(self):
+        if self.live_active:
+            self.stop_live_monitor(refresh=False)
         self._save()
         self.destroy()
 
