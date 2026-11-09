@@ -6,19 +6,24 @@ from candlelab.model import GREEN, RED
 from candlelab.vision import detect_candles
 
 
-def chart(directions, hollow=False, noise=False):
-    image = Image.new("RGB", (40 + len(directions) * 16, 300), "#101513")
+def chart(directions, hollow=False, noise=False, body=8, gap=16, background="#101513",
+          palette=None):
+    image = Image.new("RGB", (40 + len(directions) * gap, 300), background)
     draw = ImageDraw.Draw(image)
+    outline = 2 if body >= 8 else 1
     for index, direction in enumerate(directions):
-        x = 20 + index * 16
-        color = "#26A69A" if direction == GREEN else "#EF5350"
+        x = 20 + index * gap
+        if palette:
+            color = palette[GREEN] if direction == GREEN else palette[RED]
+        else:
+            color = "#26A69A" if direction == GREEN else "#EF5350"
         top = 50 + (index % 5) * 8
         bottom = 190 - (index % 4) * 7
-        draw.line((x + 4, top - 15, x + 4, bottom + 15), fill=color, width=1)
+        draw.line((x + body // 2, top - 15, x + body // 2, bottom + 15), fill=color, width=1)
         if hollow:
-            draw.rectangle((x, top, x + 8, bottom), outline=color, width=2)
+            draw.rectangle((x, top, x + body, bottom), outline=color, width=outline)
         else:
-            draw.rectangle((x, top, x + 8, bottom), fill=color)
+            draw.rectangle((x, top, x + body, bottom), fill=color)
     if noise:
         # Logo kecil dan garis sumbu tidak boleh menjadi deret utama.
         draw.rectangle((2, 2, 5, 6), fill="#26A69A")
@@ -67,6 +72,26 @@ class VisionTests(unittest.TestCase):
         result = detect_candles(image)
         self.assertEqual(len(result.candles), 30)
         self.assertLessEqual(result.annotated_image.width, 1600)
+
+    def test_scaled_broker_chart_with_hollow_bodies_survives_text_noise(self):
+        # Meniru chart broker ringan: body lebar + hollow, banyak teks tombol
+        # berwarna yang lebih dulu lolos deteksi pada versi sebelumnya.
+        expected = [RED, RED, GREEN, RED, GREEN, GREEN, RED, RED, GREEN, RED, GREEN, GREEN]
+        image = chart(expected, hollow=True, body=8, gap=20,
+                      background="#FEFEFE", palette={GREEN: "#009B2E", RED: "#D74C39"})
+        draw = ImageDraw.Draw(image)
+        for x in range(6, 60, 9):
+            draw.rectangle((x, 4, x + 7, 11), fill="#009B2E")
+            draw.rectangle((x, 278, x + 8, 285), fill="#D74C39")
+        scaled = image.resize((image.width * 4, image.height * 4), Image.LANCZOS)
+        result = detect_candles(scaled)
+        self.assertEqual(result.sequence, "".join("M" if item == RED else "H" for item in expected))
+        self.assertGreaterEqual(result.confidence, 0.8)
+
+    def test_wide_candles_are_not_rejected_by_absolute_width_limit(self):
+        expected = [GREEN, RED, GREEN] * 8
+        result = detect_candles(chart(expected, body=24, gap=40))
+        self.assertEqual([item.direction for item in result.detections], expected)
 
 
 if __name__ == "__main__":

@@ -111,13 +111,51 @@ def _components(mask: bytearray, width: int, height: int, direction: int) -> lis
     return components
 
 
+def _is_candle_like(component: Component) -> bool:
+    """Bentuk body candle: mendekati persegi panjang, bukan teks atau tombol.
+
+    Body candle yang terisi padat oleh rasio area/lebar. Wick membuat tinggi
+    komponen sedikit lebih besar, sedangkan ikon/teks/logo punya baris tipis
+    yang tidak konsisten.
+    """
+    if component.width < 2 or component.height < 4:
+        return False
+    # Kolom body (left/right/bottom/top) cukup padat? Baris label teks tipis.
+    columns: dict[int, int] = {}
+    for y, count in component.row_counts.items():
+        if count >= component.width * 0.5:
+            columns[y] = columns.get(y, 0) + 1
+    filled_rows = len(columns)
+    if filled_rows / component.height < 0.18:
+        return False
+    # Body, termasuk hollow, harus mendominasi tinggi komponen (wick relatif tipis).
+    body = _body_box(component)
+    if body is None:
+        return False
+    if (body[3] - body[1] + 1) / component.height < 0.2:
+        return False
+    return True
+
+
+def _typical_width(components: list[Component]) -> int:
+    """Lebar body yang paling khas; candle berbagi lebar, teks/ikon tidak."""
+    widths = [item.width for item in components]
+    ranked = sorted(set(widths), key=lambda value: (widths.count(value), value), reverse=True)
+    return ranked[0] if ranked else 0
+
+
 def _body_box(component: Component) -> Optional[tuple[int, int, int, int]]:
+    """Batas body; baris wick dominan juga diterima agar candle tipis tetap terbaca."""
     x1, y1, x2, y2 = component.box
     threshold = max(2, round(component.width * 0.50))
-    rows = [y for y, count in component.row_counts.items() if count >= threshold]
-    if not rows or max(rows) - min(rows) + 1 < 2:
+    strong = [y for y, count in component.row_counts.items() if count >= threshold]
+    if not strong or max(strong) - min(strong) + 1 < 2:
         return None
-    return x1, min(rows), x2, max(rows)
+    if component.width >= 6:
+        wide = [y for y, count in component.row_counts.items() if count >= component.width * 0.75]
+        if len(wide) >= 2:
+            return x1, min(wide), x2, max(wide)
+    return x1, min(strong), x2, max(strong)
 
 
 def _regular_series(components: list[Component]) -> tuple[list[Component], float]:
@@ -125,10 +163,22 @@ def _regular_series(components: list[Component]) -> tuple[list[Component], float
     if len(components) < 3:
         return components, 0.35 if components else 0.0
     widths = [item.width for item in components]
-    common_width = median(widths)
-    # Satu deret candle umumnya memiliki lebar body yang hampir sama.
-    width_filtered = [item for item in components if abs(item.width - common_width) <= max(1, common_width * 0.35)]
-    if len(width_filtered) >= max(3, len(components) * 0.35):
+    common_width = _typical_width(components)
+    if common_width <= 0:
+        common_width = median(widths)
+    # Candle lebih tinggi daripada lebar body-nya. Teks/label tombol hampir selalu
+    # lebar dan tipis, sehingga disaring sebelum pencarian deret.
+    aspect = [item for item in components if item.height >= item.width * 0.5]
+    if len(aspect) >= 3:
+        components = aspect
+    common_width = _typical_width(components) or common_width
+    # Satu deret candle umumnya memiliki lebar body yang hampir sama. Mode dipakai
+    # agar teks/ikon yang jumlahnya banyak tidak menggeser lebar candle sebenarnya.
+    width_filtered = [item for item in components if abs(item.width - common_width) <= max(1, common_width * 0.30)]
+    if not width_filtered:
+        width_filtered = [item for item in components
+                          if abs(item.width - median(widths)) <= max(1, median(widths) * 0.35)]
+    if len(width_filtered) >= max(3, len(components) * 0.20):
         components = width_filtered
 
     # Satu komponen per posisi x. Jika volume ikut terpilih, komponen yang lebih
@@ -175,10 +225,31 @@ def _regular_series(components: list[Component]) -> tuple[list[Component], float
                 errors[index] = errors[previous] + error
     best = max(range(len(chains)), key=lambda index: (len(chains[index]), -errors[index]))
     selected = [components[index] for index in chains[best]]
+
+    # Tombol/ikon kecil bisa sejajar dengan deret candle. Candle sungguhan jauh
+    # lebih tinggi, sehingga komponen yang ekstrem pendek dibuang.
+    if len(selected) >= 5:
+        median_height = median(item.height for item in selected)
+        kept = [item for item in selected if item.height >= median_height * 0.35]
+        if len(kept) >= 3:
+            selected = kept
+
     consistency = 1.0 / (1.0 + errors[best] / max(1, len(selected) - 1))
     coverage = len(selected) / len(components)
     confidence = max(0.0, min(1.0, consistency * (0.55 + 0.45 * coverage)))
     return selected, confidence
+
+
+def _candles_touch(detections: list[DetectedCandle]) -> bool:
+    """Candle yang hampir menempel menyulitkan pemisahan body saat terbaca."""
+    if len(detections) < 4:
+        return False
+    centers = [(item.box[0] + item.box[2]) / 2 for item in detections]
+    gaps = [b - a for a, b in zip(centers, centers[1:]) if b > a]
+    widths = [item.box[2] - item.box[0] + 1 for item in detections]
+    if not gaps or not widths:
+        return False
+    return median(gaps) < median(widths) * 1.05
 
 
 def detect_candles(image: "Image.Image") -> VisionResult:
@@ -198,9 +269,10 @@ def detect_candles(image: "Image.Image") -> VisionResult:
     raw += _components(red_mask, work.width, work.height, RED)
     candidates: list[Component] = []
     for component in raw:
-        if component.width < 2 or component.height < 4:
+        # Batas ukuran relatif agar chart yang diperbesar/diskala tetap terbaca.
+        if component.width > max(12, work.width * 0.16) or component.height > work.height * 0.95:
             continue
-        if component.width > min(80, work.width * 0.16):
+        if not _is_candle_like(component):
             continue
         if _body_box(component) is None:
             continue
@@ -245,6 +317,8 @@ def detect_candles(image: "Image.Image") -> VisionResult:
     warning = ""
     if len(detections) < 20:
         warning = "Kurang dari 20 candle terdeteksi; model probabilitas mungkin belum tersedia."
+    elif _candles_touch(detections):
+        warning = "Candle tampak saling menempel sehingga batas body sulit dipisahkan. Perbesar skala chart lalu baca ulang."
     elif confidence < 0.65:
         warning = "Spasi/lebar deteksi kurang konsisten. Periksa preview dengan teliti."
     return VisionResult([item.candle for item in detections], detections, annotated,
