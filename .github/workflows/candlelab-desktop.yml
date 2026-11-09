@@ -1,0 +1,73 @@
+name: CandleLab Desktop CI
+
+on:
+  push:
+    paths:
+      - 'CandleLab/**'
+      - '.github/workflows/candlelab-desktop.yml'
+  pull_request:
+    paths:
+      - 'CandleLab/**'
+      - '.github/workflows/candlelab-desktop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Run desktop logic tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install runtime dependencies
+        run: python -m pip install -r CandleLab/requirements.txt
+      - name: Compile Python sources
+        run: python -m compileall -q CandleLab
+      - name: Run unit tests
+        working-directory: CandleLab
+        run: python -m unittest discover -s tests -v
+
+  windows-exe:
+    name: Build portable Windows executable
+    needs: test
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install runtime dependencies
+        run: python -m pip install -r CandleLab/requirements.txt
+      - name: Run tests on Windows
+        working-directory: CandleLab
+        run: python -m unittest discover -s tests -v
+      - name: Render all desktop pages
+        working-directory: CandleLab
+        run: python tools/smoke_ui.py
+      - name: Install PyInstaller
+        run: python -m pip install pyinstaller==6.16.0
+      - name: Build one-file desktop app
+        working-directory: CandleLab
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name CandleLab --paths . candlelab.py
+      - name: Verify executable exists
+        working-directory: CandleLab
+        run: |
+          if (!(Test-Path 'dist/CandleLab.exe')) { throw 'CandleLab.exe was not produced' }
+          Get-Item 'dist/CandleLab.exe' | Select-Object Name,Length
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: CandleLab-Windows-x64
+          path: CandleLab/dist/CandleLab.exe
+          if-no-files-found: error
+          retention-days: 30
