@@ -15,6 +15,9 @@ from .model import (
     Candle, CandleModel, make_demo_candles,
 )
 from .storage import JsonStore
+from .screen_capture import capture_after_overlay_closed
+from .screen_ui import select_and_capture
+from .vision import VisionResult, detect_candles
 from .theme import (
     ACCENT, BG, DOJI as DOJI_COLOR, FONT, GREEN, GREEN_BRIGHT, GREEN_PALE,
     INK, LINE, MUTED, RED, SIDEBAR, SIDEBAR_SOFT, SURFACE,
@@ -26,6 +29,7 @@ from .widgets import ScrollFrame, metric, page_heading
 
 class CandleLabApp(tk.Tk):
     def __init__(self):
+        self._enable_dpi_awareness()
         super().__init__()
         self.title(f"{APP_NAME} — Eksperimen Probabilitas Candlestick")
         self.geometry("1180x800")
@@ -33,6 +37,7 @@ class CandleLabApp(tk.Tk):
         self.configure(bg=BG)
         self.store = JsonStore()
         self.state = self.store.load()
+        self.screen_region = None
         self.current_page = "prediction"
         self.order_var = tk.StringVar(value="1 candle terakhir")
         self.window_var = tk.StringVar(value="60 candle")
@@ -47,6 +52,20 @@ class CandleLabApp(tk.Tk):
         self.show_page("prediction")
         if self.store.warning:
             self.after(200, lambda: messagebox.showwarning("Data dipulihkan", self.store.warning, parent=self))
+
+    @staticmethod
+    def _enable_dpi_awareness():
+        # Koordinat ImageGrab dan overlay harus sama-sama memakai piksel fisik.
+        import sys
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                ctypes.windll.shcore.SetProcessDpiAwareness(2)
+            except Exception:
+                try:
+                    ctypes.windll.user32.SetProcessDPIAware()
+                except Exception:
+                    pass
 
     def _configure_style(self):
         style = ttk.Style(self)
@@ -137,6 +156,8 @@ class CandleLabApp(tk.Tk):
         self.bind("<Control-i>", lambda _event: self.import_csv())
         self.bind("<Control-s>", lambda _event: self.export_data())
         self.bind("<F5>", lambda _event: self.refresh())
+        self.bind("<F8>", lambda _event: self.read_screen())
+        self.bind("<Control-F8>", lambda _event: self.read_screen(reuse_region=True))
 
     def _set_icon_buttons(self):
         for key, nav in self.nav_buttons.items():
@@ -215,6 +236,7 @@ class CandleLabApp(tk.Tk):
         badge = tk.Frame(chart_header, bg=badge_bg, padx=10, pady=6)
         badge.pack(side="right")
         text(badge, badge_text, 8, badge_fg, "bold", badge_bg).pack()
+        button(chart_header, "▣  Baca layar", self.read_screen, "secondary").pack(side="right", padx=(0, 8))
         chart = CandleChart(chart_card)
         chart.pack(fill="x", expand=True)
         chart.set_data(self.state.candles)
@@ -350,6 +372,7 @@ class CandleLabApp(tk.Tk):
         titles.pack(side="left", fill="x", expand=True)
         actions = tk.Frame(heading, bg=BG)
         actions.pack(side="right", padx=(15, 0))
+        button(actions, "Baca layar", self.read_screen, "secondary").pack(side="left", padx=3)
         button(actions, "Impor CSV", self.import_csv, "secondary").pack(side="left", padx=3)
         button(actions, "+ Tambah candle", self.add_candle_dialog, "primary").pack(side="left", padx=3)
 
@@ -396,7 +419,7 @@ class CandleLabApp(tk.Tk):
         button(footer, "Ekspor CSV", self.export_data, "ghost").pack(side="left", padx=(0, 6))
         button(footer, "Muat data simulasi", self.reset_demo, "ghost").pack(side="left", padx=6)
         button(footer, "Hapus candle terakhir", self.delete_last, "danger").pack(side="right")
-        text(page, "Menampilkan hingga 500 candle terbaru  •  Ctrl+N tambah  •  Ctrl+I impor  •  Ctrl+S ekspor",
+        text(page, "Hingga 500 candle terbaru  •  F8 baca layar  •  Ctrl+F8 ulangi area  •  Ctrl+N tambah  •  Ctrl+I impor  •  Ctrl+S ekspor",
              8, MUTED, bg=BG).pack(anchor="w", pady=(10, 0))
 
     @staticmethod
@@ -481,6 +504,143 @@ class CandleLabApp(tk.Tk):
         first_entry = form.grid_slaves(row=1, column=0)[0]
         first_entry.focus_set()
         dialog.wait_window()
+
+    def read_screen(self, reuse_region=False):
+        """Tangkap area grafik dan selalu minta verifikasi sebelum impor."""
+        try:
+            self.configure(cursor="watch")
+            if reuse_region and self.screen_region:
+                self.withdraw()
+                self.update()
+                try:
+                    image = capture_after_overlay_closed(self.screen_region)
+                finally:
+                    self.deiconify()
+                    self.update()
+                box = self.screen_region
+            else:
+                captured = select_and_capture(self)
+                if captured is None:
+                    return
+                image, box = captured
+            self.screen_region = box
+            self.set_status("Menganalisis warna candle pada tangkapan layar…")
+            self.update_idletasks()
+            result = detect_candles(image)
+        except (RuntimeError, ValueError, OSError) as exc:
+            messagebox.showerror("Baca layar gagal", str(exc), parent=self)
+            return
+        finally:
+            self.configure(cursor="")
+            self.deiconify()
+        self.set_status(f"{len(result.candles)} candle terdeteksi — menunggu verifikasi Anda.")
+        self._show_screen_result(result)
+
+    def _show_screen_result(self, result: VisionResult):
+        from PIL import ImageTk
+
+        dialog = tk.Toplevel(self)
+        dialog.title("Verifikasi hasil baca layar")
+        dialog.configure(bg=BG, padx=22, pady=20)
+        dialog.minsize(760, 620)
+        dialog.transient(self)
+        heading = tk.Frame(dialog, bg=BG)
+        heading.pack(fill="x")
+        titles = tk.Frame(heading, bg=BG)
+        titles.pack(side="left")
+        text(titles, "Periksa deteksi sebelum digunakan", 17, INK, "bold", BG).pack(anchor="w")
+        text(titles, "Kotak berwarna menandai candle yang terbaca. Screenshot tidak disimpan atau dikirim.",
+             9, MUTED, bg=BG).pack(anchor="w", pady=(4, 0))
+        confidence_color = GREEN if result.confidence >= 0.65 else WARNING
+        text(heading, f"Konsistensi {format_percent(result.confidence, 0)}", 11,
+             confidence_color, "bold", BG).pack(side="right")
+
+        preview = tk.Frame(dialog, bg=SIDEBAR, highlightbackground=LINE, highlightthickness=1)
+        preview.pack(fill="both", expand=True, pady=(16, 12))
+        image = result.annotated_image.copy()
+        image.thumbnail((900, 390))
+        preview_image = ImageTk.PhotoImage(image)
+        image_label = tk.Label(preview, image=preview_image, bg=SIDEBAR)
+        image_label.image = preview_image
+        image_label.pack(expand=True, padx=8, pady=8)
+
+        summary = tk.Frame(dialog, bg=BG)
+        summary.pack(fill="x")
+        text(summary, f"{len(result.candles)} candle digunakan", 12, INK, "bold", BG).pack(side="left")
+        text(summary, f"{result.candidate_count} kandidat warna  •  H=hijau, M=merah, D=doji",
+             8, MUTED, bg=BG).pack(side="right")
+        sequence = result.sequence or "Tidak ada candle yang dapat dikenali."
+        text(dialog, sequence[-120:], 10, GREEN if result.candles else RED, "bold", BG,
+             wraplength=820).pack(anchor="w", pady=(9, 4))
+        notice = (result.warning + " " if result.warning else "") + \
+                 "Harga hasil baca layar hanya skala piksel relatif, bukan harga aset sebenarnya. " \
+                 "Potong hanya area price chart; hindari volume, indikator, toolbar, dan teks berwarna."
+        text(dialog, notice, 9, WARNING, bg=WARNING_PALE, wraplength=820,
+             padx=12, pady=10).pack(fill="x", pady=(5, 12))
+
+        actions = tk.Frame(dialog, bg=BG)
+        actions.pack(fill="x")
+        button(actions, "Batal", dialog.destroy, "ghost").pack(side="left")
+        repeat = button(actions, "Tangkap ulang area", lambda: None, "secondary")
+        # Argumen command dipasang terpisah agar dialog ditutup lebih dahulu.
+        repeat.configure(command=lambda: (dialog.destroy(), self.read_screen(reuse_region=True)))
+        repeat.pack(side="left", padx=(8, 0))
+        append = button(actions, "Tambah candle terakhir", lambda: None, "secondary")
+        append.configure(command=lambda: self._import_screen_last(dialog, result))
+        append.pack(side="right", padx=(8, 0))
+        replace = button(actions, "Ganti data dengan hasil", lambda: None, "primary")
+        replace.configure(command=lambda: self._import_screen_replace(dialog, result))
+        replace.pack(side="right")
+        if not result.candles:
+            append.configure(state="disabled")
+            replace.configure(state="disabled")
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+        dialog.grab_set()
+        dialog.wait_window()
+
+    def _import_screen_replace(self, dialog, result):
+        if not result.candles:
+            return
+        if not messagebox.askyesno(
+            "Gunakan hasil baca layar?",
+            f"Data set akan diganti dengan {len(result.candles)} candle hasil deteksi. "
+            "Prediksi tertunda akan dibatalkan. Pastikan kotak deteksi sudah benar.",
+            parent=dialog,
+        ):
+            return
+        try:
+            self.state.replace_candles(result.candles)
+        except ValueError as exc:
+            messagebox.showerror("Hasil tidak dapat digunakan", str(exc), parent=dialog)
+            return
+        if self._save():
+            dialog.destroy()
+            self.set_status(f"{len(result.candles)} candle dibaca dari layar dan disimpan.")
+            self.show_page("prediction")
+
+    def _import_screen_last(self, dialog, result):
+        if not result.candles:
+            return
+        last = result.candles[-1]
+        timestamp = datetime.now().timestamp()
+        if self.state.candles and self.state.candles[-1].timestamp:
+            timestamp = max(timestamp, self.state.candles[-1].timestamp + 1)
+        try:
+            resolved = self.state.append_candle(Candle(last.open, last.high, last.low, last.close, timestamp))
+        except ValueError as exc:
+            messagebox.showerror("Candle tidak dapat ditambahkan", str(exc), parent=dialog)
+            return
+        if not self._save():
+            return
+        dialog.destroy()
+        self.set_status("Candle terakhir dari layar ditambahkan.")
+        self.refresh()
+        if resolved:
+            outcome = ("Doji tidak dinilai." if resolved.actual_direction == DOJI else
+                       "Probabilitas seimbang: skor 0,5." if resolved.score == 0.5 else
+                       "Prediksi tepat." if resolved.score == 1.0 else "Prediksi meleset.")
+            messagebox.showinfo("Eksperimen dinilai",
+                                f"Aktual: {direction_name(resolved.actual_direction)}.\n{outcome}", parent=self)
 
     def import_csv(self):
         path = filedialog.askopenfilename(
@@ -644,24 +804,31 @@ class CandleLabApp(tk.Tk):
                 "4. Setelah candle berikutnya selesai, masukkan OHLC aktual melalui Tambah candle. Aplikasi langsung memberi skor.",
                 "5. Ulangi pada banyak sampel. Satu atau dua tebakan benar tidak menunjukkan bahwa model memiliki keunggulan.",
             ]),
-            ("02  Rumus probabilitas", [
+            ("02  Membaca candle dari layar desktop", [
+                "Klik ‘Baca layar’ atau tekan F8. Aplikasi diminimalkan dan sebuah overlay transparan ditampilkan. Drag hanya pada area price chart, lalu lepaskan tombol mouse. Tekan Esc untuk membatalkan.",
+                "CandleLab membaca piksel hijau/teal dan merah, mengelompokkan body serta sumbu, lalu memilih deret dengan lebar dan spasi yang konsisten. Ini bukan OCR harga dan bukan koneksi ke platform trading.",
+                "Periksa kotak penanda pada preview. Pilih ‘Ganti data dengan hasil’ untuk memuat seluruh urutan, atau ‘Tambah candle terakhir’ untuk menilai prediksi terkunci. Jangan gunakan hasil jika volume, indikator, atau teks ikut terkotak.",
+                "Ctrl+F8 menangkap ulang area yang sama. Area hanya disimpan dalam memori selama aplikasi berjalan. Screenshot tidak disimpan ke disk dan tidak dikirim ke mana pun.",
+                "Skala OHLC hasil deteksi berasal dari posisi piksel, bukan harga aset sesungguhnya. Warna custom, candle yang saling menempel, chart kecil, atau anti-alias ekstrem dapat menurunkan akurasi deteksi. Di macOS diperlukan izin Screen Recording; Wayland dapat membatasi tangkapan layar.",
+            ]),
+            ("03  Rumus probabilitas", [
                 "Candle hijau berarti close > open, merah berarti close < open, dan doji berarti close = open. Doji ditampilkan, tetapi diabaikan saat membentuk pola dan tidak dinilai.",
                 "Model mencari pola 1–3 arah terakhir di dalam jendela 30/60/100 atau semua data. Frekuensi dasar adalah proporsi hijau pada seluruh candle non-doji di jendela tersebut.",
                 "P(Hijau) = (jumlah hijau setelah pola + 6 × frekuensi dasar hijau) ÷ (jumlah pola + 6). Angka 6 adalah prior Bayesian agar pola langka tidak menghasilkan kepastian semu.",
                 "Contoh: pola muncul 4 kali dan 3 diikuti hijau bukan berarti peluang pasti 75%. Frekuensi dasar ikut menarik estimasi agar lebih hati-hati.",
             ]),
-            ("03  Backtest dan penilaian", [
+            ("04  Backtest dan penilaian", [
                 "Backtest walk-forward memprediksi setiap target hanya dari candle sebelum target. Model tidak melatih memakai candle masa depan.",
                 "Baseline menebak arah berdasarkan frekuensi dasar pada data pelatihan yang sama. Bandingkan akurasi model dengan baseline untuk melihat apakah pola menambah informasi.",
                 "Brier score adalah rata-rata (P(Hijau) − aktual hijau)², dengan aktual hijau bernilai 1 dan merah 0. Nilai mendekati 0 lebih baik. Probabilitas 50%–50% memperoleh skor arah 0,5.",
                 "Backtest pada data yang dipakai berulang untuk memilih pengaturan tetap dapat overfit. Idealnya gunakan data baru yang belum pernah dilihat untuk eksperimen terkunci.",
             ]),
-            ("04  Format CSV", [
+            ("05  Format CSV", [
                 "Header yang disarankan: timestamp,open,high,low,close. Kolom timestamp bersifat opsional; open, high, low, close wajib. Header bahasa Inggris dan Indonesia umum dikenali.",
                 "Pemisah koma, titik-koma, atau tab didukung. File tanpa header dapat berisi open,high,low,close; jika ada lima kolom, kolom pertama dianggap waktu.",
                 "Encoding harus UTF-8, ukuran maksimal 4 MiB, dan maksimal 2.000 candle. Semua baris divalidasi sebelum data set diganti; impor yang gagal tidak mengubah data.",
             ]),
-            ("05  Batasan & privasi", [
+            ("06  Batasan & privasi", [
                 "Ini adalah model statistik sederhana untuk eksperimen, bukan kecerdasan buatan yang mengetahui masa depan. Harga, volume, berita, spread, likuiditas, dan kondisi pasar lain tidak dianalisis.",
                 "Aplikasi tidak memiliki koneksi bursa, tidak mengambil harga live, dan tidak memberi rekomendasi beli/jual. Probabilitas tinggi tetap dapat menghasilkan prediksi salah.",
                 "Semua data dan riwayat disimpan lokal sebagai JSON tanpa enkripsi. Tidak ada akun atau sinkronisasi. Ekspor CSV secara berkala jika perlu cadangan.",

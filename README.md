@@ -2,7 +2,7 @@
 
 ## CandleLab — aplikasi desktop
 
-**CandleLab** adalah aplikasi desktop offline untuk eksperimen probabilitas warna candlestick berikutnya. Tersedia grafik OHLC, model Bayesian yang transparan, backtest walk-forward, impor/ekspor CSV, serta pencatatan prediksi terkunci dan hasil aktualnya. Ini adalah alat eksperimen, bukan kepastian atau rekomendasi finansial.
+**CandleLab** adalah aplikasi desktop offline untuk eksperimen probabilitas warna candlestick berikutnya. Tersedia pembacaan candle langsung dari area layar yang dipilih, grafik OHLC, model Bayesian yang transparan, backtest walk-forward, impor/ekspor CSV, serta pencatatan prediksi terkunci dan hasil aktualnya. Ini adalah alat eksperimen, bukan kepastian atau rekomendasi finansial.
 
 Source dan panduan menjalankan aplikasi Windows/Linux/macOS berada di [`CandleLab/`](CandleLab/). Lihat [CandleLab/README.md](CandleLab/README.md) untuk launcher desktop, format CSV, metode, pengujian, dan cara membuat `CandleLab.exe`.
 

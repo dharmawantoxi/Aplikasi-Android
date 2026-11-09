@@ -2,10 +2,12 @@
 
 **CandleLab** adalah aplikasi desktop offline untuk bereksperimen dengan probabilitas warna candlestick berikutnya: **hijau** (`close > open`) atau **merah** (`close < open`). Aplikasi ini bukan mesin jawaban pasti dan bukan penyedia sinyal trading. Model, data historis, dan hasil prediksi dapat diperiksa langsung oleh pengguna.
 
-Dibangun dengan **Python dan Tkinter**, tanpa library runtime pihak ketiga. Grafik digambar dengan Canvas, data disimpan lokal, dan aplikasi tidak meminta akun atau koneksi internet.
+Dibangun dengan **Python dan Tkinter**. Grafik digambar dengan Canvas, sedangkan **Pillow** dipakai untuk menangkap dan membaca piksel layar. Data disimpan lokal dan aplikasi tidak meminta akun atau koneksi internet.
 
 ## Fitur
 
+- **Baca langsung dari layar desktop**: pilih area chart dengan drag, deteksi candle hijau/teal dan merah, lalu verifikasi kotak deteksi sebelum mengimpor.
+- Tangkap ulang area yang sama dengan `Ctrl+F8`; area dan screenshot hanya berada di memori sesi berjalan.
 - Grafik hingga 64 candle terakhir dengan tooltip OHLC saat kursor diarahkan.
 - Estimasi `P(Hijau)` dan `P(Merah)` yang selalu berjumlah 100%.
 - Pola 1, 2, atau 3 arah candle; jendela 30, 60, 100, atau semua data.
@@ -24,14 +26,17 @@ Dibangun dengan **Python dan Tkinter**, tanpa library runtime pihak ketiga. Graf
 ### Windows — dari source
 
 1. Pasang **Python 3.10 atau lebih baru** dari python.org. Installer Python Windows umumnya sudah menyertakan Tkinter.
-2. Buka folder `CandleLab`.
+2. Buka folder `CandleLab` dan pasang dependensi pembacaan layar:
+
+```bat
+py -3 -m pip install -r requirements.txt
+```
+
 3. Klik dua kali **`run_candlelab.bat`**, atau jalankan:
 
 ```bat
 py -3 candlelab.py
 ```
-
-Tidak perlu menjalankan `pip install` untuk memakai aplikasi dari source.
 
 ### Windows — file `.exe`
 
@@ -54,6 +59,7 @@ Pasang Python 3 dan Tkinter melalui package manager, lalu jalankan launcher:
 sudo apt install python3-tk
 
 cd CandleLab
+python3 -m pip install -r requirements.txt
 ./run_candlelab.sh
 ```
 
@@ -63,6 +69,7 @@ Gunakan Python yang menyertakan Tkinter, lalu jalankan:
 
 ```bash
 cd CandleLab
+python3 -m pip install -r requirements.txt
 python3 candlelab.py
 ```
 
@@ -75,7 +82,22 @@ python3 candlelab.py
 5. Lihat skor pada **Eksperimen**. Ulangi hingga jumlah sampel memadai; beberapa tebakan benar tidak membuktikan model memiliki keunggulan.
 6. Gunakan **Ekspor CSV** untuk membuat salinan data candle. Ekspor tidak mencakup riwayat eksperimen.
 
-Pintasan: `Ctrl+N` tambah candle, `Ctrl+I` impor CSV, `Ctrl+S` ekspor CSV, dan `F5` muat ulang tampilan.
+Pintasan: `Ctrl+N` tambah candle, `Ctrl+I` impor CSV, `Ctrl+S` ekspor CSV, `F5` muat ulang tampilan, **`F8` baca area layar baru**, dan **`Ctrl+F8` tangkap ulang area yang sama**.
+
+## Membaca candle langsung dari layar
+
+1. Buka chart pada aplikasi atau situs yang ingin dibaca. Perbesar chart agar body candle dan jaraknya terlihat jelas.
+2. Di CandleLab, klik **Baca layar** atau tekan `F8`. CandleLab akan diminimalkan.
+3. Drag hanya pada **area price chart**. Usahakan tidak menyertakan volume, indikator, toolbar, teks berwarna, atau panel lain. Lepaskan mouse untuk menangkap; tekan `Esc` untuk batal.
+4. Periksa preview. Setiap candle yang digunakan diberi kotak hijau/merah, dan candle terakhir diberi garis kuning. Urutan `H/M/D` serta tingkat konsistensi deteksi ditampilkan.
+5. Pilih:
+   - **Ganti data dengan hasil** untuk memakai seluruh urutan yang terbaca; prediksi tertunda dibatalkan karena data berubah.
+   - **Tambah candle terakhir** untuk menambahkan hanya candle paling kanan dan menilai prediksi yang sedang dikunci.
+   - **Tangkap ulang area** jika ada objek yang salah terdeteksi. `Ctrl+F8` juga mengulang tangkapan pada koordinat yang sama.
+
+Deteksi bekerja berdasarkan warna piksel hijau/teal dan merah, body/sumbu, serta konsistensi lebar dan spasi—**bukan OCR harga**. OHLC yang dihasilkan hanya memakai skala piksel relatif agar grafik dan arah dapat diproses; nilainya bukan harga aset sebenarnya. Warna chart custom, candle terlalu kecil/saling menempel, atau objek lain berwarna sama dapat menyebabkan kesalahan. **Jangan gunakan hasil tanpa memeriksa preview.**
+
+Screenshot dan koordinat area hanya disimpan dalam memori selama aplikasi berjalan, tidak ditulis ke disk, dan tidak dikirim ke mana pun. Di macOS, berikan izin **Screen Recording** kepada CandleLab/Python. Pada Linux Wayland, kebijakan sistem dapat membatasi tangkapan layar; X11 atau impor CSV dapat digunakan sebagai alternatif.
 
 ## Format CSV
 
@@ -123,18 +145,19 @@ Data tersimpan tanpa enkripsi di:
 
 Penulisan memakai file sementara lalu `os.replace` agar pembaruan atomik. Jika file rusak, aplikasi mencoba menyimpannya sebagai `*.corrupt-<waktu>.json`, lalu memuat simulasi dan menampilkan peringatan. Membersihkan folder data menghapus candle serta eksperimen lokal.
 
-Aplikasi tidak mengambil harga live, tidak mengenali berita/volume/spread/likuiditas, dan tidak terhubung ke broker. **Probabilitas tinggi tetap bisa salah. Hasil historis bukan jaminan hasil berikutnya. Jangan jadikan aplikasi ini satu-satunya dasar keputusan finansial.**
+Aplikasi tidak mengambil harga live dari bursa, tidak mengenali berita/volume/spread/likuiditas, dan tidak terhubung ke broker. Fitur baca layar hanya menganalisis piksel area yang Anda pilih dan dapat salah membaca chart. **Probabilitas tinggi tetap bisa salah. Hasil historis bukan jaminan hasil berikutnya. Jangan jadikan aplikasi ini satu-satunya dasar keputusan finansial.**
 
 ## Pengujian
 
-Pengujian tidak membuka GUI dan tidak memerlukan Tkinter:
+Pengujian tidak membuka GUI dan tidak memerlukan Tkinter. Pillow diperlukan untuk pengujian visi:
 
 ```bash
 cd CandleLab
+python -m pip install -r requirements.txt
 python -m unittest discover -s tests -v
 ```
 
-Cakupan meliputi validasi OHLC, arah/doji, rumus Bayesian, pola dan jendela, rentang metrik, pencegahan kebocoran data backtest, format CSV, round-trip ekspor, eksperimen benar/salah/doji, pembatalan, serta pemulihan penyimpanan.
+Cakupan meliputi validasi OHLC, arah/doji, rumus Bayesian, pola dan jendela, rentang metrik, pencegahan kebocoran data backtest, format CSV, round-trip ekspor, eksperimen benar/salah/doji, pembatalan, pemulihan penyimpanan, serta deteksi candle terisi/hollow, teal/merah, noise, gambar kosong, dan perubahan resolusi.
 
 Pada mesin desktop yang memiliki display, smoke test berikut membuka seluruh halaman dan menguji penguncian prediksi dengan folder data sementara:
 
