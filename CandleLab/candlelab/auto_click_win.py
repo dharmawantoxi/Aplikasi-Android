@@ -98,32 +98,62 @@ def foreground_window():
 
 def foreground_title() -> str:
     """Judul jendela aktif; string kosong bila tidak diketahui."""
-    handle = foreground_window()
-    return _window_text(handle) if handle else ""
+    try:
+        handle = foreground_window()
+        return _window_text(handle) if handle else ""
+    except (AttributeError, OSError, ValueError):
+        return ""
+
+
+def window_process_id(handle) -> Optional[int]:
+    """PID pemilik jendela, atau None bila tidak dapat dibaca.
+
+    ``GetWindowThreadProcessId`` berada di **user32**, bukan kernel32. Memanggilnya
+    lewat kernel32 memunculkan ``function 'GetWindowThreadProcessId' not found``
+    dan menjatuhkan aplikasi sebelum klik pertama.
+    """
+    if not platform_supported() or not handle:
+        return None
+    try:
+        user32 = _user32()
+        pid = ctypes.c_ulong()
+        user32.GetWindowThreadProcessId(handle, ctypes.byref(pid))
+        return int(pid.value) or None
+    except (AttributeError, OSError, ValueError):
+        # ctypes melempar AttributeError untuk fungsi yang tidak ada di DLL.
+        return None
 
 
 def is_our_window(handle) -> bool:
-    """Apakah jendela ini milik proses CandleLab sendiri."""
-    if not platform_supported() or not handle:
+    """Apakah jendela ini milik proses CandleLab sendiri.
+
+    Bila PID tidak terbaca, jawabannya False: pengaman berbasis titik tetap
+    menjaga klik, dan menolak semua klik hanya akan mematikan fitur tanpa alasan.
+    """
+    pid = window_process_id(handle)
+    if pid is None:
         return False
-    kernel32 = ctypes.windll.kernel32
-    pid = ctypes.c_ulong()
-    kernel32.GetWindowThreadProcessId(handle, ctypes.byref(pid))
-    return int(pid.value) == int(kernel32.GetCurrentProcessId())
+    try:
+        return pid == int(ctypes.windll.kernel32.GetCurrentProcessId())
+    except (AttributeError, OSError, ValueError):
+        return False
 
 
 def window_root_at(point: tuple[int, int]):
     """Handle jendela teratas yang berada di bawah titik layar."""
     if not platform_supported():
         return None
-    user32 = _user32()
-    point_ref = ctypes.wintypes.POINT(int(point[0]), int(point[1]))
-    handle = user32.WindowFromPoint(point_ref)
-    if not handle:
+    try:
+        user32 = _user32()
+        point_ref = ctypes.wintypes.POINT(int(point[0]), int(point[1]))
+        handle = user32.WindowFromPoint(point_ref)
+        if not handle:
+            return None
+        # Naik ke jendela induk teratas agar perbandingan dengan jendela aktif sah.
+        root = user32.GetAncestor(handle, 2)  # GA_ROOT
+        return root or handle
+    except (AttributeError, OSError, ValueError):
         return None
-    # Naik ke jendela induk teratas agar perbandingan dengan jendela aktif sah.
-    root = user32.GetAncestor(handle, 2)  # GA_ROOT
-    return root or handle
 
 
 def click_safety(point: tuple[int, int], region: tuple[int, int, int, int],

@@ -34,6 +34,9 @@ BG = "#0E1F19"
 BORDER = "#25372F"
 DETAIL_FG = "#8FA49A"
 WARN_FG = "#E6B84C"
+# Tombol klik otomatis: redup saat mati, jingga menyala saat aktif.
+CLICK_ON_FG = "#FF6B35"
+CLICK_OFF_FG = "#5E736B"
 
 
 def _short(text: str, limit: int = 34) -> str:
@@ -103,7 +106,8 @@ class OverlayBadge:
         self.buttons = tk.Frame(self.frame, bg=BG, width=BADGE_PAD_X * 2)
         self.buttons.pack(side="right", padx=(6, 6), pady=(2, 2))
         for text, command, colour in (
-            ("⚡", self._toggle_click, WARN_FG),
+            # ⚡ mulai tanpa warna: warna hanya menandakan "sedang aktif".
+            ("⚡", self._toggle_click, CLICK_OFF_FG),
             ("⚙", self._expand, DETAIL_FG),
             ("✕", self._stop, "#D45E62"),
         ):
@@ -246,7 +250,7 @@ class OverlayBadge:
         self.auto_click_on = bool(enabled)
         try:
             self.buttons.winfo_children()[0].configure(
-                fg="#FF6B35" if enabled else WARN_FG)
+                fg=CLICK_ON_FG if enabled else CLICK_OFF_FG)
         except (IndexError, tk.TclError):
             pass
 

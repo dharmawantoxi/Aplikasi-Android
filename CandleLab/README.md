@@ -246,7 +246,7 @@ Aktifkan lewat panel tebak otomatis setelah mengalibrasi tombol:
 
 **Bila tidak ada klik sama sekali:** klik **"Uji klik sekarang (tanpa klik)"** di panel samping. Tombol ini memeriksa seluruh rantai tanpa menekan apa pun — area tombol, pengenalan tombol Higher/Lower, dan apakah jendela IQ Option sedang aktif. Baris bertanda ✗ adalah penyebabnya.
 
-Badge juga menampilkan `klik ditolak` beserta alasan singkatnya. Tombol **⚡** berubah jingga saat aktif. Tombol **⚙** membuka jendela penuh, **✕** menghentikan live.
+Badge juga menampilkan `klik ditolak` beserta alasan singkatnya. Tombol **⚡** tidak berwarna saat mati dan berubah **jingga** saat aktif, jadi sekali lihat Anda tahu apakah klik otomatis menyala. Tombol **⚙** membuka jendela penuh, **✕** menghentikan live.
 
 Pengaman yang selalu berlaku:
 

@@ -343,3 +343,118 @@ class BadgeFocusTests(unittest.TestCase):
                   / "ui.py").read_text(encoding="utf-8")
         self.assertIn("def _restore_previous_window", source)
         self.assertIn("def _remember_foreign_window", source)
+
+
+class WindowsBindingTests(unittest.TestCase):
+    """Regresi: GetWindowThreadProcessId ada di user32, bukan kernel32."""
+
+    def _patch_windll(self, user32, kernel32=None):
+        from unittest.mock import MagicMock, patch
+
+        from candlelab import auto_click_win as mod
+
+        kernel32 = kernel32 or MagicMock()
+        windll = MagicMock()
+        windll.user32 = user32
+        windll.kernel32 = kernel32
+        fake_ctypes = MagicMock(windll=windll, byref=mod.ctypes.byref,
+                                c_ulong=mod.ctypes.c_ulong,
+                                wintypes=mod.ctypes.wintypes)
+        return patch.multiple(
+            mod, platform_supported=MagicMock(return_value=True),
+            ctypes=fake_ctypes, _user32=MagicMock(return_value=user32))
+
+    def test_pid_lookup_uses_user32(self):
+        from unittest.mock import MagicMock
+
+        from candlelab import auto_click_win as mod
+
+        user32 = MagicMock()
+        user32.GetWindowThreadProcessId.side_effect = (
+            lambda handle, ref: setattr(ref._obj, "value", 4321))
+        kernel32 = MagicMock()
+        kernel32.GetCurrentProcessId.return_value = 4321
+
+        with self._patch_windll(user32, kernel32):
+            self.assertTrue(mod.is_our_window(12345))
+        user32.GetWindowThreadProcessId.assert_called_once()
+
+    def test_missing_function_does_not_raise(self):
+        from unittest.mock import MagicMock
+
+        from candlelab import auto_click_win as mod
+
+        user32 = MagicMock()
+        user32.GetWindowThreadProcessId.side_effect = AttributeError(
+            "function 'GetWindowThreadProcessId' not found")
+
+        with self._patch_windll(user32):
+            # Tidak boleh melempar; jawaban False membuat pengaman lain bekerja.
+            self.assertFalse(mod.is_our_window(12345))
+            self.assertIsNone(mod.window_process_id(12345))
+
+    def test_window_root_at_survives_missing_function(self):
+        from unittest.mock import MagicMock
+
+        from candlelab import auto_click_win as mod
+
+        user32 = MagicMock()
+        user32.WindowFromPoint.side_effect = AttributeError("nope")
+
+        with self._patch_windll(user32):
+            self.assertIsNone(mod.window_root_at((10, 10)))
+
+
+class LiveErrorResilienceTests(unittest.TestCase):
+    """Kegagalan klak ctypes tidak boleh menutup live dengan dialog."""
+
+    def test_live_keeps_running_on_click_error(self):
+        from pathlib import Path
+
+        ui = (Path(__file__).resolve().parents[1] / "candlelab" / "ui.py").read_text(
+            encoding="utf-8")
+        start = ui.index("def report_callback_exception")
+        body = ui[start:start + 700]
+        self.assertIn("live_active", body)
+        self.assertIn("KLIK DITOLAK", body)
+
+
+class BadgeClickColourTests(unittest.TestCase):
+    """⚡ harus berwarna hanya saat klik otomatis aktif.
+
+    tkinter tidak tersedia di semua lingkungan tes (mis. runner Linux tanpa
+    X), jadi warna dibaca dari sumber, bukan dengan mengimpor overlay.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import re
+        from pathlib import Path
+
+        cls.source = (Path(__file__).resolve().parents[1] / "candlelab"
+                      / "overlay.py").read_text(encoding="utf-8")
+        cls.re = re
+
+    def _colour(self, name: str) -> str:
+        found = self.re.search(rf'^{name} = "(#[0-9A-Fa-f]{{6}})"', self.source, self.re.M)
+        self.assertIsNotNone(found, f"{name} tidak ditemukan")
+        return found.group(1)
+
+    @staticmethod
+    def _lum(hex_colour: str) -> float:
+        r, g, b = (int(hex_colour[i:i + 2], 16) for i in (1, 3, 5))
+        return 0.299 * r + 0.587 * g + 0.114 * b
+
+    def test_off_colour_is_muted_not_coloured(self):
+        off = self._colour("CLICK_OFF_FG")
+        on = self._colour("CLICK_ON_FG")
+        self.assertLess(self._lum(off), self._lum(on))
+        r, g, b = (int(off[i:i + 2], 16) for i in (1, 3, 5))
+        self.assertLess(max(r, g, b) - min(r, g, b), 40,
+                        "warna saat mati terlalu mencolok; harus mendekati abu-abu")
+
+    def test_state_uses_the_on_colour(self):
+        self.assertIn("fg=CLICK_ON_FG if enabled else CLICK_OFF_FG", self.source)
+
+    def test_button_starts_uncoloured(self):
+        self.assertIn('("⚡", self._toggle_click, CLICK_OFF_FG)', self.source)
