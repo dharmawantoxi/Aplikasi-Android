@@ -13,6 +13,7 @@ Pengaman:
 from __future__ import annotations
 
 import ctypes
+import ctypes.wintypes
 import sys
 import time
 from dataclasses import dataclass
@@ -72,9 +73,97 @@ def cursor_position() -> Optional[tuple[int, int]]:
     return point.x, point.y
 
 
+# Nama jendela yang diterima. IQ Option dapat berjalan sebagai aplikasi desktop
+# ("IQ Option") maupun di peramban ("IQ Option - Google Chrome"), dan judulnya
+# berbeda-beda antar versi.
+BROKER_TITLES = ("iq option", "iqoption", "iq-option")
+
+
+def _window_text(handle) -> str:
+    user32 = _user32()
+    length = user32.GetWindowTextLengthW(handle)
+    if not length:
+        return ""
+    buffer = ctypes.create_unicode_buffer(length + 1)
+    user32.GetWindowTextW(handle, buffer, length + 1)
+    return buffer.value
+
+
+def foreground_window():
+    """Handle jendela aktif, atau None."""
+    if not platform_supported():
+        return None
+    return _user32().GetForegroundWindow() or None
+
+
+def foreground_title() -> str:
+    """Judul jendela aktif; string kosong bila tidak diketahui."""
+    handle = foreground_window()
+    return _window_text(handle) if handle else ""
+
+
+def is_our_window(handle) -> bool:
+    """Apakah jendela ini milik proses CandleLab sendiri."""
+    if not platform_supported() or not handle:
+        return False
+    kernel32 = ctypes.windll.kernel32
+    pid = ctypes.c_ulong()
+    kernel32.GetWindowThreadProcessId(handle, ctypes.byref(pid))
+    return int(pid.value) == int(kernel32.GetCurrentProcessId())
+
+
+def window_root_at(point: tuple[int, int]):
+    """Handle jendela teratas yang berada di bawah titik layar."""
+    if not platform_supported():
+        return None
+    user32 = _user32()
+    point_ref = ctypes.wintypes.POINT(int(point[0]), int(point[1]))
+    handle = user32.WindowFromPoint(point_ref)
+    if not handle:
+        return None
+    # Naik ke jendela induk teratas agar perbandingan dengan jendela aktif sah.
+    root = user32.GetAncestor(handle, 2)  # GA_ROOT
+    return root or handle
+
+
+def click_safety(point: tuple[int, int], region: tuple[int, int, int, int],
+                 require_active: bool) -> ClickGuard:
+    """Pengaman klik berbasis *titik*, bukan judul jendela.
+
+    Syarat yang sebenarnya penting bukanlah "judul jendela aktif memuat IQ
+    Option", melainkan "titik yang akan diklik memang milik aplikasi yang sedang
+    aktif, dan aplikasi itu bukan CandleLab sendiri". Pemeriksaan judul membuat
+    fitur gagal di peramban atau versi dengan judul berbeda; pemeriksaan titik
+    tidak.
+    """
+    if not platform_supported():
+        return ClickGuard("Klik otomatis hanya tersedia di Windows.")
+    if not is_point_inside(point, region):
+        return ClickGuard("Titik klik berada di luar area yang dipantau; klik dibatalkan.")
+    if not require_active:
+        return ClickGuard()
+    active = foreground_window()
+    if not active:
+        return ClickGuard("Tidak ada jendela aktif; klik dibatalkan.")
+    if is_our_window(active):
+        return ClickGuard(
+            "Jendela CandleLab sendiri sedang aktif. Klik dulu ke chart broker "
+            "agar klik otomatis boleh menekan tombol.")
+    target = window_root_at(point)
+    if target is not None and target != active:
+        return ClickGuard(
+            "Titik klik bukan milik jendela yang sedang aktif; klik dibatalkan "
+            "agar tidak menekan aplikasi lain.")
+    return ClickGuard()
+
+
 def check_before_click(point: tuple[int, int], region: tuple[int, int, int, int],
                        require_active: bool, window_title: str) -> ClickGuard:
-    """Semua pemeriksaan sebelum klik. Mengembalikan ClickGuard."""
+    """Pemeriksaan lama berbasis judul; dipertahankan untuk kompatibilitas.
+
+    Aplikasi memakai ``click_safety``; fungsi ini hanya menerima judul yang
+    cocok agar tes lama dan pemanggil luar tidak rusak.
+    """
     if not platform_supported():
         return ClickGuard("Klik otomatis hanya tersedia di Windows.")
     if not is_point_inside(point, region):

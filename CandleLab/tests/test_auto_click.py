@@ -253,3 +253,88 @@ class ClickRecursionTests(unittest.TestCase):
         start = ui.index("def _try_auto_click_for_current")
         body = ui[start:start + 1200]
         self.assertIn("if self._clicking:", body)
+
+
+class ClickSafetyPointTests(unittest.TestCase):
+    """Pengaman klik harus berbasis titik, bukan judul jendela."""
+
+    def test_safety_helper_exists(self):
+        from candlelab import auto_click_win
+
+        self.assertTrue(hasattr(auto_click_win, "click_safety"))
+        self.assertTrue(hasattr(auto_click_win, "foreground_title"))
+        self.assertTrue(hasattr(auto_click_win, "window_root_at"))
+
+    def test_non_windows_is_refused_before_anything_else(self):
+        from candlelab.auto_click_win import click_safety
+
+        guard = click_safety((900, 300), (100, 200, 400, 600), True)
+        self.assertFalse(guard.allowed)
+        self.assertIn("Windows", guard.reason)
+
+    def test_point_outside_region_is_refused(self):
+        from unittest.mock import patch
+
+        from candlelab.auto_click_win import click_safety
+
+        with patch("candlelab.auto_click_win.platform_supported", return_value=True):
+            guard = click_safety((50, 50), (100, 200, 400, 600), True)
+        self.assertFalse(guard.allowed)
+        self.assertIn("luar area", guard.reason)
+
+    def test_own_window_active_produces_a_clear_hint(self):
+        from unittest.mock import patch
+
+        from candlelab.auto_click_win import click_safety
+
+        with patch("candlelab.auto_click_win.platform_supported", return_value=True), \
+                patch("candlelab.auto_click_win.foreground_window", return_value=111), \
+                patch("candlelab.auto_click_win.is_our_window", return_value=True):
+            guard = click_safety((200, 300), (100, 200, 400, 600), True)
+        self.assertFalse(guard.allowed)
+        self.assertIn("CandleLab", guard.reason)
+
+    def test_click_into_active_foreign_window_is_allowed(self):
+        from unittest.mock import patch
+
+        from candlelab.auto_click_win import click_safety
+
+        with patch("candlelab.auto_click_win.platform_supported", return_value=True), \
+                patch("candlelab.auto_click_win.foreground_window", return_value=111), \
+                patch("candlelab.auto_click_win.is_our_window", return_value=False), \
+                patch("candlelab.auto_click_win.window_root_at", return_value=111):
+            guard = click_safety((200, 300), (100, 200, 400, 600), True)
+        self.assertTrue(guard.allowed, guard.reason)
+
+    def test_point_belonging_to_another_window_is_refused(self):
+        from unittest.mock import patch
+
+        from candlelab.auto_click_win import click_safety
+
+        with patch("candlelab.auto_click_win.platform_supported", return_value=True), \
+                patch("candlelab.auto_click_win.foreground_window", return_value=111), \
+                patch("candlelab.auto_click_win.is_our_window", return_value=False), \
+                patch("candlelab.auto_click_win.window_root_at", return_value=999):
+            guard = click_safety((200, 300), (100, 200, 400, 600), True)
+        self.assertFalse(guard.allowed)
+        self.assertIn("bukan milik jendela", guard.reason)
+
+
+class BadgeFocusTests(unittest.TestCase):
+    """Badge tidak boleh merebut fokus, karena itu mematikan kliknya sendiri."""
+
+    def test_badge_is_no_activate(self):
+        from pathlib import Path
+
+        source = (Path(__file__).resolve().parents[1] / "candlelab"
+                  / "overlay.py").read_text(encoding="utf-8")
+        self.assertIn("WIN32_EX_NOACTIVATE", source)
+        self.assertIn("def _make_no_activate", source)
+
+    def test_ui_can_restore_focus(self):
+        from pathlib import Path
+
+        source = (Path(__file__).resolve().parents[1] / "candlelab"
+                  / "ui.py").read_text(encoding="utf-8")
+        self.assertIn("def _restore_previous_window", source)
+        self.assertIn("def _remember_foreign_window", source)
