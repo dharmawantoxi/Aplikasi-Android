@@ -1,4 +1,6 @@
-# CandleLab — Desktop Probability Lab
+# CandleLab
+
+> Penjelasan teknis lengkap: [CARA-KERJA.md](CARA-KERJA.md) — Desktop Probability Lab
 
 **CandleLab** adalah aplikasi desktop offline untuk bereksperimen dengan probabilitas warna candlestick berikutnya: **hijau** (`close > open`) atau **merah** (`close < open`). Aplikasi ini bukan mesin jawaban pasti dan bukan penyedia sinyal trading. Model, data historis, dan hasil prediksi dapat diperiksa langsung oleh pengguna.
 
