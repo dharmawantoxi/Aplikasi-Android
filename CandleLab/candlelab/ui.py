@@ -889,6 +889,9 @@ class CandleLabApp(tk.Tk):
             self.screen_region, self.winfo_screenwidth(), self.winfo_screenheight(),
             BADGE_WIDTH, BADGE_HEIGHT,
         )
+        # Badge diukur saat jendela sudah dipetakan; kalau belum, lebar teks
+        # belum bisa dihitung dan teks akan terpotong.
+        self.overlay.window.deiconify()
         self.overlay.place(corner)
         self.close_live_hud()
         self.overlay_mode = True

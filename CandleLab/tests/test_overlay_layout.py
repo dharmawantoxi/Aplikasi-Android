@@ -1,6 +1,14 @@
 import unittest
 
-from candlelab.hud_layout import BADGE_CORNERS, badge_positions, best_badge_corner, next_corner
+from candlelab.hud_layout import (
+    BADGE_CORNERS,
+    badge_positions,
+    best_badge_corner,
+    clamp_position,
+    estimate_badge_width,
+    fit_size,
+    next_corner,
+)
 
 W, H = 1918, 987
 BW, BH = 176, 46
@@ -41,3 +49,46 @@ class BadgeLayoutTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BadgeSizingTests(unittest.TestCase):
+    """Regresi: teks badge pernah terpotong karena lebar dipaku 176 px."""
+
+    def test_long_detail_widens_badge(self):
+        narrow = estimate_badge_width("HIJAU", "next\ndata 8", 14)
+        wide = estimate_badge_width("HIJAU", "next · data 8\nperkiraan lemah", 14)
+        self.assertGreater(wide, narrow)
+        self.assertGreater(wide, 176)
+
+    def test_warning_text_fits(self):
+        # "perkiraan lemah" adalah baris terpanjang yang dulu terpotong.
+        width = estimate_badge_width("HIJAU", "next · data 8\nperkiraan lemah", 14)
+        text_width = len("perkiraan lemah") * 14 * 0.60
+        self.assertGreaterEqual(width, text_width)
+
+    def test_clamp_keeps_badge_on_screen(self):
+        x, y = clamp_position(1900, 1050, 1920, 1080, 200, 60)
+        self.assertLessEqual(x + 200, 1920)
+        self.assertLessEqual(y + 60, 1080)
+        self.assertGreaterEqual(x, 4)
+        self.assertGreaterEqual(y, 4)
+
+    def test_clamp_handles_negative_drag(self):
+        x, y = clamp_position(-300, -80, 1920, 1080, 200, 60)
+        self.assertEqual((x, y), (4, 4))
+
+    def test_content_wins_on_absurdly_small_screen(self):
+        # Runner CI tanpa display melaporkan layar sangat kecil. Teks tetap
+        # diutamakan: lebih baik badge keluar layar daripada terpotong.
+        width, height = fit_size(400, 80, 320, 200)
+        self.assertEqual((width, height), (400, 80))
+
+    def test_fit_size_bounded_on_real_screen(self):
+        width, height = fit_size(4000, 80, 1920, 1080)
+        self.assertEqual(width, 1920 - 8)
+        self.assertEqual(height, 80)
+
+    def test_fit_size_never_below_minimum(self):
+        width, height = fit_size(10, 10, 1920, 1080)
+        self.assertGreaterEqual(width, 120)
+        self.assertGreaterEqual(height, 30)

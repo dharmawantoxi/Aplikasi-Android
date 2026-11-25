@@ -103,7 +103,7 @@ Ini mode yang disarankan bila Anda ingin **IQ Option tetap menjadi layar utama**
    Badge selalu di atas jendela lain, **bisa diseret**, dan **klik kanan** untuk berpindah sudut. CandleLab memilih sudut yang tidak menutupi area chart.
 5. Klik **⚙** atau dobel-klik badge untuk membuka jendela penuh (live tetap berjalan). Klik **✕** untuk berhenti.
 
-Badge disembunyikan sesaat setiap kali piksel dibaca, sehingga tidak pernah ikut terpotret. Model mulai bekerja dari **5 candle** (5 non-doji). Bila candle non-doji kurang dari **20**, badge hanya menampilkan arah tanpa persen dan diberi tanda **perkiraan lemah**, karena pada rentang itu angkanya sebagian besar berasal dari prior, bukan dari pola.
+Ukuran badge mengikuti isinya, jadi teks tidak pernah terpotong, dan posisinya selalu dijepit agar tetap utuh di dalam layar. Badge disembunyikan sesaat setiap kali piksel dibaca, sehingga tidak pernah ikut terpotret. Model mulai bekerja dari **5 candle** (5 non-doji). Bila candle non-doji kurang dari **20**, badge hanya menampilkan arah tanpa persen dan diberi tanda **perkiraan lemah**, karena pada rentang itu angkanya sebagian besar berasal dari prior, bukan dari pola.
 
 ## Mode live — prediksi terus diperbarui
 
