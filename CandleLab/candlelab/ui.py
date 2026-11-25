@@ -736,6 +736,10 @@ class CandleLabApp(tk.Tk):
             self.live_events, self.screen_region, self.live_generation, interval=2.0,
         )
         covered = self.live_window_overlaps_region()
+        # Wilayah ini bisa tertutup badge sendiri saat mode overlay; masalah
+        # tersebut tidak nyata karena badge ikut disembunyikan saat memotret.
+        if overlay:
+            covered = False
         self.live_monitor.start()
         self.show_page("prediction")
         if overlay:
