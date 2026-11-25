@@ -189,6 +189,41 @@ class OverlayBadge:
             pass
 
     # -- isi --------------------------------------------------------------
+    def show_round(self, round_obj, stats, candle_count: int, pending: bool = True):
+        """Tampilkan tebakan yang sedang berjalan beserta skor benar/salah.
+
+        ``round_obj`` adalah ``rounds.Round``; ``stats`` adalah
+        ``rounds.RoundStats``. Bila ``round_obj`` punya hasil, badge menampilkan
+        apakah tebakan itu benar atau salah.
+        """
+        if round_obj is None:
+            from .rounds import needed_candles
+            kurang = needed_candles(candle_count)
+            self.headline.configure(text="Belum cukup", fg="#C9D6CF")
+            pesan = (f"next\ntambah {kurang} candle" if kurang else "next\nmenunggu data")
+            self.detail.configure(text=pesan, fg=DETAIL_FG)
+            self._apply_geometry()
+            return
+
+        direction = round_obj.direction
+        label = "HIJAU" if direction == 1 else "MERAH" if direction == -1 else "SEIMBANG"
+        colour = FORECAST_COLORS.get(direction, DOJI)
+
+        if round_obj.resolved:
+            # Candle sudah selesai: ini bukti, bukan lagi tebakan.
+            if round_obj.correct is None:
+                detail, tint = "seimbang\ntidak dinilai", DETAIL_FG
+            elif round_obj.correct:
+                detail, tint = f"BENAR · {stats.wins}/{stats.played}", "#3FE08A"
+            else:
+                detail, tint = f"SALAH · {stats.wins}/{stats.played}", "#FF8A7A"
+        else:
+            detail = f"next · {stats.wins}/{stats.played}\nmenunggu candle"
+            tint = DETAIL_FG
+        self.headline.configure(text=label, fg=colour)
+        self.detail.configure(text=detail, fg=tint)
+        self._apply_geometry()
+
     def show_prediction(self, prediction, candle_count: int, warning: str = ""):
         if prediction is not None and prediction.available:
             direction = prediction.predicted_direction

@@ -14,6 +14,7 @@ from .experiments import summarise
 from .hud_layout import best_badge_corner
 from .live_hud import LiveHud
 from .overlay import BADGE_HEIGHT, BADGE_WIDTH, OverlayBadge
+from .rounds import RoundTracker
 from .live_monitor import LiveScreenMonitor, MonitorEvent
 from .model import (
     MIN_CANDLES,
@@ -44,6 +45,10 @@ class CandleLabApp(tk.Tk):
         self.configure(bg=BG)
         self.store = JsonStore()
         self.state = self.store.load()
+        # Putaran tebak otomatis: tebakan dikunci per candle lalu dinilai
+        # oleh candle itu sendiri saat selesai.
+        self.rounds = RoundTracker()
+        self._round_status = ""
         self.screen_region = self.state.screen_region
         self.live_monitor = None
         self.live_events = queue.Queue(maxsize=3)
@@ -332,7 +337,8 @@ class CandleLabApp(tk.Tk):
                          f"Saat ini {len(self._source_candles())} candle yang dihitung.",
                  9, "#82998F", bg=SIDEBAR).pack(anchor="w", pady=(16, 0))
             if self.live_active:
-                text(parent, f"Pada mode live, tangkap minimal {MIN_CANDLES + 1} candle jika candle paling kanan diabaikan.",
+                text(parent, f"Mode live menebak candle yang sedang berjalan, jadi candle itu tidak dipakai "
+                             f"sebagai dasar: tampilkan minimal {MIN_CANDLES + 1} candle di area chart.",
                      8, ACCENT, bg=SIDEBAR, wraplength=340).pack(anchor="w", pady=(8, 0))
                 button(parent, "Stop live", self.toggle_live, "accent").pack(anchor="w", pady=(18, 0))
             else:
@@ -360,6 +366,8 @@ class CandleLabApp(tk.Tk):
                     f"{prediction.red_matches} merah. Hasil akhir telah dihaluskan menuju frekuensi dasar "
                     f"{format_percent(prediction.base_green_probability)} hijau.")
         text(parent, observed, 8, "#AFC3BA", bg=SIDEBAR, wraplength=340, justify="left").pack(anchor="w", fill="x")
+        if self.live_active:
+            self._fill_round_panel(parent)
         pending = self.state.pending
         if pending:
             info = tk.Frame(parent, bg=SIDEBAR_SOFT, padx=12, pady=10)
@@ -379,6 +387,48 @@ class CandleLabApp(tk.Tk):
                      8, "#D8C79A", bg=SIDEBAR, wraplength=340, justify="left").pack(anchor="w", pady=(4, 0))
             lock_text = "Kunci prediksi live & berhenti" if self.live_active else "Kunci prediksi untuk eksperimen"
             button(parent, lock_text, self.lock_prediction, "accent").pack(fill="x", pady=(14, 0))
+
+    def _fill_round_panel(self, parent):
+        """Ringkasan tebak otomatis: putaran berjalan + skor benar/salah."""
+        round_obj = self.rounds.current
+        stats = self.rounds.stats
+        box = tk.Frame(parent, bg=SIDEBAR_SOFT, padx=12, pady=10)
+        box.pack(fill="x", pady=(13, 0))
+        text(box, "TEBAK OTOMATIS", 8, ACCENT, "bold", SIDEBAR_SOFT).pack(anchor="w")
+
+        if round_obj is None:
+            text(box, "Menunggu candle terbaca", 9, "#B8C9C1", bg=SIDEBAR_SOFT).pack(anchor="w", pady=(4, 0))
+            return
+
+        arah = direction_name(round_obj.direction)
+        if round_obj.resolved:
+            if round_obj.correct is None:
+                hasil, warna = "tidak dinilai", "#B8C9C1"
+            elif round_obj.correct:
+                hasil, warna = "BENAR", "#3FE08A"
+            else:
+                hasil, warna = "SALAH", "#FF8A7A"
+            text(box, f"Tebakan {arah}: {hasil}", 10, warna, "bold", SIDEBAR_SOFT).pack(anchor="w", pady=(4, 0))
+        else:
+            text(box, f"Tebakan {arah} untuk candle berjalan", 9, "#FFFFFF",
+                 "bold", SIDEBAR_SOFT).pack(anchor="w", pady=(4, 0))
+
+        played = stats.played
+        if played:
+            akurasi = format_percent(stats.accuracy, 0)
+            streak = stats.streak
+            rentetan = (f"{streak} benar beruntun" if streak > 0
+                        else f"{-streak} salah beruntun" if streak < 0 else "")
+            text(box, f"Skor {stats.wins}/{played} benar ({akurasi})"
+                      + (f" • {rentetan}" if rentetan else ""),
+                 8, "#B8C9C1", bg=SIDEBAR_SOFT, wraplength=320, justify="left").pack(anchor="w", pady=(3, 0))
+        else:
+            text(box, "Skor dihitung dari candle yang sudah selesai.",
+                 8, "#B8C9C1", bg=SIDEBAR_SOFT, wraplength=320, justify="left").pack(anchor="w", pady=(3, 0))
+
+        if stats.skipped:
+            text(box, f"{stats.skipped} candle dilewati (doji/seimbang).",
+                 8, "#8FA49A", bg=SIDEBAR_SOFT).pack(anchor="w", pady=(2, 0))
 
     def _fill_settings(self, parent):
         text(parent, "Pengaturan model", 12, INK, "bold").pack(anchor="w")
@@ -646,6 +696,9 @@ class CandleLabApp(tk.Tk):
                 return
         if overlay:
             self.quiet_live = True
+        # Putaran baru dimulai: tebakan lama tidak boleh dinilai dengan candle
+        # dari area pembacaan yang berbeda.
+        self.rounds.reset()
         try:
             self.configure(cursor="watch")
             if select_new or not self.screen_region:
@@ -920,9 +973,14 @@ class CandleLabApp(tk.Tk):
     def _refresh_overlay(self):
         if self.overlay is None:
             return
-        self.overlay.show_prediction(
-            self._prediction(), len(self._source_candles()),
-        )
+        if self.live_active:
+            self.overlay.show_round(
+                self.rounds.current, self.rounds.stats, len(self.live_candles),
+            )
+        else:
+            self.overlay.show_prediction(
+                self._prediction(), len(self._source_candles()),
+            )
 
     def _refresh_live_hud(self):
         if self.live_hud is None:
@@ -931,6 +989,44 @@ class CandleLabApp(tk.Tk):
             self._prediction(), len(self._source_candles()),
             bool(self.exclude_forming_var.get()),
         )
+
+    def _round_inputs(self):
+        """Candle historis + prediksi untuk candle yang sedang berjalan.
+
+        Candle terakhir dianggap masih terbentuk, jadi tidak dipakai sebagai
+        dasar tebakan dan tidak ikut membentuk pola.
+        """
+        candles = self.live_candles if self.live_active else self._chart_candles()
+        history = list(candles[:-1]) if candles else []
+        prediction = CandleModel.predict(history, self._order(), self._window())
+        return history, prediction
+
+    def _advance_round(self, candles):
+        """Kunci atau nilai satu putaran tebak otomatis."""
+        history = list(candles[:-1]) if candles else []
+        prediction = CandleModel.predict(history, self._order(), self._window())
+        finished = self.rounds.observe(history, prediction)
+        self._round_status = ""
+        if finished is not None and finished.correct is not None:
+            self.state.record_live_round(finished.correct)
+            self._save_quietly()
+            self._round_status = (
+                f"LIVE • tebakan {direction_name(finished.direction)} "
+                + ("BENAR" if finished.correct else "SALAH")
+                + f" • skor {self.rounds.status_text()}"
+            )
+        elif finished is not None:
+            self._round_status = "LIVE • candle doji/seimbang; tidak dinilai."
+        elif self.rounds.reset_reason:
+            self._round_status = "LIVE • " + self.rounds.reset_reason
+        self.rounds.reset_reason = ""
+
+    def _save_quietly(self):
+        """Simpan tanpa dialog; kegagalan tidak menghentikan mode live."""
+        try:
+            self.store.save(self.state)
+        except OSError:
+            pass
 
     def _process_live_result(self, event: MonitorEvent):
         result = event.result
@@ -949,7 +1045,14 @@ class CandleLabApp(tk.Tk):
         changed = sequence != self.live_sequence or not self.live_candles
         self.live_candles = list(result.candles)
         self.live_sequence = sequence
-        if changed and result.warning:
+        previous_status = self._round_status or ""
+        self._advance_round(result.candles)
+        if self._round_status and self._round_status != previous_status:
+            # Hasil putaran lebih penting daripada statistik deteksi, tetapi
+            # hanya ditampilkan sekali agar status tidak berkedip.
+            self.set_status(self._round_status)
+            self._round_status = ""
+        elif changed and result.warning:
             # Peringatan deteksi penting (mis. objek terlalu kecil) didahulukan,
             # tetapi hanya saat urutan berubah agar status tidak berkedip.
             self.set_status("LIVE • " + result.warning)
