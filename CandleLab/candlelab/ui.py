@@ -15,6 +15,13 @@ from .experiments import summarise
 from .hud_layout import best_badge_corner
 from .live_hud import LiveHud
 from .overlay import BADGE_HEIGHT, BADGE_WIDTH, OverlayBadge
+from .auto_click import click_point, find_button_pair
+from .auto_click_win import (
+    ClickLimiter,
+    check_before_click,
+    left_click,
+    platform_supported,
+)
 from .rounds import (
     MIN_ROUNDS_FOR_SIGNAL,
     CandleClock,
@@ -29,7 +36,7 @@ from .model import (
     Candle, CandleModel, make_demo_candles,
 )
 from .storage import JsonStore
-from .screen_capture import capture_after_overlay_closed
+from .screen_capture import capture_after_overlay_closed, capture_region
 from .screen_ui import select_and_capture
 from .vision import VisionResult, detect_candles
 from .theme import (
@@ -56,6 +63,10 @@ class CandleLabApp(tk.Tk):
         self.rounds = RoundTracker()
         self.clock = CandleClock()
         self._round_status = ""
+        # Klik otomatis: nonaktif secara bawaan.
+        self.auto_click_enabled = False
+        self.click_guard = ClickLimiter()
+        self._clicked_candle = -1
         self.screen_region = self.state.screen_region
         self.live_monitor = None
         self.live_events = queue.Queue(maxsize=3)
@@ -463,6 +474,19 @@ class CandleLabApp(tk.Tk):
                  wraplength=320, justify="left").pack(anchor="w", pady=(6, 0))
             text(box, "Cocokkan dengan 12 candle terakhir di chart. H=hijau, M=merah, D=doji.",
                  7, "#6F8377", bg=SIDEBAR_SOFT, wraplength=320, justify="left").pack(anchor="w")
+        # Klik otomatis: sengaja diletakkan setelah penjelasan, bukan di atas.
+        status_klik = "MATI" if not self.auto_click_enabled else f"AKTIF ({self.click_guard.count} klik)"
+        text(box, f"KLIK OTOMATIS: {status_klik}", 7,
+             "#FF8A7A" if self.auto_click_enabled else "#6F8377",
+             "bold", SIDEBAR_SOFT).pack(anchor="w", pady=(8, 0))
+        button(box, "Matikan klik otomatis" if self.auto_click_enabled
+               else "Aktifkan klik otomatis",
+               self.toggle_auto_click, "danger" if self.auto_click_enabled else "secondary").pack(
+            fill="x", pady=(3, 0))
+        if not self.state.click_region:
+            text(box, "Belum dikalibrasi. Atur di halaman Data.",
+                 7, "#C9A227", bg=SIDEBAR_SOFT).pack(anchor="w", pady=(2, 0))
+
         if self.rounds.log:
             button(box, "Salin riwayat tebakan", self.copy_round_log, "secondary").pack(
                 fill="x", pady=(8, 0))
@@ -470,6 +494,103 @@ class CandleLabApp(tk.Tk):
         if riwayat:
             text(box, "Riwayat: " + riwayat, 7, "#8FA49A", bg=SIDEBAR_SOFT,
                  wraplength=320, justify="left").pack(anchor="w", pady=(4, 0))
+
+    # -- klik otomatis ---------------------------------------------------
+    def toggle_auto_click(self):
+        """Aktifkan/matikan klik otomatis, dengan konfirmasi eksplisit."""
+        if self.auto_click_enabled:
+            self.auto_click_enabled = False
+            self.set_status("Klik otomatis dimatikan.")
+            self.refresh()
+            return
+        if not platform_supported():
+            messagebox.showinfo(
+                "Klik otomatis hanya di Windows",
+                "Fitur ini memakai SendInput Windows. Di sistem lain, gunakan "
+                "mode latihan (catat sinyal tanpa klik).", parent=self)
+            return
+        if not self.state.click_region:
+            messagebox.showinfo(
+                "Kalibrasi tombol belum ada",
+                "Klik otomatis perlu tahu posisi tombol Higher/Lower.\n\n"
+                "Gunakan ‘Kalibrasi tombol broker’ di halaman Data, lalu pilih "
+                "area yang memuat kedua tombol tersebut.", parent=self)
+            return
+        if not messagebox.askyesno(
+            "Aktifkan klik otomatis?",
+            "CandleLab akan MENGKLIK tombol Higher/Lower di layar Anda setiap "
+            "kali tebakan baru muncul.\n\n"
+            "Pengaman yang berlaku:\n"
+            "• hanya bila jendela broker sedang aktif\n"
+            "• hanya bila titik klik berada di area yang dikalibrasi\n"
+            "• maksimal satu klik per candle\n"
+            "• berhenti otomatis setelah 50 klik\n\n"
+            "Gunakan hanya pada akun demo. Lanjutkan?",
+            parent=self,
+        ):
+            return
+        self.auto_click_enabled = True
+        self.click_guard = ClickLimiter()
+        self._clicked_candle = -1
+        self.set_status("Klik otomatis AKTIF — hanya pada akun demo.")
+        self.refresh()
+
+    def calibrate_click_region(self):
+        """Pilih area panel tombol Higher/Lower."""
+        if self.live_active:
+            messagebox.showinfo(
+                "Hentikan live dulu",
+                "Kalibrasi tombol dilakukan saat live berhenti agar area chart "
+                "tidak tertukar.", parent=self)
+            return
+        captured = select_and_capture(self)
+        if captured is None:
+            return
+        image, box = captured
+        pair, reason = find_button_pair(image)
+        if pair is None:
+            messagebox.showwarning("Tombol tidak dikenali", reason, parent=self)
+            return
+        self.state.click_region = box
+        if self._save():
+            messagebox.showinfo(
+                "Tombol dikenali",
+                f"Higher di {pair.higher}, Lower di {pair.lower} (relatif area).\n\n"
+                f"Area disimpan: {box[0]}, {box[1]} → {box[2]}, {box[3]}",
+                parent=self)
+
+    def _maybe_auto_click(self, direction: int, candle_index: int):
+        """Klik sekali per candle, hanya bila semua pengaman lolos."""
+        if not self.auto_click_enabled or not self.state.click_region:
+            return
+        if direction not in (1, -1):
+            return
+        if candle_index == self._clicked_candle:
+            return
+        allowed, reason = self.click_guard.allow(time.monotonic())
+        if not allowed:
+            self.set_status("KLIK DITOLAK • " + reason)
+            return
+        try:
+            image = capture_region(self.state.click_region)
+        except (RuntimeError, ValueError) as exc:
+            self.set_status(f"KLIK DITOLAK • area tombol tidak terbaca ({exc}).")
+            return
+        pair, reason = find_button_pair(image)
+        if pair is None:
+            self.set_status("KLIK DITOLAK • " + reason)
+            return
+        point = click_point(image.size, self.state.click_region[:2], pair, direction)
+        guard = check_before_click(point, self.state.click_region, True, "IQ Option")
+        if not guard.allowed:
+            self.set_status("KLIK DITOLAK • " + guard.reason)
+            return
+        left_click(point)
+        self.click_guard.record(time.monotonic())
+        self._clicked_candle = candle_index
+        arah = "Higher" if direction == 1 else "Lower"
+        self.set_status(f"KLIK {arah} di {point[0]},{point[1]} • "
+                        f"{self.click_guard.count} klik sesi ini")
 
     def copy_round_log(self):
         """Salin riwayat putaran ke clipboard untuk diperiksa di luar aplikasi."""
@@ -593,6 +714,8 @@ class CandleLabApp(tk.Tk):
         actions = tk.Frame(heading, bg=BG)
         actions.pack(side="right", padx=(15, 0))
         button(actions, "Baca layar", self.read_screen, "secondary").pack(side="left", padx=3)
+        button(actions, "Kalibrasi tombol broker", self.calibrate_click_region,
+               "secondary").pack(side="left", padx=3)
         button(actions, "Impor CSV", self.import_csv, "secondary").pack(side="left", padx=3)
         button(actions, "+ Tambah candle", self.add_candle_dialog, "primary").pack(side="left", padx=3)
 
@@ -1115,6 +1238,8 @@ class CandleLabApp(tk.Tk):
         elif self.rounds.reset_reason:
             self._round_status = "LIVE • " + self.rounds.reset_reason
         self.rounds.reset_reason = ""
+        if self.rounds.current is not None and not self.rounds.current.resolved:
+            self._maybe_auto_click(self.rounds.current.direction, len(history))
 
     def _save_quietly(self):
         """Simpan tanpa dialog; kegagalan tidak menghentikan mode live."""

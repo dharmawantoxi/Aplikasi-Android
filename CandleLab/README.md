@@ -228,3 +228,23 @@ python tools/smoke_ui.py
 ```
 
 Workflow Windows menjalankan smoke test ini sebelum membuat `.exe`; test tidak membaca atau mengubah data pengguna.
+
+## Klik otomatis (opsional, Windows)
+
+Mengklik tombol Higher/Lower secara otomatis setiap kali tebakan baru muncul. **Mati secara bawaan** dan hanya untuk akun demo.
+
+Aktifkan lewat panel tebak otomatis setelah mengalibrasi tombol:
+
+1. Halaman **Data** → **Kalibrasi tombol broker** → pilih area yang memuat kedua tombol Higher dan Lower.
+2. Tombol dikenali hanya bila berbentuk blok besar (bukan candle) dan keduanya bersusun sejajar.
+3. Panel tebak otomatis → **Aktifkan klik otomatis** → konfirmasi.
+
+Pengaman yang selalu berlaku:
+
+- hanya berjalan di Windows,
+- hanya bila jendela **IQ Option** sedang aktif,
+- hanya bila titik klik berada di area yang dikalibrasi,
+- maksimal satu klik per candle,
+- berhenti otomatis setelah **50 klik** per sesi.
+
+Alasan pembatasannya: pada payout 82% (seperti di IQ Option), akurasi impas adalah **54,9%**. Model ini terukur berkisar 49–55%, jadi gunakan hanya dengan uang demo.
