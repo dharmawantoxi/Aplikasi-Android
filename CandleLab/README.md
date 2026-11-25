@@ -105,7 +105,19 @@ Ini mode yang disarankan bila Anda ingin **IQ Option tetap menjadi layar utama**
    Badge selalu di atas jendela lain, **bisa diseret**, dan **klik kanan** untuk berpindah sudut. CandleLab memilih sudut yang tidak menutupi area chart.
 5. Klik **⚙** atau dobel-klik badge untuk membuka jendela penuh (live tetap berjalan). Klik **✕** untuk berhenti.
 
-Ukuran badge mengikuti isinya, jadi teks tidak pernah terpotong, dan posisinya selalu dijepit agar tetap utuh di dalam layar. Badge disembunyikan sesaat setiap kali piksel dibaca, sehingga tidak pernah ikut terpotret. Model mulai bekerja dari **5 candle** (5 non-doji). Bila candle non-doji kurang dari **20**, badge hanya menampilkan arah tanpa persen dan diberi tanda **perkiraan lemah**, karena pada rentang itu angkanya sebagian besar berasal dari prior, bukan dari pola.
+Ukuran badge mengikuti isinya, jadi teks tidak pernah terpotong, dan posisinya selalu dijepit agar tetap utuh di dalam layar. Badge disembunyikan sesaat setiap kali piksel dibaca, sehingga tidak pernah ikut terpotret. ### Tebak otomatis per candle (mode live)
+
+Saat live berjalan, CandleLab menebak **candle yang sedang berjalan** lalu membiarkan candle itu sendiri yang menilai hasilnya:
+
+- Tebakan **dikunci** selama candle berjalan dan tidak diperbarui, agar tidak "selalu benar".
+- Ketika candle selesai (chart bergeser satu langkah, atau riwayat bertambah), arah candle itu dibandingkan dengan tebakan.
+- Badge menampilkan `BENAR · 12/20` atau `SALAH · 11/20`.
+- Doji dan tebakan 50% dilewati, tidak dihitung sebagai kalah.
+- Bila jumlah candle menurun atau melompat, putaran diulang daripada menilai dengan candle yang salah.
+
+Karena candle yang berjalan tidak dipakai sebagai dasar, area chart perlu menampilkan **6 candle** (bukan 5). Sejarah benar/salah disimpan di `data.json` (`live_rounds`).
+
+Model mulai bekerja dari **5 candle** (5 non-doji). Bila candle non-doji kurang dari **20**, badge hanya menampilkan arah tanpa persen dan diberi tanda **perkiraan lemah**, karena pada rentang itu angkanya sebagian besar berasal dari prior, bukan dari pola.
 
 ## Mode live — prediksi terus diperbarui
 

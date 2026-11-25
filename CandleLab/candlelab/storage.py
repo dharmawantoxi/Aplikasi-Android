@@ -13,6 +13,10 @@ from .experiments import Experiment
 from .model import Candle, MAX_CANDLES, make_demo_candles
 
 
+# Riwayat tebak otomatis dibatasi agar data.json tidak tumbuh tanpa batas.
+LIVE_ROUNDS_KEPT = 500
+
+
 def _valid_region(region) -> bool:
     """Terima hanya empat bilangan bulat dengan ukuran wajar."""
     if not isinstance(region, (list, tuple)) or len(region) != 4:
@@ -42,6 +46,8 @@ class AppState:
     # Area chart terakhir. Koordinat layar hanya disimpan agar live bisa
     # dimulai tanpa memilih ulang; tidak ada isi layar yang disimpan.
     screen_region: tuple[int, int, int, int] | None = None
+    # Hasil tebak otomatis per candle pada mode live (benar/salah).
+    live_rounds: list[bool] = field(default_factory=list)
 
     @property
     def pending(self) -> Optional[Experiment]:
@@ -83,6 +89,11 @@ class AppState:
         self.is_demo = False
         return self.candles.pop()
 
+    def record_live_round(self, correct: bool) -> None:
+        """Catat hasil satu putaran tebak otomatis."""
+        self.live_rounds.append(bool(correct))
+        del self.live_rounds[:-LIVE_ROUNDS_KEPT]
+
     def clear_history(self) -> None:
         self.experiments = [item for item in self.experiments if item.pending]
 
@@ -112,8 +123,10 @@ class JsonStore:
             region = raw.get("screen_region")
             if not _valid_region(region):
                 region = None
+            rounds_raw = raw.get("live_rounds") or []
+            live_rounds = [bool(item) for item in rounds_raw][-LIVE_ROUNDS_KEPT:]
             state = AppState(candles, experiments[-200:], bool(raw.get("is_demo", False)),
-                             tuple(region) if region else None)
+                             tuple(region) if region else None, live_rounds)
             # Prediksi tertunda dari sesi lama hanya sah jika candle berikutnya belum masuk.
             pending = state.pending
             if pending and len(candles) == pending.candle_count + 1:
@@ -147,6 +160,8 @@ class JsonStore:
         }
         if state.screen_region:
             payload["screen_region"] = list(state.screen_region)
+        if state.live_rounds:
+            payload["live_rounds"] = state.live_rounds[-LIVE_ROUNDS_KEPT:]
         temporary = self.path.with_suffix(".tmp")
         with temporary.open("w", encoding="utf-8") as output:
             json.dump(payload, output, ensure_ascii=False, separators=(",", ":"), allow_nan=False)

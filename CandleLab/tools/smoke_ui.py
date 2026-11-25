@@ -15,7 +15,7 @@ with tempfile.TemporaryDirectory() as directory:
     from PIL import Image, ImageDraw
 
     from candlelab.live_monitor import MonitorEvent
-    from candlelab.model import GREEN, RED
+    from candlelab.model import GREEN, RED, Candle, make_demo_candles
     from candlelab.screen_capture import capture_region
     from candlelab.ui import CandleLabApp
     from candlelab.vision import detect_candles
@@ -148,6 +148,18 @@ with tempfile.TemporaryDirectory() as directory:
         app.update()
         assert float(badge.attributes("-alpha")) > 0.5, "badge tidak dipulihkan"
         assert app.wm_state() == "withdrawn", "jendela penuh muncul saat overlay aktif"
+
+        # Tebak otomatis: tebakan dikunci, lalu dinilai saat chart bergeser.
+        app.live_candles = list(make_demo_candles(8))
+        app._advance_round(app.live_candles)
+        assert app.rounds.current is not None, "putaran tidak dimulai"
+        locked = app.rounds.current.direction
+        next_direction = 1 if locked != 1 else -1
+        shifted = app.live_candles[1:] + [Candle(1.0, 2.0, 0.0, 2.0 if next_direction == 1 else 0.5)]
+        app.live_candles = shifted
+        app._advance_round(shifted)
+        assert app.rounds.stats.played == 1, "putaran bergeser tidak dinilai"
+        assert app.state.live_rounds, "hasil putaran tidak dicatat"
 
         # Area chart tersimpan agar live bisa dimulai tanpa memilih ulang.
         app._save()
