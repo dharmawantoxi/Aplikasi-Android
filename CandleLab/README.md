@@ -101,7 +101,7 @@ Worker berjalan di background thread dan berhenti saat aplikasi ditutup. Antrean
 
 ## Membaca candle langsung dari layar
 
-1. Buka chart pada aplikasi atau situs yang ingin dibaca. Perbesar chart agar body candle dan jaraknya terlihat jelas.
+1. Buka chart pada aplikasi atau situs yang ingin dibaca. Atur zoom agar body candle dan jaraknya terlihat jelas (± 8–30 px per candle) dan tampilkan minimal 20 candle.
 2. Di CandleLab, klik **Baca layar** atau tekan `F8`. CandleLab akan diminimalkan.
 3. Drag hanya pada **area price chart**. Usahakan tidak menyertakan volume, indikator, toolbar, teks berwarna, atau panel lain. Lepaskan mouse untuk menangkap; tekan `Esc` untuk batal.
 4. Periksa preview. Setiap candle yang digunakan diberi kotak hijau/merah, dan candle terakhir diberi garis kuning. Urutan `H/M/D` serta tingkat konsistensi deteksi ditampilkan.
@@ -110,7 +110,7 @@ Worker berjalan di background thread dan berhenti saat aplikasi ditutup. Antrean
    - **Tambah candle terakhir** untuk menambahkan hanya candle paling kanan dan menilai prediksi yang sedang dikunci.
    - **Tangkap ulang area** jika ada objek yang salah terdeteksi. `Ctrl+F8` juga mengulang tangkapan pada koordinat yang sama.
 
-Deteksi bekerja berdasarkan warna piksel hijau/teal dan merah, body/sumbu, serta konsistensi lebar dan spasi—**bukan OCR harga**. OHLC yang dihasilkan hanya memakai skala piksel relatif agar grafik dan arah dapat diproses; nilainya bukan harga aset sebenarnya. Warna chart custom, candle terlalu kecil/saling menempel, atau objek lain berwarna sama dapat menyebabkan kesalahan. **Jangan gunakan hasil tanpa memeriksa preview.**
+Deteksi bekerja berdasarkan warna piksel hijau/teal dan merah, body/sumbu, serta konsistensi lebar dan spasi—**bukan OCR harga**. Candle berisi (solid) maupun berongga (hollow) didukung, dan batas ukuran mengikuti skala layar sehingga chart yang diperbesar, tema terang seperti IQ Option, atau grafik dengan body lebar tetap terbaca. Komponen yang sangat pendek/lebar (teks, tombol, logo) disaring sebelum pemilihan deret. OHLC yang dihasilkan hanya memakai skala piksel relatif agar grafik dan arah dapat diproses; nilainya bukan harga aset sebenarnya. Warna chart custom, candle terlalu kecil/saling menempel, atau objek lain berwarna sama dapat menyebabkan kesalahan. **Jangan gunakan hasil tanpa memeriksa preview.**
 
 Screenshot dan koordinat area hanya disimpan dalam memori selama aplikasi berjalan, tidak ditulis ke disk, dan tidak dikirim ke mana pun. Di macOS, berikan izin **Screen Recording** kepada CandleLab/Python. Pada Linux Wayland, kebijakan sistem dapat membatasi tangkapan layar; X11 atau impor CSV dapat digunakan sebagai alternatif.
 

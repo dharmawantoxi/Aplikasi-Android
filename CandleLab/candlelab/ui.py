@@ -314,6 +314,8 @@ class CandleLabApp(tk.Tk):
             if self.live_active:
                 text(parent, "Pada mode live, tangkap minimal 21 candle jika candle paling kanan diabaikan.",
                      8, ACCENT, bg=SIDEBAR, wraplength=340).pack(anchor="w", pady=(8, 0))
+                text(parent, "Chart broker yang menampilkan sedikit candle: perkecil zoom agar lebih banyak candle terlihat di area yang dipilih.",
+                     8, "#82998F", bg=SIDEBAR, wraplength=340).pack(anchor="w", pady=(6, 0))
                 button(parent, "Stop live", self.toggle_live, "accent").pack(anchor="w", pady=(18, 0))
             else:
                 button(parent, "Tambah candle", self.add_candle_dialog, "accent").pack(anchor="w", pady=(18, 0))
@@ -1045,7 +1047,7 @@ class CandleLabApp(tk.Tk):
                 "CandleLab membaca piksel hijau/teal dan merah, mengelompokkan body serta sumbu, lalu memilih deret dengan lebar dan spasi yang konsisten. Ini bukan OCR harga dan bukan koneksi ke platform trading.",
                 "Periksa kotak penanda pada preview. Pilih ‘Ganti data dengan hasil’ untuk memuat seluruh urutan, atau ‘Tambah candle terakhir’ untuk menilai prediksi terkunci. Jangan gunakan hasil jika volume, indikator, atau teks ikut terkotak.",
                 "Ctrl+F8 menangkap ulang area yang sama. Area hanya disimpan dalam memori selama aplikasi berjalan. Screenshot tidak disimpan ke disk dan tidak dikirim ke mana pun.",
-                "Skala OHLC hasil deteksi berasal dari posisi piksel, bukan harga aset sesungguhnya. Warna custom, candle yang saling menempel, chart kecil, atau anti-alias ekstrem dapat menurunkan akurasi deteksi. Di macOS diperlukan izin Screen Recording; Wayland dapat membatasi tangkapan layar.",
+                "Skala OHLC hasil deteksi berasal dari posisi piksel, bukan harga aset sesungguhnya. Warna custom, candle yang saling menempel, chart kecil, atau anti-alias ekstrem dapat menurunkan akurasi deteksi. Grafik broker bertema terang seperti IQ Option dan candle hollow didukung; atur zoom agar 20+ candle terlihat dan tidak menempel. Di macOS diperlukan izin Screen Recording; Wayland dapat membatasi tangkapan layar.",
             ]),
             ("03  Mode live tanpa screenshot berulang", [
                 "Tekan F9 atau klik ‘Mulai live’. Jika belum ada area, pilih area price chart sekali. Setelah itu worker membaca area yang sama setiap 2 detik dan probabilitas diperbarui otomatis; Anda tidak perlu mengambil screenshot manual.",
