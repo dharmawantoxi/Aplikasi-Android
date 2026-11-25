@@ -48,6 +48,7 @@ class CandleLabApp(tk.Tk):
         self.live_hidden = False
         self.live_hidden_mode = ""
         self.live_hud = None
+        self.hud_mode = False
         self.live_candles = []
         self.live_sequence = ""
         self.live_pending_sequence = None
@@ -702,6 +703,7 @@ class CandleLabApp(tk.Tk):
         self.live_sequence = ""
         self.live_pending_sequence = None
         self.live_events = queue.Queue(maxsize=3)
+        self.hud_mode = False
         self.close_live_hud()
         self._show_after_capture()
         self.state("normal")
@@ -758,6 +760,9 @@ class CandleLabApp(tk.Tk):
         """
         if self.live_hud is not None:
             self.live_hud.set_hidden(True)
+        if self.hud_mode:
+            # Jendela utama memang sudah tidak terlihat selama HUD aktif.
+            return
         if self.live_hidden:
             return
         self.live_hidden = True
@@ -773,6 +778,9 @@ class CandleLabApp(tk.Tk):
     def _show_after_capture(self):
         if self.live_hud is not None:
             self.live_hud.set_hidden(False)
+        if self.hud_mode:
+            # Jangan munculkan jendela penuh; chart harus tetap terlihat.
+            return
         if not self.live_hidden:
             return
         self.live_hidden = False
@@ -803,12 +811,14 @@ class CandleLabApp(tk.Tk):
             )
         self.live_hud.move_to_corner(corner)
         self.withdraw()
+        self.hud_mode = True
         self.live_hud.window.deiconify()
         self.live_hud.window.lift()
         self._refresh_live_hud()
 
     def expand_from_hud(self):
         """Kembali ke jendela penuh; live tetap berjalan."""
+        self.hud_mode = False
         if self.live_hud is not None:
             self.live_hud.set_hidden(False)
         self.deiconify()

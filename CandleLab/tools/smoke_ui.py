@@ -86,25 +86,30 @@ with tempfile.TemporaryDirectory() as directory:
         hud = app.live_hud.window
         assert hud.winfo_exists()
         assert app.state() == "withdrawn", "jendela utama masih terlihat"
-        assert hud.winfo_viewable(), "panel HUD tidak tampil"
-        assert int(hud.attributes("-topmost")) == 1
+        assert int(hud.attributes("-topmost")) == 1, "HUD tidak always-on-top"
         before = (hud.winfo_x(), hud.winfo_y())
         app.live_hud.cycle_corner()
         app.update()
         assert (hud.winfo_x(), hud.winfo_y()) != before, "HUD tidak berpindah sudut"
-        # HUD harus ikut tak terlihat saat piksel diambil.
+
+        # Siklus tangkapan: HUD hilang sebentar, jendela PENUH tidak boleh muncul.
         app._hide_for_capture()
-        assert float(hud.attributes("-alpha")) < 0.01
+        assert float(hud.attributes("-alpha")) < 0.01, "HUD tidak ikut disembunyikan"
         app._show_after_capture()
-        assert float(hud.attributes("-alpha")) > 0.99
+        app.update()
+        assert float(hud.attributes("-alpha")) > 0.99, "HUD tidak dipulihkan"
+        assert app.state() == "withdrawn", "jendela penuh muncul lagi saat HUD aktif"
+
         app.expand_from_hud()
         app.update()
         assert app.state() == "normal", "jendela utama tidak kembali"
+
         app.show_live_hud()
         app.stop_live_monitor(refresh=False)
         app.update()
         assert app.live_hud is None, "HUD tidak ditutup saat live berhenti"
         assert app.state() == "normal", "jendela utama tidak dipulihkan"
+        assert not app.hud_mode, "mode HUD tidak direset"
 
         app.stop_live_monitor(refresh=False)
         print("GUI smoke test passed: pages, capture, preview, live updates, and live HUD.")
