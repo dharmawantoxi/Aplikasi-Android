@@ -11,6 +11,7 @@ from . import APP_NAME, __version__
 from .charts import CandleChart, LogoMark, ProbabilityBar
 from .csv_io import export_csv, load_csv
 from .experiments import summarise
+from .live_hud import LiveHud
 from .live_monitor import LiveScreenMonitor, MonitorEvent
 from .model import (
     DOJI, GREEN as GREEN_DIRECTION, PRIOR_STRENGTH, RED as RED_DIRECTION,
@@ -46,6 +47,7 @@ class CandleLabApp(tk.Tk):
         self.live_active = False
         self.live_hidden = False
         self.live_hidden_mode = ""
+        self.live_hud = None
         self.live_candles = []
         self.live_sequence = ""
         self.live_pending_sequence = None
@@ -178,6 +180,7 @@ class CandleLabApp(tk.Tk):
         self.bind("<F8>", lambda _event: self.read_screen())
         self.bind("<Control-F8>", lambda _event: self.read_screen(reuse_region=True))
         self.bind("<F9>", lambda _event: self.toggle_live())
+        self.bind("<F10>", lambda _event: self.expand_from_hud() if self.live_hud else None)
         self.bind("<Control-F9>", lambda _event: self.toggle_live(select_new=True))
 
     def _set_icon_buttons(self):
@@ -649,19 +652,23 @@ class CandleLabApp(tk.Tk):
         self.live_monitor = LiveScreenMonitor(
             self.live_events, self.screen_region, self.live_generation, interval=2.0,
         )
+        covered = self.live_window_overlaps_region()
         self.live_monitor.start()
-        if self.live_window_overlaps_region():
+        self.show_page("prediction")
+        # Jendela utama hilang dan diganti panel kecil, sehingga chart tetap
+        # terlihat penuh selama pemantauan.
+        self.show_live_hud()
+        if covered:
             messagebox.showwarning(
-                "Jendela menutupi area chart",
-                "Area chart yang dipilih tertutup jendela CandleLab. Area ini akan tetap "
-                "terbaca nyaris kosong setiap kali jendela muncul kembali.\n\n"
-                "Pindahkan/geser jendela CandleLab agar area chart terlihat penuh, "
-                "lalu pilih area baru dengan Ctrl+F9.", parent=self,
+                "Jendela sempat menutupi area chart",
+                "Sebagian area chart tadi tertutup jendela CandleLab, jadi pembacaan "
+                "pertama bisa salah.\n\nJendela penuh kini disembunyikan; panel kecil "
+                "dapat digeser agar tidak menutupi candle. Jika hasilnya masih aneh, "
+                "pilih area baru dengan Ctrl+F9.", parent=self.live_hud.window,
             )
         self.set_status(
-            f"LIVE aktif • {len(self.live_candles)} candle • jangan tutupi area grafik yang dipilih."
+            f"LIVE aktif • {len(self.live_candles)} candle • panel live dapat digeser."
         )
-        self.show_page("prediction")
         self.after(120, self._poll_live_events)
 
     def live_window_overlaps_region(self) -> bool:
@@ -695,7 +702,11 @@ class CandleLabApp(tk.Tk):
         self.live_sequence = ""
         self.live_pending_sequence = None
         self.live_events = queue.Queue(maxsize=3)
+        self.close_live_hud()
         self._show_after_capture()
+        self.state("normal")
+        self.deiconify()
+        self.lift()
         self.set_status("Mode live berhenti. Data tersimpan tidak berubah.")
         if refresh:
             self.refresh()
@@ -740,12 +751,13 @@ class CandleLabApp(tk.Tk):
             self.after(120, self._poll_live_events)
 
     def _hide_for_capture(self):
-        """Buat jendela tidak terlihat selama satu tangkapan live.
+        """Buat semua jendela CandleLab tidak terlihat saat piksel diambil.
 
-        Transparansi dipakai lebih dulu karena tidak mengubah fokus/taskbar
-        sehingga tidak berkedip; ``withdraw`` menjadi cadangan bila window
-        manager tidak mendukung atribut alpha.
+        HUD ikut disembunyikan sebentar karena panel itu juga berada di atas
+        chart. Keduanya memakai transparansi agar fokus/taskbar tidak berubah.
         """
+        if self.live_hud is not None:
+            self.live_hud.set_hidden(True)
         if self.live_hidden:
             return
         self.live_hidden = True
@@ -759,6 +771,8 @@ class CandleLabApp(tk.Tk):
         self.withdraw()
 
     def _show_after_capture(self):
+        if self.live_hud is not None:
+            self.live_hud.set_hidden(False)
         if not self.live_hidden:
             return
         self.live_hidden = False
@@ -777,6 +791,43 @@ class CandleLabApp(tk.Tk):
             except tk.TclError:
                 pass
             self.deiconify()
+
+    def show_live_hud(self, corner=None):
+        """Sembunyikan jendela utama dan tampilkan panel kecil di atas chart."""
+        if self.live_hud is None:
+            self.live_hud = LiveHud(self, on_stop=self.stop_live_monitor,
+                                    on_expand=self.expand_from_hud)
+        if corner is None:
+            corner = self.live_hud.best_corner(
+                self.screen_region, self.winfo_screenwidth(), self.winfo_screenheight(),
+            )
+        self.live_hud.move_to_corner(corner)
+        self.withdraw()
+        self.live_hud.window.deiconify()
+        self.live_hud.window.lift()
+        self._refresh_live_hud()
+
+    def expand_from_hud(self):
+        """Kembali ke jendela penuh; live tetap berjalan."""
+        if self.live_hud is not None:
+            self.live_hud.set_hidden(False)
+        self.deiconify()
+        self.state("normal")
+        self.lift()
+        self.refresh()
+
+    def close_live_hud(self):
+        if self.live_hud is not None:
+            self.live_hud.close()
+            self.live_hud = None
+
+    def _refresh_live_hud(self):
+        if self.live_hud is None:
+            return
+        self.live_hud.update(
+            self._prediction(), len(self._source_candles()),
+            bool(self.exclude_forming_var.get()),
+        )
 
     def _process_live_result(self, event: MonitorEvent):
         result = event.result
@@ -805,6 +856,7 @@ class CandleLabApp(tk.Tk):
                 f" • {event.elapsed:.1f} detik/baca • {datetime.now():%H:%M:%S}"
             )
         self._refresh_live_panels(redraw_chart=True, redraw_model=changed)
+        self._refresh_live_hud()
 
     def _refresh_live_panels(self, redraw_chart=True, redraw_model=True):
         if self.current_page != "prediction":
@@ -1174,6 +1226,7 @@ class CandleLabApp(tk.Tk):
     def _close(self):
         if self.live_active:
             self.stop_live_monitor(refresh=False)
+        self.close_live_hud()
         self._save()
         self.destroy()
 

@@ -90,7 +90,12 @@ Pintasan: `Ctrl+N` tambah candle, `Ctrl+I` impor CSV, `Ctrl+S` ekspor CSV, `F5` 
 
 1. Buka chart dan atur zoom/warna agar candle terlihat jelas.
 2. Tekan **`F9`** atau klik **Mulai live**. Jika belum ada area tersimpan, drag area price chart sekali.
-3. Selama live, CandleLab **menyembunyikan jendelanya sendiri sesaat** sebelum setiap pembacaan (± tiap 2 detik), lalu menampilkannya kembali. Ini wajib: bila jendela menutupi area chart, aplikasi akan membaca grafiknya sendiri dan menghasilkan "candle" palsu berupa potongan kecil. Jika area yang dipilih tetap tertutup jendela, CandleLab menampilkan peringatan saat live dimulai — geser jendela lalu pilih area baru dengan `Ctrl+F9`.
+3. Saat live dimulai, **jendela penuh CandleLab disembunyikan** dan diganti **panel live kecil** yang mengambang di atas chart, sehingga chart IQ Option tetap terlihat penuh. Panel menampilkan arah dan probabilitas terbaru.
+   - **Seret** panel untuk memindahkannya, atau klik **⇄ Pindah sudut**.
+   - CandleLab otomatis memilih sudut yang tidak menutupi area chart yang Anda pilih.
+   - **Buka jendela** (atau `F10`) mengembalikan tampilan penuh; live tetap berjalan.
+   - **✕** atau **Stop live** menghentikan pemantauan dan memunculkan jendela penuh.
+   - Panel juga disembunyikan sesaat (± 0,1 detik) setiap kali piksel diambil, jadi tidak pernah ikut terbaca. Ini wajib: bila jendela menutupi area chart, aplikasi akan membaca grafiknya sendiri dan menghasilkan "candle" palsu berupa potongan kecil. Jika area yang dipilih tetap tertutup jendela, CandleLab menampilkan peringatan saat live dimulai — geser jendela lalu pilih area baru dengan `Ctrl+F9`.
 4. **Ctrl+F9** memilih area baru; **F9** atau **Stop live** menghentikan monitor.
 
    Aplikasi memperingatkan bila objek yang terbaca terlalu kecil untuk sebuah candle (mis. potongan ikon atau teks). Itu tanda area tangkapan salah atau tertutup — perbaiki area, jangan melanjutkan dengan data tersebut.

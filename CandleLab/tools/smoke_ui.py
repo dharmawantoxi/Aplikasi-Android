@@ -78,7 +78,35 @@ with tempfile.TemporaryDirectory() as directory:
         assert not app.live_hidden
         assert float(app.attributes("-alpha")) > 0.99
 
+        # HUD live: jendela utama hilang, panel kecil tampil dan bisa digeser.
+        app.screen_region = (100, 250, 1430, 800)
+        app.show_live_hud()
+        app.update()
+        assert app.live_hud is not None, "HUD tidak dibuat"
+        hud = app.live_hud.window
+        assert hud.winfo_exists()
+        assert app.state() == "withdrawn", "jendela utama masih terlihat"
+        assert hud.winfo_viewable(), "panel HUD tidak tampil"
+        assert int(hud.attributes("-topmost")) == 1
+        before = (hud.winfo_x(), hud.winfo_y())
+        app.live_hud.cycle_corner()
+        app.update()
+        assert (hud.winfo_x(), hud.winfo_y()) != before, "HUD tidak berpindah sudut"
+        # HUD harus ikut tak terlihat saat piksel diambil.
+        app._hide_for_capture()
+        assert float(hud.attributes("-alpha")) < 0.01
+        app._show_after_capture()
+        assert float(hud.attributes("-alpha")) > 0.99
+        app.expand_from_hud()
+        app.update()
+        assert app.state() == "normal", "jendela utama tidak kembali"
+        app.show_live_hud()
         app.stop_live_monitor(refresh=False)
-        print("GUI smoke test passed: pages, screen capture, vision preview, and live updates.")
+        app.update()
+        assert app.live_hud is None, "HUD tidak ditutup saat live berhenti"
+        assert app.state() == "normal", "jendela utama tidak dipulihkan"
+
+        app.stop_live_monitor(refresh=False)
+        print("GUI smoke test passed: pages, capture, preview, live updates, and live HUD.")
     finally:
         app.destroy()
