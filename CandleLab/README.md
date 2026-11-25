@@ -248,3 +248,19 @@ Pengaman yang selalu berlaku:
 - berhenti otomatis setelah **50 klik** per sesi.
 
 Alasan pembatasannya: pada payout 82% (seperti di IQ Option), akurasi impas adalah **54,9%**. Model ini terukur berkisar 49–55%, jadi gunakan hanya dengan uang demo.
+
+## Lab hipotesis
+
+Halaman untuk menjawab satu pertanyaan: **apakah sebuah pola benar-benar ada, atau hanya kebetulan?**
+
+Pilih satu hipotesis (pola 1–3 candle, pembalikan setelah body besar, ekor panjang, efek jam), lalu aplikasi menghitung tiga hal:
+
+- **akurasi** pada data historis,
+- **nilai-p** dua sisi (uji binomial eksak), yaitu peluang melihat hasil seekstrem ini bila model tidak lebih baik dari koin,
+- **jumlah sampel** yang dibutuhkan bila edge-nya sebesar yang terlihat.
+
+Dua tombol: *Uji hipotesis ini* (satu uji, sesuai anjuran) dan *Uji semua (dikoreksi)* yang menerapkan koreksi **Benjamini-Hochberg** karena menguji banyak hipotesis sekaligus hampir pasti memunculkan penemuan palsu.
+
+Hasil hanya layak dipakai bila **dua syarat terpenuhi bersama**: nilai-p < 0,05 *dan* akurasi melewati ambang impas (`1 / (1 + payout)`), yaitu 54,9% pada payout 82%.
+
+Satu hipotesis juga diverifikasi agar tidak menipu: efek jam sempat terlihat 60,4% pada data acak murni karena frekuensi dasarnya dihitung dari seluruh data (termasuk masa depan). Setelah dibuat walk-forward, hasilnya 51,7% dan tidak signifikan.

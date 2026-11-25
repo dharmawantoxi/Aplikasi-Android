@@ -16,6 +16,8 @@ from .hud_layout import best_badge_corner
 from .live_hud import LiveHud
 from .overlay import BADGE_HEIGHT, BADGE_WIDTH, OverlayBadge
 from .auto_click import click_point, find_button_pair
+from .hypotheses import HYPOTHESES, run_hypothesis
+from .hypothesis_stats import evaluate, evaluate_many
 from .auto_click_win import (
     ClickLimiter,
     check_before_click,
@@ -64,6 +66,8 @@ class CandleLabApp(tk.Tk):
         self.clock = CandleClock()
         self._round_status = ""
         # Klik otomatis: nonaktif secara bawaan.
+        self.lab_results = []
+        self.lab_payout_var = tk.StringVar(value="82")
         self.auto_click_enabled = False
         self.click_guard = ClickLimiter()
         self._clicked_candle = -1
@@ -171,6 +175,7 @@ class CandleLabApp(tk.Tk):
             ("prediction", "◈   Prediksi"),
             ("data", "▤   Data candle"),
             ("experiments", "✓   Eksperimen"),
+            ("lab", "⚗   Lab hipotesis"),
             ("guide", "?   Panduan"),
         ):
             nav = tk.Button(
@@ -253,6 +258,8 @@ class CandleLabApp(tk.Tk):
             self._data_page()
         elif name == "experiments":
             self._experiments_page()
+        elif name == "lab":
+            self._lab_page()
         else:
             self._guide_page()
 
@@ -1515,6 +1522,148 @@ class CandleLabApp(tk.Tk):
         if self._save():
             self.set_status("Candle terakhir dihapus.")
             self.refresh()
+
+    def _lab_page(self):
+        """Lab hipotesis: satu hipotesis, diuji sekali, dengan nilai-p jujur."""
+        scroller = ScrollFrame(self.page_host)
+        scroller.pack(fill="both", expand=True)
+        page = tk.Frame(scroller.interior, bg=BG, padx=28, pady=25)
+        page.pack(fill="both", expand=True)
+        page_heading(page, "Lab hipotesis",
+                     "Bedakan pola nyata dari kebetulan. Pilih satu hipotesis, "
+                     "jalankan sekali, lalu lihat nilai-p-nya.").pack(fill="x")
+
+        candles = self._chart_candles()
+        info = tk.Frame(page, bg=GREEN_PALE, padx=15, pady=12)
+        info.pack(fill="x", pady=(18, 12))
+        text(info, f"Data: {len(candles)} candle"
+                   + (" (simulasi)" if self.state.is_demo else " (data Anda)"),
+             9, GREEN, "bold", GREEN_PALE).pack(anchor="w")
+        text(info, "Uji pada data historis TIDAK sama dengan hasil live. Pola yang "
+                   "lolos di sini tetap harus dibuktikan dengan putaran baru.",
+             8, "#2F6B4F", bg=GREEN_PALE, wraplength=880, justify="left").pack(anchor="w", pady=(3, 0))
+
+        controls = card(page, padding=16)
+        controls.pack(fill="x", pady=(0, 12))
+        row = tk.Frame(controls, bg=SURFACE)
+        row.pack(fill="x")
+        text(row, "Hipotesis", 9, INK, "bold").pack(side="left")
+        self.lab_choice = tk.StringVar(value=HYPOTHESES[1].key)
+        combo = ttk.Combobox(row, textvariable=self.lab_choice, state="readonly",
+                             values=[f"{item.label} — {item.question}" for item in HYPOTHESES],
+                             font=(FONT, 10), width=60)
+        combo.pack(side="left", padx=(10, 10))
+        text(row, "Payout %", 9, INK, "bold").pack(side="left", padx=(6, 4))
+        ttk.Entry(row, textvariable=self.lab_payout_var, width=6,
+                  font=(FONT, 10)).pack(side="left")
+        button(row, "Uji hipotesis ini", self.run_lab_hypothesis, "primary").pack(
+            side="left", padx=(12, 0))
+        button(row, "Uji semua (dikoreksi)", self.run_lab_all, "secondary").pack(
+            side="left", padx=(6, 0))
+
+        self.lab_output = tk.Frame(page, bg=BG)
+        self.lab_output.pack(fill="both", expand=True)
+        self._render_lab_results()
+
+    def _lab_payout(self) -> float:
+        try:
+            value = float(self.lab_payout_var.get().replace(",", "."))
+        except (TypeError, ValueError):
+            value = 82.0
+        value = max(1.0, min(value, 500.0))
+        return value / 100.0
+
+    def run_lab_hypothesis(self):
+        index = [f"{item.label} — {item.question}" for item in HYPOTHESES].index(
+            self.lab_choice.get()) if self.lab_choice.get() in [
+            f"{item.label} — {item.question}" for item in HYPOTHESES] else 1
+        hypothesis = HYPOTHESES[index]
+        candles = self._chart_candles()
+        try:
+            scores = run_hypothesis(hypothesis.key, candles)
+        except Exception as exc:  # pragma: no cover - pertahanan GUI
+            messagebox.showerror("Uji gagal", str(exc), parent=self)
+            return
+        if not scores:
+            messagebox.showinfo(
+                "Tidak ada sampel",
+                "Hipotesis ini tidak menemukan satu pun kejadian yang cocok pada "
+                "data saat ini. Impor CSV yang lebih panjang atau pilih hipotesis lain.",
+                parent=self)
+            return
+        verdict = evaluate(hypothesis.label, sum(scores), len(scores), self._lab_payout())
+        self.lab_results = [(hypothesis, verdict)]
+        self._render_lab_results()
+
+    def run_lab_all(self):
+        candles = self._chart_candles()
+        raw = []
+        for hypothesis in HYPOTHESES:
+            try:
+                scores = run_hypothesis(hypothesis.key, candles)
+            except Exception:  # pragma: no cover - pertahanan GUI
+                scores = []
+            raw.append((hypothesis, sum(scores), len(scores)))
+        played = [(hypothesis, wins, total) for hypothesis, wins, total in raw if total]
+        if not played:
+            messagebox.showinfo("Tidak ada sampel", "Belum ada data untuk diuji.", parent=self)
+            return
+        verdicts = evaluate_many([(h.label, w, t) for h, w, t in played],
+                                 self._lab_payout())
+        by_label = {verdict.label: verdict for verdict in verdicts}
+        self.lab_results = [(hypothesis, by_label[hypothesis.label])
+                            for hypothesis, _, _ in played]
+        self._render_lab_results()
+
+    def _render_lab_results(self):
+        for child in self.lab_output.winfo_children():
+            child.destroy()
+        if not self.lab_results:
+            hint = card(self.lab_output, padding=18)
+            hint.pack(fill="x")
+            text(hint, "Belum ada yang diuji", 11, INK, "bold").pack(anchor="w")
+            text(hint, "Mulai dari satu hipotesis. Menguji sepuluh sekaligus lalu "
+                       "memilih yang terbaik adalah cara paling umum menghasilkan "
+                       "penemuan palsu.",
+                 8, MUTED, wraplength=820, justify="left").pack(anchor="w", pady=(4, 0))
+            return
+
+        panel = card(self.lab_output, padding=16)
+        panel.pack(fill="x", pady=(0, 12))
+        text(panel, "HASIL", 8, MUTED, "bold").pack(anchor="w", pady=(0, 10))
+        for hypothesis, verdict in self.lab_results:
+            self._render_lab_row(panel, hypothesis, verdict)
+
+        footnote = card(self.lab_output, padding=16, bg=WARNING_PALE)
+        footnote.pack(fill="x")
+        text(footnote, "Cara membaca hasil ini", 10, WARNING, "bold", WARNING_PALE).pack(anchor="w")
+        for line in (
+            "Nilai-p = peluang melihat hasil seekstrem ini bila model sebenarnya "
+            "tidak lebih baik dari koin. Di bawah 0,05 baru layak dicurigai.",
+            "Bila banyak hipotesis diuji sekaligus, nilai-p dikoreksi "
+            "(Benjamini-Hochberg) agar penemuan palsu tidak muncul dari jumlah percobaan.",
+            "Akurasi di atas ambang impas belum berarti bila nilai-p masih besar. "
+            "Dua syarat itu harus terpenuhi bersamaan.",
+        ):
+            text(footnote, "• " + line, 8, "#5A4A1F", bg=WARNING_PALE,
+                 wraplength=820, justify="left").pack(anchor="w", pady=(3, 0))
+
+    def _render_lab_row(self, parent, hypothesis, verdict):
+        row = tk.Frame(parent, bg=SURFACE, pady=8)
+        row.pack(fill="x")
+        left = tk.Frame(row, bg=SURFACE)
+        left.pack(side="left", fill="x", expand=True)
+        text(left, hypothesis.label, 10, INK, "bold", SURFACE).pack(anchor="w")
+        text(left, hypothesis.question, 8, MUTED, SURFACE, wraplength=560,
+             justify="left").pack(anchor="w")
+        text(left, verdict.summary(), 8,
+             GREEN if verdict.profitable else (WARNING if verdict.significant else MUTED),
+             bg=SURFACE, wraplength=560, justify="left").pack(anchor="w", pady=(3, 0))
+        right = tk.Frame(row, bg=SURFACE)
+        right.pack(side="right")
+        acc = "—" if verdict.accuracy is None else format_percent(verdict.accuracy, 1)
+        text(right, acc, 13, INK, "bold", SURFACE).pack(anchor="e")
+        text(right, f"n={verdict.total}  p={verdict.adjusted_p:.3f}", 8, MUTED, SURFACE).pack(anchor="e")
 
     def _experiments_page(self):
         scroller = ScrollFrame(self.page_host)
