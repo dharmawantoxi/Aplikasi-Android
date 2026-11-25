@@ -41,6 +41,13 @@ def select_and_capture(root):
         text="Drag untuk memilih area grafik candle  •  Lepaskan untuk membaca  •  Esc untuk batal",
         fill="#FFFFFF", font=(FONT, 13, "bold"),
     )
+    # Candle baru muncul di kanan. Bila area berhenti tepat di candle terakhir,
+    # candle berikutnya berada di luar area dan putaran tidak pernah selesai.
+    canvas.create_text(
+        width / 2, 60,
+        text="Sertakan ruang kosong di KANAN candle terakhir, supaya candle baru ikut terbaca.",
+        fill=ACCENT, font=(FONT, 11, "bold"),
+    )
     start = None
     rectangle = None
     dimensions = None

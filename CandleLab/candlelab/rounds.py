@@ -15,6 +15,7 @@ candle yang sedang bergerak.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import time
 from typing import Optional, Sequence
 
 
@@ -76,11 +77,14 @@ class RoundTracker:
     bertambah panjang menandakan candle sebelumnya sudah selesai.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, start_monotonic: Optional[float] = None) -> None:
         self.stats = RoundStats()
         self.current: Optional[Round] = None
         self._history: list[int] = []
         self._reset_reason = ""
+        self._opened_at: Optional[float] = None
+        if start_monotonic is not None:
+            self._opened_at = start_monotonic
 
     @property
     def reset_reason(self) -> str:
@@ -96,6 +100,8 @@ class RoundTracker:
         self.current = None
         self._history = []
         self._reset_reason = ""
+        self._opened_at = None
+
 
     def observe(self, history_candles: Sequence, prediction) -> Optional[Round]:
         """Perbarui putaran. Kembalikan putaran yang baru selesai (bila ada).
@@ -139,6 +145,8 @@ class RoundTracker:
 
         if self.current is None or resolved is not None:
             self.current = self._open(prediction, len(history))
+            if self.current is not None:
+                self._opened_at = time.monotonic()
         return resolved
 
     # -- internal ---------------------------------------------------------
@@ -174,6 +182,17 @@ class RoundTracker:
             self.stats.streak = min(-1, self.stats.streak - 1)
         self.stats.last_correct = round_.correct
         return round_
+
+    def waiting_seconds(self) -> Optional[float]:
+        """Berapa lama tebakan menunggu candle-nya selesai.
+
+        Dipakai badge untuk menunjukkan aplikasi masih bekerja; angka yang
+        terus naik juga menjadi petunjuk bahwa deteksi berhenti (mis. jendela
+        chart tertutup).
+        """
+        if self.current is None or self.current.resolved or self._opened_at is None:
+            return None
+        return max(0.0, time.monotonic() - self._opened_at)
 
     def status_text(self) -> str:
         """Ringkasan pendek untuk badge/panel."""

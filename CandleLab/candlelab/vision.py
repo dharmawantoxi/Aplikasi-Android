@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from statistics import median
 from typing import TYPE_CHECKING, Optional
 
-from .model import Candle, DOJI, GREEN, RED
+from .model import MIN_CANDLES, Candle, DOJI, GREEN, RED
 
 if TYPE_CHECKING:
     from PIL import Image
@@ -337,8 +337,9 @@ def detect_candles(image: "Image.Image") -> VisionResult:
             "Objek terdeteksi terlalu kecil untuk candle (bisa jadi ikon/teks). "
             "Pastikan area chart benar-benar terlihat saat dibaca; CandleLab tidak boleh menutupinya."
         )
-    elif len(detections) < 20:
-        warning = "Kurang dari 5 candle terdeteksi; perbesar area atau perkecil zoom chart."
+    elif len(detections) < MIN_CANDLES:
+        warning = (f"Kurang dari {MIN_CANDLES} candle terdeteksi; perbesar area "
+                   "atau perkecil zoom chart.")
     elif _candles_touch(detections):
         warning = "Candle tampak saling menempel sehingga batas body sulit dipisahkan. Perbesar skala chart lalu baca ulang."
     elif confidence < 0.65:

@@ -976,6 +976,7 @@ class CandleLabApp(tk.Tk):
         if self.live_active:
             self.overlay.show_round(
                 self.rounds.current, self.rounds.stats, len(self.live_candles),
+                seconds_left=self.rounds.waiting_seconds(),
             )
         else:
             self.overlay.show_prediction(
@@ -1392,8 +1393,8 @@ class CandleLabApp(tk.Tk):
                 "Klik ‘Baca layar’ atau tekan F8. Aplikasi diminimalkan dan sebuah overlay transparan ditampilkan. Drag hanya pada area price chart, lalu lepaskan tombol mouse. Tekan Esc untuk membatalkan.",
                 "CandleLab membaca piksel hijau/teal dan merah, mengelompokkan body serta sumbu, lalu memilih deret dengan lebar dan spasi yang konsisten. Ini bukan OCR harga dan bukan koneksi ke platform trading.",
                 "Periksa kotak penanda pada preview. Pilih ‘Ganti data dengan hasil’ untuk memuat seluruh urutan, atau ‘Tambah candle terakhir’ untuk menilai prediksi terkunci. Jangan gunakan hasil jika volume, indikator, atau teks ikut terkotak.",
-                "Ctrl+F8 menangkap ulang area yang sama. Area hanya disimpan dalam memori selama aplikasi berjalan. Screenshot tidak disimpan ke disk dan tidak dikirim ke mana pun.",
-                "Skala OHLC hasil deteksi berasal dari posisi piksel, bukan harga aset sesungguhnya. Warna custom, candle yang saling menempel, chart kecil, atau anti-alias ekstrem dapat menurunkan akurasi deteksi. Grafik broker bertema terang seperti IQ Option dan candle hollow didukung; atur zoom agar 20+ candle terlihat dan tidak menempel. Di macOS diperlukan izin Screen Recording; Wayland dapat membatasi tangkapan layar.",
+                "Ctrl+F8 menangkap ulang area yang sama. Area terakhir diingat di data.json (koordinat saja) agar mode live bisa dimulai tanpa memilih ulang. Screenshot tidak disimpan ke disk dan tidak dikirim ke mana pun.",
+                "Skala OHLC hasil deteksi berasal dari posisi piksel, bukan harga aset sesungguhnya. Warna custom, candle yang saling menempel, chart kecil, atau anti-alias ekstrem dapat menurunkan akurasi deteksi. Grafik broker bertema terang seperti IQ Option dan candle hollow didukung; atur zoom agar minimal 6 candle terlihat dan tidak menempel. Di macOS diperlukan izin Screen Recording; Wayland dapat membatasi tangkapan layar.",
             ]),
             ("03  Mode live tanpa screenshot berulang", [
                 "Tekan F9 atau klik ‘Mulai live’. Jika belum ada area, pilih area price chart sekali. Setelah itu worker membaca area yang sama setiap 2 detik dan probabilitas diperbarui otomatis; Anda tidak perlu mengambil screenshot manual.",
@@ -1402,6 +1403,14 @@ class CandleLabApp(tk.Tk):
                 "Model dapat mulai dari 5 candle, tetapi di bawah 20 candle non-doji hasilnya ditandai DATA SEDIKIT: angkanya sebagian besar berasal dari prior, bukan dari pola. Perlakukan sebagai perkiraan lemah.",
                 "Opsi ‘Abaikan candle paling kanan’ aktif secara default karena candle tersebut biasanya masih terbentuk. Grafik tetap menampilkannya, tetapi prediksi memakai candle sebelumnya. Saat candle baru muncul, candle yang sudah selesai otomatis masuk perhitungan.",
                 "Data live dan screenshot hanya berada di memori; aplikasi tidak menulis data set setiap interval. ‘Kunci prediksi live & berhenti’ menyimpan snapshot yang sedang dihitung, menghentikan monitor, dan membuat prediksi eksperimen. Jika live dihentikan tanpa dikunci, data tersimpan sebelumnya tetap dipakai.",
+            ]),
+            ("03b  Tebak otomatis: benar atau salah", [
+                "Di mode live, CandleLab menebak candle yang SEDANG berjalan, lalu candle itu sendiri yang menilai hasilnya. Badge menampilkan tebakannya; setelah candle selesai, badge berubah menjadi BENAR atau SALAH beserta skor seperti 12/20.",
+                "Tebakan tidak diperbarui selama candle berjalan. Kalau diperbarui, tebakan akan selalu mengikuti warna candle yang sedang bergerak dan hasilnya selalu benar — skor seperti itu tidak berarti.",
+                "Satu putaran selesai ketika jumlah candle di layar bertambah, atau ketika seluruh urutan bergeser satu langkah (umum pada chart broker: candle baru masuk di kanan, candle lama keluar di kiri).",
+                "AREA HARUS MENCAKUP CANDLE BARU. Jika kotak berhenti tepat di candle terakhir, candle berikutnya berada di luar area, jumlah candle tidak pernah berubah, dan badge akan terus menampilkan 0/0. Sertakan ruang kosong di kanan candle terakhir.",
+                "Butuh minimal 6 candle terlihat: satu candle yang sedang berjalan tidak dipakai sebagai dasar tebakan. Doji dan tebakan 50/50 dilewati, bukan dihitung sebagai kalah.",
+                "Badge menampilkan titik berkedip dan lama menunggu (mis. 42s). Angka yang terus naik tanpa pernah dinilai berarti area tangkapan tidak pernah melihat candle baru — ulangi pemilihan area.",
             ]),
             ("04  Rumus probabilitas", [
                 "Candle hijau berarti close > open, merah berarti close < open, dan doji berarti close = open. Doji ditampilkan, tetapi diabaikan saat membentuk pola dan tidak dinilai.",
