@@ -103,6 +103,38 @@ class RoundTrackerTests(unittest.TestCase):
         self.assertIsNone(finished)
         self.assertIsNone(self.tracker.current)
 
+    def test_reset_reason_is_settable(self):
+        """UI mengosongkan alasan setelah ditampilkan; harus punya setter."""
+        self.tracker.reset_reason = "uji"
+        self.assertEqual(self.tracker.reset_reason, "uji")
+        self.tracker.reset_reason = ""
+        self.assertEqual(self.tracker.reset_reason, "")
+
+    def test_every_attribute_ui_writes_on_tracker_exists(self):
+        """Cegah AttributeError di jalur live: cek atribut yang ditulis ui.py.
+
+        ui.py tidak diimpor karena membutuhkan tkinter; berkasnya dipindai
+        sebagai teks dan cukup bagian setelah ``RoundTracker`` dibuat.
+        """
+        import re
+        from pathlib import Path
+
+        from candlelab.rounds import RoundTracker
+
+        source = Path(__file__).resolve().parents[1] / "candlelab" / "ui.py"
+        text = source.read_text(encoding="utf-8")
+        text = text[text.index("RoundTracker()"):]
+        written = set(re.findall(r"self\.rounds\.([a-zA-Z_][\w]*)", text))
+        self.assertIn("reset_reason", written, "pemindaian gagal menemukan atribut")
+        tracker = RoundTracker()
+        for name in sorted(written):
+            self.assertTrue(hasattr(tracker, name), f"RoundTracker tidak punya atribut {name}")
+            current = getattr(tracker, name)
+            try:
+                setattr(tracker, name, current)
+            except AttributeError:
+                self.fail(f"atribut {name} tidak dapat ditulis dari UI")
+
     def test_status_text(self):
         self.assertEqual(self.tracker.status_text(), "0/0 benar")
         self.tracker.stats.wins, self.tracker.stats.losses = 3, 1

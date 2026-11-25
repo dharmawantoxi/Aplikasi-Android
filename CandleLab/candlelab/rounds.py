@@ -86,6 +86,11 @@ class RoundTracker:
     def reset_reason(self) -> str:
         return self._reset_reason
 
+    @reset_reason.setter
+    def reset_reason(self, value: str) -> None:
+        # UI membaca lalu mengosongkan alasan agar tidak tampil berulang.
+        self._reset_reason = value or ""
+
     def reset(self) -> None:
         """Lupakan posisi; dipakai saat area/jendela pembacaan berubah."""
         self.current = None
