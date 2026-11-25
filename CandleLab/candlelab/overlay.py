@@ -191,7 +191,7 @@ class OverlayBadge:
 
     # -- isi --------------------------------------------------------------
     def show_round(self, round_obj, stats, candle_count: int, pending: bool = True,
-                   seconds_left=None):
+                   seconds_left=None, next_in=None, timeframe="?"):
         """Tampilkan tebakan yang sedang berjalan beserta skor benar/salah.
 
         ``round_obj`` adalah ``rounds.Round``; ``stats`` adalah
@@ -202,7 +202,7 @@ class OverlayBadge:
             from .rounds import needed_candles
             kurang = needed_candles(candle_count)
             self.headline.configure(text="Belum cukup", fg="#C9D6CF")
-            pesan = (f"next\ntambah {kurang} candle" if kurang else "next\nmenunggu data")
+            pesan = (f"perlu {kurang} candle lagi" if kurang else "menunggu data")
             self.detail.configure(text=pesan, fg=DETAIL_FG)
             self._apply_geometry()
             return
@@ -214,19 +214,27 @@ class OverlayBadge:
         if round_obj.resolved:
             # Candle sudah selesai: ini bukti, bukan lagi tebakan.
             if round_obj.correct is None:
-                detail, tint = "seimbang\ntidak dinilai", DETAIL_FG
+                detail, tint = "tebakan tadi\ntidak dinilai", DETAIL_FG
             elif round_obj.correct:
-                detail, tint = f"BENAR · {stats.wins}/{stats.played}", "#3FE08A"
+                detail, tint = f"tebakan tadi BENAR\nskor {stats.wins}/{stats.played}", "#3FE08A"
             else:
-                detail, tint = f"SALAH · {stats.wins}/{stats.played}", "#FF8A7A"
+                detail, tint = f"tebakan tadi SALAH\nskor {stats.wins}/{stats.played}", "#FF8A7A"
         else:
             # Tanpa penanda waktu, badge tampak diam selama satu candle penuh
             # dan pengguna mengira aplikasi berhenti.
             tick = "." * (1 + int(time.monotonic() * 2) % 3)
-            sisa = ""
-            if seconds_left is not None and seconds_left >= 0:
-                sisa = f" · {int(seconds_left)}s"
-            detail = f"next · {stats.wins}/{stats.played}{tick}\nmenunggu candle{sisa}"
+            # Sisa waktu ke candle berikutnya adalah saat entry 1 menit masuk
+            # akal; tanpa itu badge hanya diam tanpa memberi waktu berguna.
+            if next_in is not None and next_in >= 0:
+                ketiga = f"candle baru {int(next_in)} dtk"
+            elif seconds_left is not None and seconds_left >= 0:
+                ketiga = f"menunggu {int(seconds_left)} dtk"
+            else:
+                ketiga = ""
+            baris = f"skor {stats.wins}/{stats.played}{tick}"
+            if ketiga:
+                baris = ketiga + "\n" + baris
+            detail = f"tebakan {timeframe}\n{baris}"
             tint = DETAIL_FG
         self.headline.configure(text=label, fg=colour)
         self.detail.configure(text=detail, fg=tint)

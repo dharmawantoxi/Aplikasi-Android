@@ -2,7 +2,7 @@
 import unittest
 
 from candlelab.model import Candle, CandleModel, DOJI, GREEN, RED
-from candlelab.rounds import Round, RoundTracker
+from candlelab.rounds import CandleClock, Round, RoundTracker
 
 
 def candle(direction: int) -> Candle:
@@ -174,6 +174,12 @@ class RoundTrackerTests(unittest.TestCase):
             del tracker.log[:-tracker.keep]
         self.assertEqual(len(tracker.log), 3)
 
+    def test_stats_have_enough_data_for_significance(self):
+        """Menentukan kapan skor layak dipercaya (dipakai UI)."""
+        from candlelab.rounds import MIN_ROUNDS_FOR_SIGNAL, accuracy_is_meaningful
+        self.assertFalse(accuracy_is_meaningful(MIN_ROUNDS_FOR_SIGNAL - 1))
+        self.assertTrue(accuracy_is_meaningful(MIN_ROUNDS_FOR_SIGNAL))
+
     def test_status_text(self):
         self.assertEqual(self.tracker.status_text(), "0/0 benar")
         self.tracker.stats.wins, self.tracker.stats.losses = 3, 1
@@ -182,3 +188,45 @@ class RoundTrackerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CandleClockTests(unittest.TestCase):
+    """Durasi candle diukur dari pergantian candle, bukan diketik manual."""
+
+    def test_period_unknown_until_enough_switches(self):
+        clock = CandleClock()
+        self.assertIsNone(clock.period)
+        clock.mark_new_candle(0.0)
+        clock.mark_new_candle(60.0)
+        self.assertIsNone(clock.period, "satu selisih belum cukup")
+
+    def test_period_measured_from_switches(self):
+        clock = CandleClock()
+        for moment in (0.0, 60.0, 120.0, 180.0):
+            clock.mark_new_candle(moment)
+        self.assertEqual(clock.period, 60.0)
+        self.assertEqual(clock.label(), "1 mnt")
+
+    def test_ignores_detection_flicker(self):
+        clock = CandleClock()
+        clock.mark_new_candle(0.0)
+        clock.mark_new_candle(1.0)    # kedipan deteksi
+        clock.mark_new_candle(61.0)
+        clock.mark_new_candle(121.0)
+        interval = sorted(clock._deltas)
+        self.assertNotIn(1.0, interval, "selisih terlalu pendek harus diabaikan")
+
+    def test_seconds_to_next_candle(self):
+        clock = CandleClock()
+        for moment in (0.0, 60.0, 120.0):
+            clock.mark_new_candle(moment)
+        self.assertAlmostEqual(clock.seconds_to_next(140.0), 40.0)
+        self.assertAlmostEqual(clock.seconds_to_next(179.0), 1.0)
+
+    def test_reset_clears_measurement(self):
+        clock = CandleClock()
+        for moment in (0.0, 60.0, 120.0):
+            clock.mark_new_candle(moment)
+        clock.reset()
+        self.assertIsNone(clock.period)
+        self.assertIsNone(clock.seconds_to_next(500.0))

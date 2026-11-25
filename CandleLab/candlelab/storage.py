@@ -48,6 +48,8 @@ class AppState:
     screen_region: tuple[int, int, int, int] | None = None
     # Hasil tebak otomatis per candle pada mode live (benar/salah).
     live_rounds: list[bool] = field(default_factory=list)
+    # Area panel tombol Higher/Lower, untuk mode klik otomatis (opsional).
+    click_region: tuple[int, int, int, int] | None = None
 
     @property
     def pending(self) -> Optional[Experiment]:
@@ -123,10 +125,14 @@ class JsonStore:
             region = raw.get("screen_region")
             if not _valid_region(region):
                 region = None
+            click_raw = raw.get("click_region")
+            if not _valid_region(click_raw):
+                click_raw = None
             rounds_raw = raw.get("live_rounds") or []
             live_rounds = [bool(item) for item in rounds_raw][-LIVE_ROUNDS_KEPT:]
             state = AppState(candles, experiments[-200:], bool(raw.get("is_demo", False)),
-                             tuple(region) if region else None, live_rounds)
+                             tuple(region) if region else None, live_rounds,
+                             tuple(click_raw) if click_raw else None)
             # Prediksi tertunda dari sesi lama hanya sah jika candle berikutnya belum masuk.
             pending = state.pending
             if pending and len(candles) == pending.candle_count + 1:
@@ -160,6 +166,8 @@ class JsonStore:
         }
         if state.screen_region:
             payload["screen_region"] = list(state.screen_region)
+        if state.click_region:
+            payload["click_region"] = list(state.click_region)
         if state.live_rounds:
             payload["live_rounds"] = state.live_rounds[-LIVE_ROUNDS_KEPT:]
         temporary = self.path.with_suffix(".tmp")

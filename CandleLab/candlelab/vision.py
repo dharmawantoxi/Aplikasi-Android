@@ -58,7 +58,8 @@ class VisionResult:
                        for item in self.detections)
 
 
-def _masks(image: "Image.Image") -> tuple[bytearray, bytearray]:
+def colour_masks(image: "Image.Image") -> tuple[bytearray, bytearray]:
+    """Masker piksel hijau/merah; dipakai juga untuk mengenali tombol broker."""
     rgb = image.convert("RGB")
     green = bytearray(rgb.width * rgb.height)
     red = bytearray(rgb.width * rgb.height)
@@ -280,7 +281,7 @@ def detect_candles(image: "Image.Image") -> VisionResult:
         empty = work.copy()
         return VisionResult([], [], empty, 0.0, 0, "Area terlalu kecil. Pilih area grafik yang lebih besar.")
 
-    green_mask, red_mask = _masks(work)
+    green_mask, red_mask = colour_masks(work)
     raw = _components(green_mask, work.width, work.height, GREEN)
     raw += _components(red_mask, work.width, work.height, RED)
     candidates: list[Component] = []

@@ -111,7 +111,8 @@ Saat live berjalan, CandleLab menebak **candle yang sedang berjalan** lalu membi
 
 - Tebakan **dikunci** selama candle berjalan dan tidak diperbarui, agar tidak "selalu benar".
 - Ketika candle selesai (chart bergeser satu langkah, atau riwayat bertambah), arah candle itu dibandingkan dengan tebakan.
-- Badge menampilkan `BENAR · 12/20` atau `SALAH · 11/20`.
+- Badge menampilkan `tebakan candle INI / sisa 7/12 ... 40 dtk` selama menunggu, lalu `tebakan tadi BENAR / skor 8/12` atau `SALAH`.
+- Di bawah 30 putaran, aplikasi menyatakan skor **belum bisa disimpulkan**.
 - Doji dan tebakan 50% dilewati, tidak dihitung sebagai kalah.
 - Bila jumlah candle menurun atau melompat, putaran diulang daripada menilai dengan candle yang salah.
 
@@ -227,3 +228,39 @@ python tools/smoke_ui.py
 ```
 
 Workflow Windows menjalankan smoke test ini sebelum membuat `.exe`; test tidak membaca atau mengubah data pengguna.
+
+## Klik otomatis (opsional, Windows)
+
+Mengklik tombol Higher/Lower secara otomatis setiap kali tebakan baru muncul. **Mati secara bawaan** dan hanya untuk akun demo.
+
+Aktifkan lewat panel tebak otomatis setelah mengalibrasi tombol:
+
+1. Halaman **Data** → **Kalibrasi tombol broker** → pilih area yang memuat kedua tombol Higher dan Lower.
+2. Tombol dikenali hanya bila berbentuk blok besar (bukan candle) dan keduanya bersusun sejajar.
+3. Panel tebak otomatis → **Aktifkan klik otomatis** → konfirmasi.
+
+Pengaman yang selalu berlaku:
+
+- hanya berjalan di Windows,
+- hanya bila jendela **IQ Option** sedang aktif,
+- hanya bila titik klik berada di area yang dikalibrasi,
+- maksimal satu klik per candle,
+- berhenti otomatis setelah **50 klik** per sesi.
+
+Alasan pembatasannya: pada payout 82% (seperti di IQ Option), akurasi impas adalah **54,9%**. Model ini terukur berkisar 49–55%, jadi gunakan hanya dengan uang demo.
+
+## Lab hipotesis
+
+Halaman untuk menjawab satu pertanyaan: **apakah sebuah pola benar-benar ada, atau hanya kebetulan?**
+
+Pilih satu hipotesis (pola 1–3 candle, pembalikan setelah body besar, ekor panjang, efek jam), lalu aplikasi menghitung tiga hal:
+
+- **akurasi** pada data historis,
+- **nilai-p** dua sisi (uji binomial eksak), yaitu peluang melihat hasil seekstrem ini bila model tidak lebih baik dari koin,
+- **jumlah sampel** yang dibutuhkan bila edge-nya sebesar yang terlihat.
+
+Dua tombol: *Uji hipotesis ini* (satu uji, sesuai anjuran) dan *Uji semua (dikoreksi)* yang menerapkan koreksi **Benjamini-Hochberg** karena menguji banyak hipotesis sekaligus hampir pasti memunculkan penemuan palsu.
+
+Hasil hanya layak dipakai bila **dua syarat terpenuhi bersama**: nilai-p < 0,05 *dan* akurasi melewati ambang impas (`1 / (1 + payout)`), yaitu 54,9% pada payout 82%.
+
+Satu hipotesis juga diverifikasi agar tidak menipu: efek jam sempat terlihat 60,4% pada data acak murni karena frekuensi dasarnya dihitung dari seluruh data (termasuk masa depan). Setelah dibuat walk-forward, hasilnya 51,7% dan tidak signifikan.

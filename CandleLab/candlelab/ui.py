@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import queue
+import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import traceback
@@ -14,7 +15,21 @@ from .experiments import summarise
 from .hud_layout import best_badge_corner
 from .live_hud import LiveHud
 from .overlay import BADGE_HEIGHT, BADGE_WIDTH, OverlayBadge
-from .rounds import RoundTracker
+from .auto_click import click_point, find_button_pair
+from .hypotheses import HYPOTHESES, run_hypothesis
+from .hypothesis_stats import evaluate, evaluate_many
+from .auto_click_win import (
+    ClickLimiter,
+    check_before_click,
+    left_click,
+    platform_supported,
+)
+from .rounds import (
+    MIN_ROUNDS_FOR_SIGNAL,
+    CandleClock,
+    RoundTracker,
+    accuracy_is_meaningful,
+)
 from .live_monitor import LiveScreenMonitor, MonitorEvent
 from .model import (
     MIN_CANDLES,
@@ -23,7 +38,7 @@ from .model import (
     Candle, CandleModel, make_demo_candles,
 )
 from .storage import JsonStore
-from .screen_capture import capture_after_overlay_closed
+from .screen_capture import capture_after_overlay_closed, capture_region
 from .screen_ui import select_and_capture
 from .vision import VisionResult, detect_candles
 from .theme import (
@@ -48,7 +63,14 @@ class CandleLabApp(tk.Tk):
         # Putaran tebak otomatis: tebakan dikunci per candle lalu dinilai
         # oleh candle itu sendiri saat selesai.
         self.rounds = RoundTracker()
+        self.clock = CandleClock()
         self._round_status = ""
+        # Klik otomatis: nonaktif secara bawaan.
+        self.lab_results = []
+        self.lab_payout_var = tk.StringVar(value="82")
+        self.auto_click_enabled = False
+        self.click_guard = ClickLimiter()
+        self._clicked_candle = -1
         self.screen_region = self.state.screen_region
         self.live_monitor = None
         self.live_events = queue.Queue(maxsize=3)
@@ -153,6 +175,7 @@ class CandleLabApp(tk.Tk):
             ("prediction", "◈   Prediksi"),
             ("data", "▤   Data candle"),
             ("experiments", "✓   Eksperimen"),
+            ("lab", "⚗   Lab hipotesis"),
             ("guide", "?   Panduan"),
         ):
             nav = tk.Button(
@@ -235,6 +258,8 @@ class CandleLabApp(tk.Tk):
             self._data_page()
         elif name == "experiments":
             self._experiments_page()
+        elif name == "lab":
+            self._lab_page()
         else:
             self._guide_page()
 
@@ -391,15 +416,20 @@ class CandleLabApp(tk.Tk):
             button(parent, lock_text, self.lock_prediction, "accent").pack(fill="x", pady=(14, 0))
 
     def _fill_round_panel(self, parent):
-        """Ringkasan tebak otomatis: putaran berjalan + skor benar/salah."""
+        """Penjelasan singkat + skor: apa yang ditebak, dan apakah benar."""
         round_obj = self.rounds.current
         stats = self.rounds.stats
         box = tk.Frame(parent, bg=SIDEBAR_SOFT, padx=12, pady=10)
         box.pack(fill="x", pady=(13, 0))
         text(box, "TEBAK OTOMATIS", 8, ACCENT, "bold", SIDEBAR_SOFT).pack(anchor="w")
+        text(box, "Aplikasi menebak warna candle yang sedang berjalan. Candle itu "
+                  "sendiri yang menentukan tebakan benar atau salah.",
+             7, "#8FA49A", bg=SIDEBAR_SOFT, wraplength=320, justify="left").pack(
+            anchor="w", pady=(3, 0))
 
         if round_obj is None:
-            text(box, "Menunggu candle terbaca", 9, "#B8C9C1", bg=SIDEBAR_SOFT).pack(anchor="w", pady=(4, 0))
+            text(box, "Menunggu candle terbaca", 9, "#B8C9C1", bg=SIDEBAR_SOFT).pack(
+                anchor="w", pady=(6, 0))
             return
 
         arah = direction_name(round_obj.direction)
@@ -410,10 +440,11 @@ class CandleLabApp(tk.Tk):
                 hasil, warna = "BENAR", "#3FE08A"
             else:
                 hasil, warna = "SALAH", "#FF8A7A"
-            text(box, f"Tebakan {arah}: {hasil}", 10, warna, "bold", SIDEBAR_SOFT).pack(anchor="w", pady=(4, 0))
+            text(box, f"Tebakan tadi: {arah} → {hasil}", 10, warna, "bold",
+                 SIDEBAR_SOFT).pack(anchor="w", pady=(6, 0))
         else:
-            text(box, f"Tebakan {arah} untuk candle berjalan", 9, "#FFFFFF",
-                 "bold", SIDEBAR_SOFT).pack(anchor="w", pady=(4, 0))
+            text(box, f"Tebakan: {arah} (untuk candle yang sedang berjalan)", 9,
+                 "#FFFFFF", "bold", SIDEBAR_SOFT).pack(anchor="w", pady=(6, 0))
 
         played = stats.played
         if played:
@@ -423,10 +454,20 @@ class CandleLabApp(tk.Tk):
                         else f"{-streak} salah beruntun" if streak < 0 else "")
             text(box, f"Skor {stats.wins}/{played} benar ({akurasi})"
                       + (f" • {rentetan}" if rentetan else ""),
-                 8, "#B8C9C1", bg=SIDEBAR_SOFT, wraplength=320, justify="left").pack(anchor="w", pady=(3, 0))
+                 8, "#B8C9C1", bg=SIDEBAR_SOFT, wraplength=320, justify="left").pack(
+                anchor="w", pady=(3, 0))
+            if not accuracy_is_meaningful(played):
+                sisa = MIN_ROUNDS_FOR_SIGNAL - played
+                text(box, f"Belum bisa disimpulkan: butuh ~{sisa} putaran lagi. "
+                          f"Dengan sedikit putaran, hasil bagus maupun buruk "
+                          f"bisa terjadi karena kebetulan.",
+                     7, "#C9A227", bg=SIDEBAR_SOFT, wraplength=320, justify="left").pack(
+                    anchor="w", pady=(3, 0))
         else:
-            text(box, "Skor dihitung dari candle yang sudah selesai.",
-                 8, "#B8C9C1", bg=SIDEBAR_SOFT, wraplength=320, justify="left").pack(anchor="w", pady=(3, 0))
+            text(box, "Skor muncul setelah candle pertama selesai — tunggu "
+                      "beberapa saat sampai candle menutup.",
+                 8, "#B8C9C1", bg=SIDEBAR_SOFT, wraplength=320, justify="left").pack(
+                anchor="w", pady=(3, 0))
 
         if stats.skipped:
             text(box, f"{stats.skipped} candle dilewati (doji/seimbang).",
@@ -440,6 +481,19 @@ class CandleLabApp(tk.Tk):
                  wraplength=320, justify="left").pack(anchor="w", pady=(6, 0))
             text(box, "Cocokkan dengan 12 candle terakhir di chart. H=hijau, M=merah, D=doji.",
                  7, "#6F8377", bg=SIDEBAR_SOFT, wraplength=320, justify="left").pack(anchor="w")
+        # Klik otomatis: sengaja diletakkan setelah penjelasan, bukan di atas.
+        status_klik = "MATI" if not self.auto_click_enabled else f"AKTIF ({self.click_guard.count} klik)"
+        text(box, f"KLIK OTOMATIS: {status_klik}", 7,
+             "#FF8A7A" if self.auto_click_enabled else "#6F8377",
+             "bold", SIDEBAR_SOFT).pack(anchor="w", pady=(8, 0))
+        button(box, "Matikan klik otomatis" if self.auto_click_enabled
+               else "Aktifkan klik otomatis",
+               self.toggle_auto_click, "danger" if self.auto_click_enabled else "secondary").pack(
+            fill="x", pady=(3, 0))
+        if not self.state.click_region:
+            text(box, "Belum dikalibrasi. Atur di halaman Data.",
+                 7, "#C9A227", bg=SIDEBAR_SOFT).pack(anchor="w", pady=(2, 0))
+
         if self.rounds.log:
             button(box, "Salin riwayat tebakan", self.copy_round_log, "secondary").pack(
                 fill="x", pady=(8, 0))
@@ -447,6 +501,103 @@ class CandleLabApp(tk.Tk):
         if riwayat:
             text(box, "Riwayat: " + riwayat, 7, "#8FA49A", bg=SIDEBAR_SOFT,
                  wraplength=320, justify="left").pack(anchor="w", pady=(4, 0))
+
+    # -- klik otomatis ---------------------------------------------------
+    def toggle_auto_click(self):
+        """Aktifkan/matikan klik otomatis, dengan konfirmasi eksplisit."""
+        if self.auto_click_enabled:
+            self.auto_click_enabled = False
+            self.set_status("Klik otomatis dimatikan.")
+            self.refresh()
+            return
+        if not platform_supported():
+            messagebox.showinfo(
+                "Klik otomatis hanya di Windows",
+                "Fitur ini memakai SendInput Windows. Di sistem lain, gunakan "
+                "mode latihan (catat sinyal tanpa klik).", parent=self)
+            return
+        if not self.state.click_region:
+            messagebox.showinfo(
+                "Kalibrasi tombol belum ada",
+                "Klik otomatis perlu tahu posisi tombol Higher/Lower.\n\n"
+                "Gunakan ‘Kalibrasi tombol broker’ di halaman Data, lalu pilih "
+                "area yang memuat kedua tombol tersebut.", parent=self)
+            return
+        if not messagebox.askyesno(
+            "Aktifkan klik otomatis?",
+            "CandleLab akan MENGKLIK tombol Higher/Lower di layar Anda setiap "
+            "kali tebakan baru muncul.\n\n"
+            "Pengaman yang berlaku:\n"
+            "• hanya bila jendela broker sedang aktif\n"
+            "• hanya bila titik klik berada di area yang dikalibrasi\n"
+            "• maksimal satu klik per candle\n"
+            "• berhenti otomatis setelah 50 klik\n\n"
+            "Gunakan hanya pada akun demo. Lanjutkan?",
+            parent=self,
+        ):
+            return
+        self.auto_click_enabled = True
+        self.click_guard = ClickLimiter()
+        self._clicked_candle = -1
+        self.set_status("Klik otomatis AKTIF — hanya pada akun demo.")
+        self.refresh()
+
+    def calibrate_click_region(self):
+        """Pilih area panel tombol Higher/Lower."""
+        if self.live_active:
+            messagebox.showinfo(
+                "Hentikan live dulu",
+                "Kalibrasi tombol dilakukan saat live berhenti agar area chart "
+                "tidak tertukar.", parent=self)
+            return
+        captured = select_and_capture(self)
+        if captured is None:
+            return
+        image, box = captured
+        pair, reason = find_button_pair(image)
+        if pair is None:
+            messagebox.showwarning("Tombol tidak dikenali", reason, parent=self)
+            return
+        self.state.click_region = box
+        if self._save():
+            messagebox.showinfo(
+                "Tombol dikenali",
+                f"Higher di {pair.higher}, Lower di {pair.lower} (relatif area).\n\n"
+                f"Area disimpan: {box[0]}, {box[1]} → {box[2]}, {box[3]}",
+                parent=self)
+
+    def _maybe_auto_click(self, direction: int, candle_index: int):
+        """Klik sekali per candle, hanya bila semua pengaman lolos."""
+        if not self.auto_click_enabled or not self.state.click_region:
+            return
+        if direction not in (1, -1):
+            return
+        if candle_index == self._clicked_candle:
+            return
+        allowed, reason = self.click_guard.allow(time.monotonic())
+        if not allowed:
+            self.set_status("KLIK DITOLAK • " + reason)
+            return
+        try:
+            image = capture_region(self.state.click_region)
+        except (RuntimeError, ValueError) as exc:
+            self.set_status(f"KLIK DITOLAK • area tombol tidak terbaca ({exc}).")
+            return
+        pair, reason = find_button_pair(image)
+        if pair is None:
+            self.set_status("KLIK DITOLAK • " + reason)
+            return
+        point = click_point(image.size, self.state.click_region[:2], pair, direction)
+        guard = check_before_click(point, self.state.click_region, True, "IQ Option")
+        if not guard.allowed:
+            self.set_status("KLIK DITOLAK • " + guard.reason)
+            return
+        left_click(point)
+        self.click_guard.record(time.monotonic())
+        self._clicked_candle = candle_index
+        arah = "Higher" if direction == 1 else "Lower"
+        self.set_status(f"KLIK {arah} di {point[0]},{point[1]} • "
+                        f"{self.click_guard.count} klik sesi ini")
 
     def copy_round_log(self):
         """Salin riwayat putaran ke clipboard untuk diperiksa di luar aplikasi."""
@@ -570,6 +721,8 @@ class CandleLabApp(tk.Tk):
         actions = tk.Frame(heading, bg=BG)
         actions.pack(side="right", padx=(15, 0))
         button(actions, "Baca layar", self.read_screen, "secondary").pack(side="left", padx=3)
+        button(actions, "Kalibrasi tombol broker", self.calibrate_click_region,
+               "secondary").pack(side="left", padx=3)
         button(actions, "Impor CSV", self.import_csv, "secondary").pack(side="left", padx=3)
         button(actions, "+ Tambah candle", self.add_candle_dialog, "primary").pack(side="left", padx=3)
 
@@ -729,6 +882,7 @@ class CandleLabApp(tk.Tk):
         # Putaran baru dimulai: tebakan lama tidak boleh dinilai dengan candle
         # dari area pembacaan yang berbeda.
         self.rounds.reset()
+        self.clock.reset()
         try:
             self.configure(cursor="watch")
             if select_new or not self.screen_region:
@@ -1045,6 +1199,8 @@ class CandleLabApp(tk.Tk):
             self.overlay.show_round(
                 self.rounds.current, self.rounds.stats, len(self.live_candles),
                 seconds_left=self.rounds.waiting_seconds(),
+                next_in=self.clock.seconds_to_next(time.monotonic()),
+                timeframe=self.clock.label(),
             )
         else:
             self.overlay.show_prediction(
@@ -1089,6 +1245,8 @@ class CandleLabApp(tk.Tk):
         elif self.rounds.reset_reason:
             self._round_status = "LIVE • " + self.rounds.reset_reason
         self.rounds.reset_reason = ""
+        if self.rounds.current is not None and not self.rounds.current.resolved:
+            self._maybe_auto_click(self.rounds.current.direction, len(history))
 
     def _save_quietly(self):
         """Simpan tanpa dialog; kegagalan tidak menghentikan mode live."""
@@ -1112,6 +1270,10 @@ class CandleLabApp(tk.Tk):
                 return
         self.live_pending_sequence = None
         changed = sequence != self.live_sequence or not self.live_candles
+        if changed:
+            # Setiap perubahan urutan berarti satu candle baru muncul; selisih
+            # waktunya adalah durasi candle (TF) yang bisa diukur otomatis.
+            self.clock.mark_new_candle(time.monotonic())
         self.live_candles = list(result.candles)
         self.live_sequence = sequence
         previous_status = self._round_status or ""
@@ -1360,6 +1522,148 @@ class CandleLabApp(tk.Tk):
         if self._save():
             self.set_status("Candle terakhir dihapus.")
             self.refresh()
+
+    def _lab_page(self):
+        """Lab hipotesis: satu hipotesis, diuji sekali, dengan nilai-p jujur."""
+        scroller = ScrollFrame(self.page_host)
+        scroller.pack(fill="both", expand=True)
+        page = tk.Frame(scroller.interior, bg=BG, padx=28, pady=25)
+        page.pack(fill="both", expand=True)
+        page_heading(page, "Lab hipotesis",
+                     "Bedakan pola nyata dari kebetulan. Pilih satu hipotesis, "
+                     "jalankan sekali, lalu lihat nilai-p-nya.").pack(fill="x")
+
+        candles = self._chart_candles()
+        info = tk.Frame(page, bg=GREEN_PALE, padx=15, pady=12)
+        info.pack(fill="x", pady=(18, 12))
+        text(info, f"Data: {len(candles)} candle"
+                   + (" (simulasi)" if self.state.is_demo else " (data Anda)"),
+             9, GREEN, "bold", GREEN_PALE).pack(anchor="w")
+        text(info, "Uji pada data historis TIDAK sama dengan hasil live. Pola yang "
+                   "lolos di sini tetap harus dibuktikan dengan putaran baru.",
+             8, "#2F6B4F", bg=GREEN_PALE, wraplength=880, justify="left").pack(anchor="w", pady=(3, 0))
+
+        controls = card(page, padding=16)
+        controls.pack(fill="x", pady=(0, 12))
+        row = tk.Frame(controls, bg=SURFACE)
+        row.pack(fill="x")
+        text(row, "Hipotesis", 9, INK, "bold").pack(side="left")
+        self.lab_choice = tk.StringVar(value=HYPOTHESES[1].key)
+        combo = ttk.Combobox(row, textvariable=self.lab_choice, state="readonly",
+                             values=[f"{item.label} — {item.question}" for item in HYPOTHESES],
+                             font=(FONT, 10), width=60)
+        combo.pack(side="left", padx=(10, 10))
+        text(row, "Payout %", 9, INK, "bold").pack(side="left", padx=(6, 4))
+        ttk.Entry(row, textvariable=self.lab_payout_var, width=6,
+                  font=(FONT, 10)).pack(side="left")
+        button(row, "Uji hipotesis ini", self.run_lab_hypothesis, "primary").pack(
+            side="left", padx=(12, 0))
+        button(row, "Uji semua (dikoreksi)", self.run_lab_all, "secondary").pack(
+            side="left", padx=(6, 0))
+
+        self.lab_output = tk.Frame(page, bg=BG)
+        self.lab_output.pack(fill="both", expand=True)
+        self._render_lab_results()
+
+    def _lab_payout(self) -> float:
+        try:
+            value = float(self.lab_payout_var.get().replace(",", "."))
+        except (TypeError, ValueError):
+            value = 82.0
+        value = max(1.0, min(value, 500.0))
+        return value / 100.0
+
+    def run_lab_hypothesis(self):
+        index = [f"{item.label} — {item.question}" for item in HYPOTHESES].index(
+            self.lab_choice.get()) if self.lab_choice.get() in [
+            f"{item.label} — {item.question}" for item in HYPOTHESES] else 1
+        hypothesis = HYPOTHESES[index]
+        candles = self._chart_candles()
+        try:
+            scores = run_hypothesis(hypothesis.key, candles)
+        except Exception as exc:  # pragma: no cover - pertahanan GUI
+            messagebox.showerror("Uji gagal", str(exc), parent=self)
+            return
+        if not scores:
+            messagebox.showinfo(
+                "Tidak ada sampel",
+                "Hipotesis ini tidak menemukan satu pun kejadian yang cocok pada "
+                "data saat ini. Impor CSV yang lebih panjang atau pilih hipotesis lain.",
+                parent=self)
+            return
+        verdict = evaluate(hypothesis.label, sum(scores), len(scores), self._lab_payout())
+        self.lab_results = [(hypothesis, verdict)]
+        self._render_lab_results()
+
+    def run_lab_all(self):
+        candles = self._chart_candles()
+        raw = []
+        for hypothesis in HYPOTHESES:
+            try:
+                scores = run_hypothesis(hypothesis.key, candles)
+            except Exception:  # pragma: no cover - pertahanan GUI
+                scores = []
+            raw.append((hypothesis, sum(scores), len(scores)))
+        played = [(hypothesis, wins, total) for hypothesis, wins, total in raw if total]
+        if not played:
+            messagebox.showinfo("Tidak ada sampel", "Belum ada data untuk diuji.", parent=self)
+            return
+        verdicts = evaluate_many([(h.label, w, t) for h, w, t in played],
+                                 self._lab_payout())
+        by_label = {verdict.label: verdict for verdict in verdicts}
+        self.lab_results = [(hypothesis, by_label[hypothesis.label])
+                            for hypothesis, _, _ in played]
+        self._render_lab_results()
+
+    def _render_lab_results(self):
+        for child in self.lab_output.winfo_children():
+            child.destroy()
+        if not self.lab_results:
+            hint = card(self.lab_output, padding=18)
+            hint.pack(fill="x")
+            text(hint, "Belum ada yang diuji", 11, INK, "bold").pack(anchor="w")
+            text(hint, "Mulai dari satu hipotesis. Menguji sepuluh sekaligus lalu "
+                       "memilih yang terbaik adalah cara paling umum menghasilkan "
+                       "penemuan palsu.",
+                 8, MUTED, wraplength=820, justify="left").pack(anchor="w", pady=(4, 0))
+            return
+
+        panel = card(self.lab_output, padding=16)
+        panel.pack(fill="x", pady=(0, 12))
+        text(panel, "HASIL", 8, MUTED, "bold").pack(anchor="w", pady=(0, 10))
+        for hypothesis, verdict in self.lab_results:
+            self._render_lab_row(panel, hypothesis, verdict)
+
+        footnote = card(self.lab_output, padding=16, bg=WARNING_PALE)
+        footnote.pack(fill="x")
+        text(footnote, "Cara membaca hasil ini", 10, WARNING, "bold", WARNING_PALE).pack(anchor="w")
+        for line in (
+            "Nilai-p = peluang melihat hasil seekstrem ini bila model sebenarnya "
+            "tidak lebih baik dari koin. Di bawah 0,05 baru layak dicurigai.",
+            "Bila banyak hipotesis diuji sekaligus, nilai-p dikoreksi "
+            "(Benjamini-Hochberg) agar penemuan palsu tidak muncul dari jumlah percobaan.",
+            "Akurasi di atas ambang impas belum berarti bila nilai-p masih besar. "
+            "Dua syarat itu harus terpenuhi bersamaan.",
+        ):
+            text(footnote, "• " + line, 8, "#5A4A1F", bg=WARNING_PALE,
+                 wraplength=820, justify="left").pack(anchor="w", pady=(3, 0))
+
+    def _render_lab_row(self, parent, hypothesis, verdict):
+        row = tk.Frame(parent, bg=SURFACE, pady=8)
+        row.pack(fill="x")
+        left = tk.Frame(row, bg=SURFACE)
+        left.pack(side="left", fill="x", expand=True)
+        text(left, hypothesis.label, 10, INK, "bold", SURFACE).pack(anchor="w")
+        text(left, hypothesis.question, 8, MUTED, SURFACE, wraplength=560,
+             justify="left").pack(anchor="w")
+        text(left, verdict.summary(), 8,
+             GREEN if verdict.profitable else (WARNING if verdict.significant else MUTED),
+             bg=SURFACE, wraplength=560, justify="left").pack(anchor="w", pady=(3, 0))
+        right = tk.Frame(row, bg=SURFACE)
+        right.pack(side="right")
+        acc = "—" if verdict.accuracy is None else format_percent(verdict.accuracy, 1)
+        text(right, acc, 13, INK, "bold", SURFACE).pack(anchor="e")
+        text(right, f"n={verdict.total}  p={verdict.adjusted_p:.3f}", 8, MUTED, SURFACE).pack(anchor="e")
 
     def _experiments_page(self):
         scroller = ScrollFrame(self.page_host)
