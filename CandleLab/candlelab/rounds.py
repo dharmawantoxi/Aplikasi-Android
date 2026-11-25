@@ -30,10 +30,26 @@ class Round:
     matches: int = 0
     actual: Optional[int] = None
     correct: Optional[bool] = None
+    # Riwayat arah yang dipakai saat menebak. Disimpan agar pengguna dapat
+    # membandingkan apa yang "dilihat" aplikasi dengan chart aslinya.
+    history: tuple[int, ...] = ()
+    resolved_at: str = ""
 
     @property
     def resolved(self) -> bool:
         return self.actual is not None
+
+    def to_dict(self) -> dict:
+        return {
+            "p": round(self.green_probability, 4),
+            "dir": self.direction,
+            "actual": self.actual,
+            "ok": self.correct,
+            "matches": self.matches,
+            "n": self.candle_count,
+            "hist": list(self.history[-12:]),
+            "at": self.resolved_at,
+        }
 
 
 @dataclass
@@ -77,8 +93,11 @@ class RoundTracker:
     bertambah panjang menandakan candle sebelumnya sudah selesai.
     """
 
-    def __init__(self, start_monotonic: Optional[float] = None) -> None:
+    def __init__(self, start_monotonic: Optional[float] = None, keep: int = 200) -> None:
         self.stats = RoundStats()
+        # Putaran yang sudah selesai, terbaru di akhir.
+        self.log: list[Round] = []
+        self.keep = keep
         self.current: Optional[Round] = None
         self._history: list[int] = []
         self._reset_reason = ""
@@ -159,6 +178,7 @@ class RoundTracker:
             candle_count=candle_count,
             pattern=tuple(getattr(prediction, "pattern", ())),
             matches=int(getattr(prediction, "matches", 0)),
+            history=tuple(self._history),
         )
 
     def _resolve(self, round_: Optional[Round], actual: int) -> Optional[Round]:
@@ -169,10 +189,14 @@ class RoundTracker:
             self.stats.skipped += 1
             return None
         round_.actual = actual
+        self.log.append(round_)
+        del self.log[:-self.keep]
         if round_.green_probability == 0.5:
             # Tebakan seimbang tidak dinilai menang atau kalah.
             self.stats.skipped += 1
             return round_
+        from datetime import datetime
+        round_.resolved_at = datetime.now().strftime("%H:%M:%S")
         round_.correct = round_.direction == actual
         if round_.correct:
             self.stats.wins += 1
@@ -193,6 +217,26 @@ class RoundTracker:
         if self.current is None or self.current.resolved or self._opened_at is None:
             return None
         return max(0.0, time.monotonic() - self._opened_at)
+
+    def history_text(self, limit: int = 12) -> str:
+        """Riwayat ringkas: arah yang dilihat aplikasi vs hasil sebenarnya."""
+        rows = []
+        for item in self.log[-limit:]:
+            tebak = "H" if item.direction == 1 else "M" if item.direction == -1 else "="
+            aktual = "H" if item.actual == 1 else "M" if item.actual == -1 else "D"
+            if item.correct is None:
+                tanda = "?"
+            else:
+                tanda = "v" if item.correct else "x"
+            rows.append(f"{item.resolved_at} {tebak}->{aktual} {tanda}")
+        return " | ".join(rows)
+
+    def observed_text(self, limit: int = 12) -> str:
+        """Urutan candle yang dibaca aplikasi (H=hijau, M=merah, D=doji)."""
+        if self.current is None or not self.current.history:
+            return "-"
+        return "".join("H" if d == 1 else "M" if d == -1 else "D"
+                       for d in self.current.history[-limit:])
 
     def status_text(self) -> str:
         """Ringkasan pendek untuk badge/panel."""

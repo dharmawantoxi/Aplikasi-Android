@@ -2,7 +2,7 @@
 import unittest
 
 from candlelab.model import Candle, CandleModel, DOJI, GREEN, RED
-from candlelab.rounds import RoundTracker
+from candlelab.rounds import Round, RoundTracker
 
 
 def candle(direction: int) -> Candle:
@@ -148,6 +148,31 @@ class RoundTrackerTests(unittest.TestCase):
         # Putaran baru sudah dibuka; tidak boleh melaporkan waktu putaran lama.
         self.assertIsNotNone(self.tracker.waiting_seconds())
         self.assertTrue(self.tracker.current is not None)
+
+    def test_log_records_what_app_saw_and_what_happened(self):
+        """Log dipakai pengguna untuk memverifikasi deteksi vs chart asli."""
+        self.feed(series(GREEN, RED, GREEN, GREEN, RED, GREEN))
+        locked = self.tracker.current.direction
+        self.feed(series(GREEN, RED, GREEN, GREEN, RED, GREEN, locked))
+        self.assertEqual(len(self.tracker.log), 1)
+        entry = self.tracker.log[0]
+        self.assertEqual(len(entry.history), 6, "riwayat yang dilihat harus disimpan")
+        self.assertIn(entry.actual, (GREEN, RED))
+        self.assertTrue(entry.to_dict()["at"], "waktu penilaian harus tercatat")
+        self.assertIn("->", self.tracker.history_text())
+
+    def test_observed_text_matches_history(self):
+        self.feed(series(GREEN, RED, GREEN, GREEN, RED, GREEN))
+        self.assertEqual(self.tracker.observed_text(), "HMHHMH")
+
+    def test_log_is_capped(self):
+        tracker = RoundTracker(keep=3)
+        for _ in range(6):
+            entry = Round(0.6, 1, 5)
+            entry.actual, entry.correct = 1, True
+            tracker.log.append(entry)
+            del tracker.log[:-tracker.keep]
+        self.assertEqual(len(tracker.log), 3)
 
     def test_status_text(self):
         self.assertEqual(self.tracker.status_text(), "0/0 benar")

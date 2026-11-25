@@ -432,6 +432,34 @@ class CandleLabApp(tk.Tk):
             text(box, f"{stats.skipped} candle dilewati (doji/seimbang).",
                  8, "#8FA49A", bg=SIDEBAR_SOFT).pack(anchor="w", pady=(2, 0))
 
+        # Verifikasi mandiri: bandingkan urutan yang dibaca aplikasi dengan
+        # chart aslinya sebelum menyimpulkan bahwa prediksinya buruk.
+        dilihat = self.rounds.observed_text(12)
+        if dilihat != "-":
+            text(box, "Yang dibaca: " + dilihat, 8, "#8FA49A", bg=SIDEBAR_SOFT,
+                 wraplength=320, justify="left").pack(anchor="w", pady=(6, 0))
+            text(box, "Cocokkan dengan 12 candle terakhir di chart. H=hijau, M=merah, D=doji.",
+                 7, "#6F8377", bg=SIDEBAR_SOFT, wraplength=320, justify="left").pack(anchor="w")
+        if self.rounds.log:
+            button(box, "Salin riwayat tebakan", self.copy_round_log, "secondary").pack(
+                fill="x", pady=(8, 0))
+        riwayat = self.rounds.history_text(6)
+        if riwayat:
+            text(box, "Riwayat: " + riwayat, 7, "#8FA49A", bg=SIDEBAR_SOFT,
+                 wraplength=320, justify="left").pack(anchor="w", pady=(4, 0))
+
+    def copy_round_log(self):
+        """Salin riwayat putaran ke clipboard untuk diperiksa di luar aplikasi."""
+        import json as _json
+        payload = _json.dumps(
+            {"skor": self.rounds.status_text(),
+             "putaran": [item.to_dict() for item in self.rounds.log]},
+            ensure_ascii=False, indent=1,
+        )
+        self.clipboard_clear()
+        self.clipboard_append(payload)
+        self.set_status(f"Riwayat {len(self.rounds.log)} putaran disalin ke clipboard.")
+
     def _fill_settings(self, parent):
         text(parent, "Pengaturan model", 12, INK, "bold").pack(anchor="w")
         text(parent, "Ubah asumsi, lalu bandingkan hasil backtest.", 8, MUTED).pack(anchor="w", pady=(4, 16))
