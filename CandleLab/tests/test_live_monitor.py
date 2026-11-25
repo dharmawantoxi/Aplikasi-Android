@@ -14,35 +14,67 @@ def result(count=20):
 
 
 class LiveMonitorTests(unittest.TestCase):
-    def test_worker_captures_repeatedly_without_gui_calls(self):
-        events = queue.Queue(maxsize=2)
-        calls = []
-
-        def capture(region):
-            calls.append(region)
-            return object()
-
-        monitor = LiveScreenMonitor(events, (1, 2, 30, 40), 7, interval=0.5,
-                                    capture_fn=capture, detect_fn=lambda _image: result())
+    def _start(self, events, capture, generation=7, interval=0.5):
+        monitor = LiveScreenMonitor(events, (1, 2, 30, 40), generation, interval=interval,
+                                    capture_fn=capture, detect_fn=lambda _image: result(),
+                                    capture_delay=0)
         monitor.start()
-        first = events.get(timeout=1.0)
+        return monitor
+
+    def test_worker_waits_for_ui_before_capturing(self):
+        """Worker tidak boleh memotret sebelum UI menyembunyikan jendela."""
+        events = queue.Queue(maxsize=4)
+        calls = []
+        monitor = self._start(events, lambda region: calls.append(region) or object())
+
+        ready = events.get(timeout=1.0)
+        self.assertTrue(ready.ready)
+        # Belum ada tangkapan sebelum UI membalas release().
+        self.assertEqual(calls, [])
+
+        monitor.release()
+        done = events.get(timeout=1.0)
         monitor.stop()
         monitor.thread.join(timeout=1.0)
-        self.assertEqual(first.generation, 7)
-        self.assertEqual(len(first.result.candles), 20)
-        self.assertGreaterEqual(len(calls), 1)
+
+        self.assertEqual(done.generation, 7)
+        self.assertEqual(len(done.result.candles), 20)
+        self.assertEqual(calls, [(1, 2, 30, 40)])
         self.assertFalse(monitor.thread.is_alive())
-        self.assertTrue(all(region == (1, 2, 30, 40) for region in calls))
+
+    def test_ready_event_precedes_every_capture(self):
+        events = queue.Queue(maxsize=8)
+        monitor = self._start(events, lambda region: object())
+
+        order = []
+        for _ in range(2):
+            ready = events.get(timeout=1.0)
+            self.assertTrue(ready.ready)
+            monitor.release()
+            done = events.get(timeout=1.0)
+            self.assertFalse(done.ready)
+            order.append(bool(done.result))
+        monitor.stop()
+        monitor.thread.join(timeout=1.0)
+        self.assertEqual(order, [True, True])
+
+    def test_stop_releases_waiting_worker(self):
+        events = queue.Queue(maxsize=4)
+        monitor = self._start(events, lambda region: object(), interval=5)
+        self.assertTrue(events.get(timeout=1.0).ready)
+        monitor.stop()  # tanpa release(): harus tetap berhenti
+        monitor.thread.join(timeout=1.0)
+        self.assertFalse(monitor.thread.is_alive())
 
     def test_capture_error_is_emitted_and_worker_stops(self):
-        events = queue.Queue(maxsize=1)
+        events = queue.Queue(maxsize=2)
 
         def fail(_region):
             raise RuntimeError("screen unavailable")
 
-        monitor = LiveScreenMonitor(events, (0, 0, 30, 30), 3, capture_fn=fail,
-                                    detect_fn=lambda image: result())
-        monitor.start()
+        monitor = self._start(events, fail, generation=3)
+        self.assertTrue(events.get(timeout=1.0).ready)
+        monitor.release()
         event = events.get(timeout=1.0)
         monitor.thread.join(timeout=1.0)
         self.assertEqual(event.error, "screen unavailable")

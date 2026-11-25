@@ -88,6 +88,22 @@ class VisionTests(unittest.TestCase):
         self.assertEqual(result.sequence, "".join("M" if item == RED else "H" for item in expected))
         self.assertGreaterEqual(result.confidence, 0.8)
 
+    def test_tiny_fragments_warn_is_too_small(self):
+        # Ciri khas CandleLab memotret jendelanya sendiri: potongan ikon/teks
+        # berukuran ~13 x 9 px yang lolos sebagai "candle".
+        image = Image.new("RGB", (300, 120), "#FDFDFD")
+        draw = ImageDraw.Draw(image)
+        for index in range(8):
+            x = 20 + index * 30
+            draw.rectangle((x, 40, x + 13, 49), fill="#009B2E")
+        result = detect_candles(image)
+        self.assertGreaterEqual(len(result.candles), 3)
+        self.assertIn("terlalu kecil", result.warning)
+
+    def test_real_chart_is_not_flagged_as_too_small(self):
+        result = detect_candles(chart([GREEN, RED] * 12))
+        self.assertNotIn("terlalu kecil", result.warning)
+
     def test_wide_candles_are_not_rejected_by_absolute_width_limit(self):
         expected = [GREEN, RED, GREEN] * 8
         result = detect_candles(chart(expected, body=24, gap=40))
