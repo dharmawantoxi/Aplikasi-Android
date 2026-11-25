@@ -237,7 +237,10 @@ Aktifkan lewat panel tebak otomatis setelah mengalibrasi tombol:
 
 1. Halaman **Data** → **Kalibrasi tombol broker** → pilih area yang memuat kedua tombol Higher dan Lower.
 2. Tombol dikenali hanya bila berbentuk blok besar (bukan candle) dan keduanya bersusun sejajar.
-3. Panel tebak otomatis → **Aktifkan klik otomatis** → konfirmasi.
+3. **Dari badge:** klik **⚡** langsung di badge — tidak perlu membuka jendela.
+   Dari jendela penuh: panel tebak otomatis → **Aktifkan klik otomatis**.
+
+Tombol **⚡** berubah jingga saat aktif. Tombol **⚙** membuka jendela penuh, **✕** menghentikan live.
 
 Pengaman yang selalu berlaku:
 

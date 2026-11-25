@@ -43,10 +43,13 @@ class OverlayBadge:
         root: tk.Tk,
         on_expand: Callable[[], None],
         on_stop: Callable[[], None],
+        on_auto_click: Callable[[], None] | None = None,
     ):
         self.root = root
         self.on_expand = on_expand
         self.on_stop = on_stop
+        self.on_auto_click = on_auto_click
+        self.auto_click_on = False
         self.corner = "top-right"
         self.width = BADGE_WIDTH
         self.height = BADGE_HEIGHT
@@ -80,6 +83,7 @@ class OverlayBadge:
         self.buttons = tk.Frame(self.frame, bg=BG, width=BADGE_PAD_X * 2)
         self.buttons.pack(side="right", padx=(6, 6), pady=(2, 2))
         for text, command, colour in (
+            ("⚡", self._toggle_click, WARN_FG),
             ("⚙", self._expand, DETAIL_FG),
             ("✕", self._stop, "#D45E62"),
         ):
@@ -145,6 +149,10 @@ class OverlayBadge:
         self.window.geometry(f"{self.width}x{self.height}+{x}+{y}")
 
     # -- aksi -------------------------------------------------------------
+    def _toggle_click(self):
+        if self.on_auto_click is not None:
+            self.on_auto_click()
+
     def _expand(self):
         self.on_expand()
 
@@ -190,6 +198,15 @@ class OverlayBadge:
             pass
 
     # -- isi --------------------------------------------------------------
+    def set_auto_click_state(self, enabled: bool):
+        """Tandai status klik otomatis pada tombol ⚡."""
+        self.auto_click_on = bool(enabled)
+        try:
+            self.buttons.winfo_children()[0].configure(
+                fg="#FF6B35" if enabled else WARN_FG)
+        except (IndexError, tk.TclError):
+            pass
+
     def show_round(self, round_obj, stats, candle_count: int, pending: bool = True,
                    seconds_left=None, next_in=None, timeframe="?"):
         """Tampilkan tebakan yang sedang berjalan beserta skor benar/salah.
