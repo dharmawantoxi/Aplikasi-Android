@@ -1,0 +1,4 @@
+[versions]
+# Harus sama dengan plugins { id("com.android.application") version ... } di
+# build.gradle.kts. Ubah keduanya bersamaan; CI memeriksa kesamaannya.
+androidGradlePlugin = "8.13.2"
