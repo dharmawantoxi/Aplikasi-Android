@@ -92,3 +92,23 @@ class BadgeSizingTests(unittest.TestCase):
         width, height = fit_size(10, 10, 1920, 1080)
         self.assertGreaterEqual(width, 120)
         self.assertGreaterEqual(height, 30)
+
+
+class BadgeCornerPreferenceTests(unittest.TestCase):
+    """Regresi: badge selalu jatuh di kanan bawah, menutupi Higher/Lower."""
+
+    def test_prefers_top_corner_over_bottom_right(self):
+        # Area chart di kiri layar: keempat sudut bebas, jadi preferensi berlaku.
+        corner = best_badge_corner((100, 250, 900, 700), 1920, 1080, 226, 46)
+        self.assertEqual(corner, "top-right")
+
+    def test_falls_back_when_top_right_overlaps_chart(self):
+        # Chart menutupi pojok kanan atas layar.
+        corner = best_badge_corner((0, 0, 1920, 300), 1920, 1080, 226, 46)
+        self.assertNotEqual(corner, "top-right")
+
+    def test_still_avoids_chart_when_possible(self):
+        region = (100, 250, 900, 700)
+        corner = best_badge_corner(region, 1920, 1080, 226, 46)
+        position = badge_positions(1920, 1080, 226, 46)[corner]
+        self.assertFalse(overlaps(region, *position, 226, 46))

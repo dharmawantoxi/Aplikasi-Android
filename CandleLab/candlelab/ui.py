@@ -192,7 +192,8 @@ class CandleLabApp(tk.Tk):
         self.bind("<F5>", lambda _event: self.refresh())
         self.bind("<F8>", lambda _event: self.read_screen())
         self.bind("<Control-F8>", lambda _event: self.read_screen(reuse_region=True))
-        self.bind("<F7>", lambda _event: None if self.live_active else self.start_overlay_live())
+        self.bind("<F7>", lambda _event: None if self.live_active else self.start_overlay_live(select_new=True))
+        self.bind("<Control-F7>", lambda _event: None if self.live_active else self.start_overlay_live_saved())
         self.bind("<F9>", lambda _event: self.toggle_live())
         self.bind("<F10>", lambda _event: self.expand_from_hud() if self.live_hud else None)
         self.bind("<Control-F9>", lambda _event: self.toggle_live(select_new=True))
@@ -298,7 +299,8 @@ class CandleLabApp(tk.Tk):
             live_button = button(chart_header, "■ Stop live", self.toggle_live, "danger")
         else:
             overlay_button = button(chart_header, "◱ Live di atas chart",
-                                    self.start_overlay_live, "primary")
+                                    lambda: self.start_overlay_live(select_new=True),
+                                    "primary")
             overlay_button.pack(side="right", padx=(0, 8))
             live_button = button(chart_header, "● Live (panel)", self.toggle_live, "secondary")
         live_button.pack(side="right", padx=(0, 8))
@@ -464,7 +466,7 @@ class CandleLabApp(tk.Tk):
         if self.live_active:
             button(parent, "■ Stop live", self.toggle_live, "danger").pack(fill="x")
         else:
-            button(parent, "◱ Live di atas chart (F7)", self.start_overlay_live,
+            button(parent, "◱ Live di atas chart (F7)", lambda: self.start_overlay_live(select_new=True),
                    "primary").pack(fill="x")
             button(parent, "● Live dengan panel (F9)", self.toggle_live,
                    "secondary").pack(fill="x", pady=(6, 0))
@@ -759,6 +761,21 @@ class CandleLabApp(tk.Tk):
         self.set_status(
             f"LIVE aktif • {len(self.live_candles)} candle • panel live dapat digeser."
         )
+        if overlay:
+            # Pengguna perlu tahu area mana yang sedang dibaca, karena memilih
+            # ulang area adalah perbaikan untuk sebagian besar masalah live.
+            messagebox.showinfo(
+                "Live di atas chart",
+                f"Badge aktif di sudut kanan atas.\n\n"
+                f"Area yang dibaca: {box[0]}, {box[1]} → {box[2]}, {box[3]} "
+                f"({len(self.live_candles)} candle terdeteksi).\n\n"
+                "• Klik kanan badge untuk memindah sudut\n"
+                "• Dobel-klik badge untuk membuka jendela penuh\n"
+                "• Ctrl+F7 atau Ctrl+F9 untuk memilih area baru\n\n"
+                "Area harus mencakup ruang kosong di kanan candle terakhir, "
+                "supaya candle baru ikut terbaca.",
+                parent=self.overlay.window,
+            )
         self.after(120, self._poll_live_events)
 
     def live_window_overlaps_region(self) -> bool:
@@ -928,12 +945,31 @@ class CandleLabApp(tk.Tk):
 
     # -- overlay di atas chart (IQ Option tetap layar utama) ---------------
     def start_overlay_live(self, select_new=False):
-        """Mode diam: tanpa jendela CandleLab, hanya badge tebakan di layar."""
+        """Mode diam: tanpa jendela CandleLab, hanya badge tebakan di layar.
+
+        Tombol dan F7 selalu meminta pemilihan area. Area lama memang diingat,
+        tetapi memakainya tanpa bertanya membuat pengguna tidak sadar sedang
+        membaca area yang salah (mis. area yang memotong candle terakhir).
+        Gunakan Ctrl+F7 untuk memakai area yang diingat.
+        """
         if self.overlay_mode:
             return
         self.quiet_live = True
-        self.start_live_monitor(select_new=select_new and not self.screen_region,
-                                overlay=True)
+        self.start_live_monitor(select_new=select_new, overlay=True)
+
+    def start_overlay_live_saved(self):
+        """Live di atas chart memakai area yang diingat (Ctrl+F7)."""
+        if self.overlay_mode:
+            return
+        if not self.screen_region:
+            messagebox.showinfo(
+                "Belum ada area tersimpan",
+                "Pilih area chart sekali dulu dengan tombol "
+                "‘Live di atas chart’ atau F7.", parent=self,
+            )
+            return
+        self.quiet_live = True
+        self.start_live_monitor(select_new=False, overlay=True)
 
     def show_overlay(self):
         """Sembunyikan semua jendela CandleLab dan tampilkan badge saja."""
