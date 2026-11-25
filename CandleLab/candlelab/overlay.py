@@ -35,6 +35,15 @@ DETAIL_FG = "#8FA49A"
 WARN_FG = "#E6B84C"
 
 
+def _short(text: str, limit: int = 34) -> str:
+    """Potong alasan panjang agar badge tetap kecil; penjelasan ada di jendela."""
+    clean = " ".join(text.split())
+    clean = clean.replace("KLIK DITOLAK • ", "")
+    if len(clean) <= limit:
+        return clean
+    return clean[: limit - 1].rstrip() + "…"
+
+
 class OverlayBadge:
     """Badge always-on-top: 'HIJAU 67%' beserta opsi mini."""
 
@@ -208,7 +217,8 @@ class OverlayBadge:
             pass
 
     def show_round(self, round_obj, stats, candle_count: int, pending: bool = True,
-                   seconds_left=None, next_in=None, timeframe="?"):
+                   seconds_left=None, next_in=None, timeframe="?",
+                   click_note: str = ""):
         """Tampilkan tebakan yang sedang berjalan beserta skor benar/salah.
 
         ``round_obj`` adalah ``rounds.Round``; ``stats`` adalah
@@ -253,6 +263,13 @@ class OverlayBadge:
                 baris = ketiga + "\n" + baris
             detail = f"tebakan {timeframe}\n{baris}"
             tint = DETAIL_FG
+        # Status klik otomatis menimpa baris skor: tanpa ini badge identik
+        # antara "klik berjalan" dan "klik terus ditolak", dan pengguna tidak
+        # punya cara mengetahui alasannya.
+        if click_note:
+            rejected = "DITOLAK" in click_note
+            detail = f"{'klik ditolak' if rejected else 'klik'}\n{_short(click_note)}"
+            tint = "#FF8A7A" if rejected else "#3FE08A"
         self.headline.configure(text=label, fg=colour)
         self.detail.configure(text=detail, fg=tint)
         self._apply_geometry()

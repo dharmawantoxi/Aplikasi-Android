@@ -17,6 +17,17 @@ from candlelab.auto_click import (
 from candlelab.auto_click_win import ClickLimiter, check_before_click, is_point_inside
 
 
+class _Prediction:
+    """Prediksi minimal untuk menguji RoundTracker tanpa model."""
+
+    def __init__(self, direction: int):
+        self.available = True
+        self.green_probability = 0.6 if direction == 1 else 0.4
+        self.predicted_direction = direction
+        self.pattern = (1,)
+        self.matches = 1
+
+
 def broker_panel(width=300, height=400, higher_box=(60, 40, 200, 160),
                   lower_box=(60, 210, 200, 330)):
     image = Image.new("RGB", (width, height), "#FFFFFF")
@@ -148,3 +159,97 @@ class _patched_platform:
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FirstClickTests(unittest.TestCase):
+    """Regresi: klik pertama dulu ditahan 'terlalu cepat sejak klik sebelumnya'."""
+
+    def test_first_click_is_allowed_immediately(self):
+        limiter = ClickLimiter(min_interval=20.0)
+        allowed, reason = limiter.allow(1000.0)
+        self.assertTrue(allowed, reason)
+
+    def test_second_click_inside_interval_is_refused(self):
+        limiter = ClickLimiter(min_interval=20.0)
+        limiter.allow(1000.0)
+        limiter.record(1000.0)
+        allowed, _ = limiter.allow(1005.0)
+        self.assertFalse(allowed)
+
+    def test_click_allowed_again_after_interval(self):
+        limiter = ClickLimiter(min_interval=20.0)
+        limiter.allow(1000.0)
+        limiter.record(1000.0)
+        allowed, _ = limiter.allow(1025.0)
+        self.assertTrue(allowed)
+
+
+class ClickDiagnosticsTests(unittest.TestCase):
+    """Alasan penolakan harus terlihat, bukan tertimpa status live."""
+
+    @classmethod
+    def setUpClass(cls):
+        from pathlib import Path
+
+        cls.ui = (Path(__file__).resolve().parents[1] / "candlelab" / "ui.py").read_text(
+            encoding="utf-8")
+        cls.overlay = (Path(__file__).resolve().parents[1] / "candlelab"
+                       / "overlay.py").read_text(encoding="utf-8")
+
+    def test_rejections_go_to_a_separate_status(self):
+        self.assertIn("self.click_status", self.ui)
+        self.assertIn("def _click_problem", self.ui)
+        # setiap penolakan memakai helper, bukan set_status langsung
+        self.assertNotIn('self.set_status("KLIK DITOLAK', self.ui)
+
+    def test_badge_shows_the_click_note(self):
+        self.assertIn("click_note", self.overlay)
+        self.assertIn("klik ditolak", self.overlay)
+
+    def test_there_is_a_dry_run_check(self):
+        self.assertIn("def test_click_now", self.ui)
+        self.assertIn("Uji klik sekarang", self.ui)
+
+    def test_click_retries_while_round_is_open(self):
+        self.assertIn("def _try_auto_click_for_current", self.ui)
+        # penilai klik tidak lagi bergantung pada jumlah candle layar
+        self.assertIn("current.seq", self.ui)
+
+
+class RoundSequenceTests(unittest.TestCase):
+    """``seq`` harus naik walau jumlah candle di layar menurun."""
+
+    def test_each_round_gets_a_new_sequence(self):
+        from candlelab.rounds import RoundTracker
+        from candlelab.model import Candle
+
+        tracker = RoundTracker()
+        pred = _Prediction(1)
+        for i in range(3):
+            tracker.observe([Candle(open=1, high=2, low=0.5, close=1.5) for _ in range(10 + i)],
+                            pred)
+        self.assertIsNotNone(tracker.current)
+        self.assertEqual(tracker.current.seq, tracker.rounds_opened)
+        self.assertGreaterEqual(tracker.current.seq, 1)
+
+    def test_reset_clears_sequence(self):
+        from candlelab.rounds import RoundTracker
+
+        tracker = RoundTracker()
+        tracker.rounds_opened = 5
+        tracker.reset()
+        self.assertEqual(tracker.rounds_opened, 0)
+
+
+class ClickRecursionTests(unittest.TestCase):
+    """Menolak klik memperbarui badge, dan badge memicu percobaan klik lagi."""
+
+    def test_click_attempt_is_guarded(self):
+        from pathlib import Path
+
+        ui = (Path(__file__).resolve().parents[1] / "candlelab" / "ui.py").read_text(
+            encoding="utf-8")
+        self.assertIn("self._clicking", ui)
+        start = ui.index("def _try_auto_click_for_current")
+        body = ui[start:start + 1200]
+        self.assertIn("if self._clicking:", body)
