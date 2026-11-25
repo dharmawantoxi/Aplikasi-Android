@@ -15,7 +15,12 @@ from .experiments import summarise
 from .hud_layout import best_badge_corner
 from .live_hud import LiveHud
 from .overlay import BADGE_HEIGHT, BADGE_WIDTH, OverlayBadge
-from .auto_click import click_point, find_button_pair
+from .auto_click import (
+    click_point,
+    find_button_pair,
+    find_new_option,
+    new_option_point,
+)
 from .hypotheses import HYPOTHESES, run_hypothesis
 from .hypothesis_stats import evaluate, evaluate_many
 from .auto_click_win import (
@@ -25,6 +30,7 @@ from .auto_click_win import (
     is_point_inside,
     left_click,
     platform_supported,
+    wait_for_new_option,
 )
 from .rounds import (
     MIN_ROUNDS_FOR_SIGNAL,
@@ -610,13 +616,23 @@ class CandleLabApp(tk.Tk):
             lines.append(f"✗ Area tidak terbaca: {exc}")
             ok = False
             image = None
+        if image is not None:
+            option_box, _ = find_new_option(image)
+            if option_box is not None:
+                titik = new_option_point(image.size, box[:2], option_box)
+                lines.append(f"• Tombol NEW OPTION terlihat di {titik[0]},{titik[1]}")
+                lines.append("  → akan ditekan otomatis lebih dulu, lalu Higher/Lower.")
         pair = None
         if image is not None:
             pair, reason = find_button_pair(image)
             if pair is None:
-                lines.append(f"✗ Tombol tidak dikenali: {reason}")
-                lines.append("  → Kalibrasi ulang dengan kotak yang lebih rapat.")
-                ok = False
+                if option_box is not None:
+                    lines.append("• Tombol Higher/Lower belum muncul (form order tertutup)")
+                    lines.append("  → Normal selama NEW OPTION tampil; keduanya ditekan berurutan.")
+                else:
+                    lines.append(f"✗ Tombol tidak dikenali: {reason}")
+                    lines.append("  → Kalibrasi ulang dengan kotak yang lebih rapat.")
+                    ok = False
             else:
                 lines.append(f"✓ Tombol dikenali (Higher {pair.higher}, Lower {pair.lower})")
         judul_aktif = foreground_title()
@@ -690,6 +706,35 @@ class CandleLabApp(tk.Tk):
         except (RuntimeError, ValueError) as exc:
             self._click_problem(f"area tombol tidak terbaca ({exc}).")
             return
+        # Tombol NEW OPTION harus ditekan lebih dulu: selama tombol itu tampil,
+        # tombol Higher/Lower belum ada di layar.
+        option_box, _ = find_new_option(image)
+        if option_box is not None:
+            point = new_option_point(image.size, self.state.click_region[:2], option_box)
+            guard = click_safety(point, self.state.click_region, True)
+            if not guard.allowed:
+                self._click_problem(guard.reason)
+                return
+            left_click(point)
+            self.click_status = "NEW OPTION ditekan • menunggu Higher/Lower"
+            self.set_status(self.click_status)
+            self._refresh_overlay()
+
+            def _still_there() -> bool:
+                try:
+                    lagi = capture_region(self.state.click_region)
+                except (RuntimeError, ValueError):
+                    return False
+                kotak, _ = find_new_option(lagi)
+                return kotak is not None
+
+            wait_for_new_option(_still_there, timeout=1.5)
+            try:
+                image = capture_region(self.state.click_region)
+            except (RuntimeError, ValueError) as exc:
+                self._click_problem(f"layar tidak terbaca ulang setelah NEW OPTION ({exc}).")
+                return
+
         pair, reason = find_button_pair(image)
         if pair is None:
             self._click_problem(reason)

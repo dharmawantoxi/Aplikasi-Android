@@ -24,6 +24,16 @@ MAX_ASPECT = 2.5
 # Proporsi piksel berwarna di dalam kotak; tombol padat, candle berongga.
 MIN_FILL_RATIO = 0.55
 
+# Tombol "NEW OPTION" milik IQ Option berwarna oranye (235, 110, 0). Yang
+# membedakannya dari tombol LOWER merah (215, 76, 57) bukan merahnya, melainkan
+# hampir tidak adanya biru: b/r 0,00 versus 0,27. Tanpa pembeda ini, tombol
+# oranye raksasa akan terbaca sebagai kandidat LOWER dan menggeser klik.
+ORANGE_MIN_RED = 180
+ORANGE_MIN_GREEN_RATIO = 0.30
+ORANGE_MAX_GREEN_RATIO = 0.68
+ORANGE_MAX_BLUE_RATIO = 0.14
+MIN_ORANGE_FILL = 0.50
+
 
 @dataclass(frozen=True)
 class ButtonCandidate:
@@ -90,6 +100,20 @@ def _largest_components(mask: bytearray, width: int, height: int, direction: int
     return found[:limit]
 
 
+def _mostly_orange(mask: bytearray, width: int, box: tuple[int, int, int, int]) -> float:
+    """Proporsi piksel oranye di dalam kotak kandidat."""
+    x1, y1, x2, y2 = box
+    total = 0
+    orange = 0
+    for y in range(y1, y2 + 1):
+        base = y * width
+        for x in range(x1, x2 + 1):
+            total += 1
+            if mask[base + x]:
+                orange += 1
+    return orange / total if total else 0.0
+
+
 def find_buttons(image) -> list[ButtonCandidate]:
     """Kembalikan kandidat tombol Higher (hijau) dan Lower (merah)."""
     from .vision import colour_masks
@@ -98,6 +122,10 @@ def find_buttons(image) -> list[ButtonCandidate]:
     if width < MIN_BUTTON_WIDTH or height < MIN_BUTTON_HEIGHT:
         return []
     green, red = colour_masks(image)
+    # Kandidat merah yang sebagian besar pikselnya oranye adalah tombol NEW
+    # OPTION, bukan tombol LOWER. Tanpa penyaringan ini, tombol oranye yang jauh
+    # lebih besar akan terpilih sebagai "Lower" dan klik meleset.
+    orange = orange_mask(image)
     candidates: list[ButtonCandidate] = []
     for mask, direction in ((green, 1), (red, -1)):
         for item in _largest_components(mask, width, height, direction):
@@ -111,8 +139,49 @@ def find_buttons(image) -> list[ButtonCandidate]:
                 continue
             if item.fill_ratio < MIN_FILL_RATIO:
                 continue
+            if direction == -1 and _mostly_orange(orange, width, item.box) >= 0.6:
+                continue
             candidates.append(item)
     return candidates
+
+
+def orange_mask(image) -> bytearray:
+    """Masker piksel oranye tombol "NEW OPTION"."""
+    rgb = image.convert("RGB")
+    mask = bytearray(rgb.width * rgb.height)
+    for index, (r, g, b) in enumerate(rgb.getdata()):
+        if r < ORANGE_MIN_RED:
+            continue
+        green_ratio = g / r
+        if not ORANGE_MIN_GREEN_RATIO <= green_ratio <= ORANGE_MAX_GREEN_RATIO:
+            continue
+        if b / r > ORANGE_MAX_BLUE_RATIO:
+            continue
+        mask[index] = 1
+    return mask
+
+
+def find_new_option(image) -> tuple[Optional[tuple[int, int, int, int]], str]:
+    """Cari tombol oranye "NEW OPTION"; kembalikan (kotak, alasan gagal).
+
+    Tombol ini muncul setelah satu posisi dibuka. Klik otomatis harus
+    menekannya lebih dulu, karena selama tombol itu tampil, tombol
+    Higher/Lower tidak ada di layar.
+    """
+    width, height = image.size
+    if width < MIN_BUTTON_WIDTH or height < MIN_BUTTON_HEIGHT:
+        return None, "Area terlalu kecil untuk memuat tombol NEW OPTION."
+    mask = orange_mask(image)
+    blobs = _largest_components(mask, width, height, 1)
+    if not blobs:
+        return None, "Tombol NEW OPTION tidak terlihat."
+    best = blobs[0]
+    x1, y1, x2, y2 = best.box
+    if (x2 - x1 + 1) < MIN_BUTTON_WIDTH or (y2 - y1 + 1) < MIN_BUTTON_HEIGHT:
+        return None, "Tidak ada tombol NEW OPTION yang cukup besar."
+    if best.fill_ratio < MIN_ORANGE_FILL:
+        return None, "Bentuk oranye tidak padat seperti tombol."
+    return best.box, ""
 
 
 @dataclass(frozen=True)
@@ -151,3 +220,10 @@ def click_point(image_size: tuple[int, int], offset: tuple[int, int],
     """Titik klik di layar (koordinat absolut) untuk arah tertentu."""
     x, y = pair.higher if direction == 1 else pair.lower
     return offset[0] + x, offset[1] + y
+
+
+def new_option_point(image_size: tuple[int, int], offset: tuple[int, int],
+                     box: tuple[int, int, int, int]) -> tuple[int, int]:
+    """Titik klik tengah tombol NEW OPTION dalam koordinat layar."""
+    x1, y1, x2, y2 = box
+    return offset[0] + (x1 + x2) // 2, offset[1] + (y1 + y2) // 2
