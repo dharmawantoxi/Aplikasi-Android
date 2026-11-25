@@ -103,5 +103,38 @@ class StorageTests(unittest.TestCase):
             self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["format_version"], 1)
 
 
+class SavedRegionTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.path = Path(self.directory.name) / "data.json"
+
+    def tearDown(self):
+        self.directory.cleanup()
+
+    def test_screen_region_round_trips(self):
+        store = JsonStore(self.path)
+        state = store.load()
+        state.screen_region = (100, 250, 1430, 800)
+        store.save(state)
+        self.assertEqual(JsonStore(self.path).load().screen_region, (100, 250, 1430, 800))
+
+    def test_region_missing_or_invalid_is_ignored(self):
+        store = JsonStore(self.path)
+        state = store.load()
+        store.save(state)
+        raw = json.loads(self.path.read_text(encoding="utf-8"))
+        for bad in ([1, 2, 3], "abc", [5, 5, 5, 5], [None, 1, 2, 3]):
+            with self.subTest(bad=bad):
+                raw["screen_region"] = bad
+                self.path.write_text(json.dumps(raw), encoding="utf-8")
+                self.assertIsNone(JsonStore(self.path).load().screen_region)
+
+    def test_region_is_not_saved_for_demo_state(self):
+        store = JsonStore(self.path)
+        state = store.load()
+        self.assertIsNone(state.screen_region)
+        self.assertNotIn("screen_region", json.loads(self.path.read_text(encoding="utf-8")))
+
+
 if __name__ == "__main__":
     unittest.main()

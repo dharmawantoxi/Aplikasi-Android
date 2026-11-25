@@ -2,6 +2,8 @@ import unittest
 from unittest import mock
 
 from candlelab.model import (
+    MIN_CANDLES,
+    WEAK_EVIDENCE_CANDLES,
     DOJI, GREEN, PRIOR_STRENGTH, RED,
     Candle, CandleModel, make_demo_candles,
 )
@@ -38,9 +40,30 @@ class CandleTests(unittest.TestCase):
 
 class PredictionTests(unittest.TestCase):
     def test_insufficient_data_is_explicit(self):
-        result = CandleModel.predict([candle(GREEN)] * 19)
+        # Di bawah MIN_CANDLES prediksi ditolak dengan alasan yang jelas.
+        result = CandleModel.predict([candle(GREEN)] * (MIN_CANDLES - 1))
         self.assertFalse(result.available)
         self.assertIn("1 candle", result.reason)
+
+    def test_allows_small_chart_but_flags_thin_data(self):
+        # Chart broker dengan sedikit candle (mis. 8) kini bisa diprediksi,
+        # tetapi harus ditandai agar angkanya tidak dianggap kuat.
+        result = CandleModel.predict([candle(GREEN), candle(RED)] * 4, window=0)
+        self.assertTrue(result.available)
+        self.assertTrue(result.thin_data)
+        self.assertLess(result.directional_count, WEAK_EVIDENCE_CANDLES)
+
+    def test_enough_data_is_not_flagged_thin(self):
+        sequence = [GREEN, RED] * 15
+        result = CandleModel.predict([candle(value) for value in sequence], window=0)
+        self.assertTrue(result.available)
+        self.assertFalse(result.thin_data)
+
+    def test_minimum_boundary(self):
+        exact = CandleModel.predict([candle(GREEN), candle(RED)] * 3, window=0)  # 6 candle
+        self.assertTrue(exact.available)
+        too_few = CandleModel.predict([candle(GREEN)] * 4, window=0)
+        self.assertFalse(too_few.available)
 
     def test_doji_is_ignored_in_pattern(self):
         # Pola non-doji: hijau, merah, hijau. Doji di tengah tidak mengubah pola.

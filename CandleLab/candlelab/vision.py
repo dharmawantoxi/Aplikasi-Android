@@ -338,7 +338,7 @@ def detect_candles(image: "Image.Image") -> VisionResult:
             "Pastikan area chart benar-benar terlihat saat dibaca; CandleLab tidak boleh menutupinya."
         )
     elif len(detections) < 20:
-        warning = "Kurang dari 20 candle terdeteksi; model probabilitas mungkin belum tersedia."
+        warning = "Kurang dari 5 candle terdeteksi; perbesar area atau perkecil zoom chart."
     elif _candles_touch(detections):
         warning = "Candle tampak saling menempel sehingga batas body sulit dipisahkan. Perbesar skala chart lalu baca ulang."
     elif confidence < 0.65:

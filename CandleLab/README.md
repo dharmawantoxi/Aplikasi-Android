@@ -86,11 +86,35 @@ python3 candlelab.py
 
 Pintasan: `Ctrl+N` tambah candle, `Ctrl+I` impor CSV, `Ctrl+S` ekspor CSV, `F5` muat ulang tampilan, **`F8` baca area layar baru**, **`Ctrl+F8` tangkap ulang area**, **`F9` mulai/stop live**, dan **`Ctrl+F9` pilih area live baru**.
 
+## Mode overlay — tebakan langsung di atas chart IQ Option
+
+Ini mode yang disarankan bila Anda ingin **IQ Option tetap menjadi layar utama**.
+
+1. Buka chart di IQ Option, atur zoom agar **20+ candle** terlihat.
+2. Tekan **`F7`** (atau klik **◱ Live di atas chart**).
+3. Bila belum ada area tersimpan, drag area price chart satu kali. Setelah itu area **diingat**, jadi berikutnya `F7` langsung mulai.
+4. Jendela CandleLab **hilang seluruhnya**. Yang tersisa hanya badge kecil di pojok layar:
+
+   ```
+   HIJAU 67%   next
+               34 candle
+   ```
+
+   Badge selalu di atas jendela lain, **bisa diseret**, dan **klik kanan** untuk berpindah sudut. CandleLab memilih sudut yang tidak menutupi area chart.
+5. Klik **⚙** atau dobel-klik badge untuk membuka jendela penuh (live tetap berjalan). Klik **✕** untuk berhenti.
+
+Badge disembunyikan sesaat setiap kali piksel dibaca, sehingga tidak pernah ikut terpotret. Model mulai bekerja dari **5 candle** (5 non-doji). Bila candle non-doji kurang dari **20**, badge hanya menampilkan arah tanpa persen dan diberi tanda **perkiraan lemah**, karena pada rentang itu angkanya sebagian besar berasal dari prior, bukan dari pola.
+
 ## Mode live — prediksi terus diperbarui
 
 1. Buka chart dan atur zoom/warna agar candle terlihat jelas.
 2. Tekan **`F9`** atau klik **Mulai live**. Jika belum ada area tersimpan, drag area price chart sekali.
-3. Selama live, CandleLab **menyembunyikan jendelanya sendiri sesaat** sebelum setiap pembacaan (± tiap 2 detik), lalu menampilkannya kembali. Ini wajib: bila jendela menutupi area chart, aplikasi akan membaca grafiknya sendiri dan menghasilkan "candle" palsu berupa potongan kecil. Jika area yang dipilih tetap tertutup jendela, CandleLab menampilkan peringatan saat live dimulai — geser jendela lalu pilih area baru dengan `Ctrl+F9`.
+3. Saat live dimulai, **jendela penuh CandleLab disembunyikan** dan diganti **panel live kecil** yang mengambang di atas chart, sehingga chart IQ Option tetap terlihat penuh. Panel menampilkan arah dan probabilitas terbaru.
+   - **Seret** panel untuk memindahkannya, atau klik **⇄ Pindah sudut**.
+   - CandleLab otomatis memilih sudut yang tidak menutupi area chart yang Anda pilih.
+   - **Buka jendela** (atau `F10`) mengembalikan tampilan penuh; live tetap berjalan.
+   - **✕** atau **Stop live** menghentikan pemantauan dan memunculkan jendela penuh.
+   - Panel juga disembunyikan sesaat (± 0,1 detik) setiap kali piksel diambil, jadi tidak pernah ikut terbaca. Ini wajib: bila jendela menutupi area chart, aplikasi akan membaca grafiknya sendiri dan menghasilkan "candle" palsu berupa potongan kecil. Jika area yang dipilih tetap tertutup jendela, CandleLab menampilkan peringatan saat live dimulai — geser jendela lalu pilih area baru dengan `Ctrl+F9`.
 4. **Ctrl+F9** memilih area baru; **F9** atau **Stop live** menghentikan monitor.
 
    Aplikasi memperingatkan bila objek yang terbaca terlalu kecil untuk sebuah candle (mis. potongan ikon atau teks). Itu tanda area tangkapan salah atau tertutup — perbaiki area, jangan melanjutkan dengan data tersebut.
@@ -103,7 +127,7 @@ Worker berjalan di background thread dan berhenti saat aplikasi ditutup. Antrean
 
 ## Membaca candle langsung dari layar
 
-1. Buka chart pada aplikasi atau situs yang ingin dibaca. Atur zoom agar body candle dan jaraknya terlihat jelas (± 8–30 px per candle) dan tampilkan minimal 20 candle.
+1. Buka chart pada aplikasi atau situs yang ingin dibaca. Atur zoom agar body candle dan jaraknya terlihat jelas (± 8–30 px per candle). Minimal 5 candle; 20+ candle non-doji disarankan agar hasil tidak ditandai DATA SEDIKIT.
 2. Di CandleLab, klik **Baca layar** atau tekan `F8`. CandleLab akan diminimalkan.
 3. Drag hanya pada **area price chart**. Usahakan tidak menyertakan volume, indikator, toolbar, teks berwarna, atau panel lain. Lepaskan mouse untuk menangkap; tekan `Esc` untuk batal.
 4. Periksa preview. Setiap candle yang digunakan diberi kotak hijau/merah, dan candle terakhir diberi garis kuning. Urutan `H/M/D` serta tingkat konsistensi deteksi ditampilkan.

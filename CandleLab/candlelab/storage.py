@@ -13,6 +13,17 @@ from .experiments import Experiment
 from .model import Candle, MAX_CANDLES, make_demo_candles
 
 
+def _valid_region(region) -> bool:
+    """Terima hanya empat bilangan bulat dengan ukuran wajar."""
+    if not isinstance(region, (list, tuple)) or len(region) != 4:
+        return False
+    try:
+        x1, y1, x2, y2 = (int(value) for value in region)
+    except (TypeError, ValueError):
+        return False
+    return -20000 <= x1 < x2 <= 20000 and -20000 <= y1 < y2 <= 20000
+
+
 def default_data_path() -> Path:
     if sys.platform == "win32":
         base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
@@ -28,6 +39,9 @@ class AppState:
     candles: list[Candle] = field(default_factory=list)
     experiments: list[Experiment] = field(default_factory=list)
     is_demo: bool = False
+    # Area chart terakhir. Koordinat layar hanya disimpan agar live bisa
+    # dimulai tanpa memilih ulang; tidak ada isi layar yang disimpan.
+    screen_region: tuple[int, int, int, int] | None = None
 
     @property
     def pending(self) -> Optional[Experiment]:
@@ -95,7 +109,11 @@ class JsonStore:
             experiments = [Experiment.from_dict(item) for item in raw.get("experiments", [])]
             if sum(item.pending for item in experiments) > 1:
                 raise ValueError("Ditemukan lebih dari satu prediksi tertunda.")
-            state = AppState(candles, experiments[-200:], bool(raw.get("is_demo", False)))
+            region = raw.get("screen_region")
+            if not _valid_region(region):
+                region = None
+            state = AppState(candles, experiments[-200:], bool(raw.get("is_demo", False)),
+                             tuple(region) if region else None)
             # Prediksi tertunda dari sesi lama hanya sah jika candle berikutnya belum masuk.
             pending = state.pending
             if pending and len(candles) == pending.candle_count + 1:
@@ -127,6 +145,8 @@ class JsonStore:
             ],
             "experiments": [item.to_dict() for item in state.experiments[-200:]],
         }
+        if state.screen_region:
+            payload["screen_region"] = list(state.screen_region)
         temporary = self.path.with_suffix(".tmp")
         with temporary.open("w", encoding="utf-8") as output:
             json.dump(payload, output, ensure_ascii=False, separators=(",", ":"), allow_nan=False)

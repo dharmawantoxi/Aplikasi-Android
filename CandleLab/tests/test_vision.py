@@ -60,7 +60,7 @@ class VisionTests(unittest.TestCase):
                 image = Image.new("RGB", (500, 250), colour)
                 result = detect_candles(image)
                 self.assertEqual(result.candles, [])
-                self.assertIn("Kurang dari 20", result.warning)
+                self.assertIn("Kurang dari 5", result.warning)
 
     def test_tiny_capture_is_rejected_gracefully(self):
         result = detect_candles(Image.new("RGB", (10, 10), "#26A69A"))
