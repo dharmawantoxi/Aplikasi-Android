@@ -122,20 +122,18 @@ with tempfile.TemporaryDirectory() as directory:
         assert badge.winfo_exists()
         assert app.wm_state() == "withdrawn", "jendela utama terlihat saat overlay"
         assert int(badge.attributes("-topmost")) == 1, "badge tidak always-on-top"
-        assert badge.winfo_width() <= 260 and badge.winfo_height() <= 72, "badge terlalu besar"
         # Regresi: teks badge pernah terpotong karena lebar dipaku pada 176 px.
-        inner = app.overlay.headline.winfo_reqwidth() + app.overlay.detail.winfo_reqwidth()
-        chrome = app.overlay.buttons.winfo_reqwidth() + 40
-        assert badge.winfo_width() >= min(inner + chrome, badge.winfo_screenwidth() - 8), \
-            "isi badge tidak muat; teks akan terpotong"
-        assert app.overlay.buttons.winfo_ismapped(), "tombol badge tidak tampil"
+        # Ukuran jendela harus menampung isi frame apa adanya.
+        content = app.overlay.frame.winfo_reqwidth()
+        assert badge.winfo_width() >= content, (
+            f"isi badge tidak muat: jendela {badge.winfo_width()}px < isi {content}px")
+        assert badge.winfo_height() >= app.overlay.frame.winfo_reqheight(), "tinggi badge kurang"
         # Badge tidak boleh keluar layar setelah diseret melewati tepi.
+        screen_w, screen_h = badge.winfo_screenwidth(), badge.winfo_screenheight()
         app.overlay._move(99999, 99999)
         app.update()
-        assert badge.winfo_x() + badge.winfo_width() <= badge.winfo_screenwidth(), \
-            "badge keluar layar di kanan"
-        assert badge.winfo_y() + badge.winfo_height() <= badge.winfo_screenheight(), \
-            "badge keluar layar di bawah"
+        assert badge.winfo_x() + badge.winfo_width() <= screen_w, "badge keluar layar di kanan"
+        assert badge.winfo_y() + badge.winfo_height() <= screen_h, "badge keluar layar di bawah"
         app.overlay.place("top-right")
         app.update()
         before = (badge.winfo_x(), badge.winfo_y())

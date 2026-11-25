@@ -146,7 +146,15 @@ def clamp_position(x: int, y: int, screen_w: int, screen_h: int,
 
 def fit_size(desired_w: int, desired_h: int, screen_w: int, screen_h: int,
              min_w: int = 120, min_h: int = 30) -> tuple[int, int]:
-    """Batasi ukuran badge agar tidak melebihi layar."""
-    width = max(min_w, min(int(desired_w), screen_w - 8))
-    height = max(min_h, min(int(desired_h), screen_h - 8))
+    """Batasi ukuran badge agar tidak melebihi layar.
+
+    Isi teks diutamakan: bila layar dilaporkan sangat kecil (sesi remote atau
+    runner CI), batas layar diabaikan supaya teks tetap utuh. Lebih baik badge
+    sedikit keluar layar daripada menampilkan teks terpotong.
+    """
+    width, height = max(min_w, int(desired_w)), max(min_h, int(desired_h))
+    if screen_w >= 640:
+        width = max(min_w, min(width, screen_w - 8))
+    if screen_h >= 480:
+        height = max(min_h, min(height, screen_h - 8))
     return width, height

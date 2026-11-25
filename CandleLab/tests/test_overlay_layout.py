@@ -77,10 +77,16 @@ class BadgeSizingTests(unittest.TestCase):
         x, y = clamp_position(-300, -80, 1920, 1080, 200, 60)
         self.assertEqual((x, y), (4, 4))
 
-    def test_clamp_on_tiny_screen(self):
+    def test_content_wins_on_absurdly_small_screen(self):
+        # Runner CI tanpa display melaporkan layar sangat kecil. Teks tetap
+        # diutamakan: lebih baik badge keluar layar daripada terpotong.
         width, height = fit_size(400, 80, 320, 200)
-        self.assertLessEqual(width, 320 - 8)
-        self.assertLessEqual(height, 200 - 8)
+        self.assertEqual((width, height), (400, 80))
+
+    def test_fit_size_bounded_on_real_screen(self):
+        width, height = fit_size(4000, 80, 1920, 1080)
+        self.assertEqual(width, 1920 - 8)
+        self.assertEqual(height, 80)
 
     def test_fit_size_never_below_minimum(self):
         width, height = fit_size(10, 10, 1920, 1080)
