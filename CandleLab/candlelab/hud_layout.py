@@ -72,6 +72,10 @@ def next_corner(corner: str) -> str:
 
 BADGE_CORNERS = ("top-right", "bottom-right", "top-left", "bottom-left")
 
+# Urutan preferensi: pojok atas lebih aman karena tombol Higher/Lower dan panel
+# order broker hampir selalu berada di kanan bawah.
+PREFERRED_BADGE_CORNERS = ("top-right", "top-left", "bottom-right", "bottom-left")
+
 
 def badge_positions(screen_w: int, screen_h: int, width: int, height: int,
                     margins=(MARGIN, 90, MARGIN, 110)) -> dict[str, tuple[int, int]]:
@@ -101,7 +105,13 @@ def best_badge_corner(region, screen_w: int, screen_h: int,
             if not overlaps(region, *positions[name], width, height)]
     if not free:
         return min(positions, key=lambda name: (_overlap_area(region, *positions[name]), name))
-    return max(free, key=lambda name: (_distance(region, *positions[name]), name))
+    # Pilih sudut bebas sesuai preferensi, bukan yang terjauh dari chart: sudut
+    # bawah-kanan memang jauh dari chart, tetapi justru menutupi tombol
+    # Higher/Lower milik broker.
+    for name in PREFERRED_BADGE_CORNERS:
+        if name in free:
+            return name
+    return free[0]
 
 
 # -- badge overlay ---------------------------------------------------------
