@@ -604,7 +604,8 @@ class CandleLabApp(tk.Tk):
             messagebox.showinfo(
                 "Area tombol belum dikalibrasi",
                 "Klik ‘Kalibrasi tombol broker’ di halaman Data lebih dulu, "
-                "lalu pilih kotak yang memuat tombol HIGHER dan LOWER.",
+                "lalu pilih kotak yang memuat tombol HIGHER, LOWER, dan "
+                "tombol oranye NEW OPTION bila terlihat.",
                 parent=self._dialog_parent())
             return
         box = self.state.click_region
@@ -673,18 +674,32 @@ class CandleLabApp(tk.Tk):
             return
         image, box = captured
         pair, reason = find_button_pair(image)
-        if pair is None:
+        option_box, _ = find_new_option(image)
+        if pair is None and option_box is None:
             messagebox.showwarning("Tombol tidak dikenali", reason, parent=self)
             return
+        if pair is None and option_box is not None:
+            # Kalibrasi saat form order tertutup sah: tombol NEW OPTION yang
+            # tampil, dan Higher/Lower akan muncul setelahnya.
+            pesan_tambahan = ("\n\nSaat dikalibrasi hanya tombol NEW OPTION yang tampak. "
+                              "Itu tidak masalah: setelah NEW OPTION ditekan, Higher/Lower "
+                              "muncul di area yang sama.")
+        else:
+            pesan_tambahan = ""
         self.state.click_region = box
         if self._save():
             messagebox.showinfo(
                 "Tombol dikenali",
                 f"Higher di {pair.higher}, Lower di {pair.lower} (relatif area).\n\n"
                 f"Area disimpan: {box[0]}, {box[1]} → {box[2]}, {box[3]}\n\n"
+                f"{pesan_tambahan}\n\n"
                 "KAPAN KLIK TERJADI:\n"
                 "Hanya saat mode live berjalan, ketika muncul tebakan BARU untuk "
                 "candle yang sedang berjalan. Maksimal satu klik per candle.\n\n"
+                "YANG HARUS MASUK AREA:\n"
+                "• tombol HIGHER dan LOWER (hijau & merah), dan\n"
+                "• tombol oranye + NEW OPTION bila terlihat.\n"
+                "Area harus memuat keduanya sekaligus, karena posisinya bertumpuk.\n\n"
                 "Urutan yang disarankan: mulai live dulu → atur durasi → baru "
                 "aktifkan klik otomatis.",
                 parent=self)
