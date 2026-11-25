@@ -11,6 +11,7 @@ tetap. Versi sebelumnya memakai lebar tetap sehingga teks seperti
 """
 from __future__ import annotations
 
+import time
 import tkinter as tk
 from typing import Callable
 
@@ -189,7 +190,8 @@ class OverlayBadge:
             pass
 
     # -- isi --------------------------------------------------------------
-    def show_round(self, round_obj, stats, candle_count: int, pending: bool = True):
+    def show_round(self, round_obj, stats, candle_count: int, pending: bool = True,
+                   seconds_left=None):
         """Tampilkan tebakan yang sedang berjalan beserta skor benar/salah.
 
         ``round_obj`` adalah ``rounds.Round``; ``stats`` adalah
@@ -218,7 +220,13 @@ class OverlayBadge:
             else:
                 detail, tint = f"SALAH · {stats.wins}/{stats.played}", "#FF8A7A"
         else:
-            detail = f"next · {stats.wins}/{stats.played}\nmenunggu candle"
+            # Tanpa penanda waktu, badge tampak diam selama satu candle penuh
+            # dan pengguna mengira aplikasi berhenti.
+            tick = "." * (1 + int(time.monotonic() * 2) % 3)
+            sisa = ""
+            if seconds_left is not None and seconds_left >= 0:
+                sisa = f" · {int(seconds_left)}s"
+            detail = f"next · {stats.wins}/{stats.played}{tick}\nmenunggu candle{sisa}"
             tint = DETAIL_FG
         self.headline.configure(text=label, fg=colour)
         self.detail.configure(text=detail, fg=tint)

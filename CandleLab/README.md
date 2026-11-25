@@ -115,7 +115,9 @@ Saat live berjalan, CandleLab menebak **candle yang sedang berjalan** lalu membi
 - Doji dan tebakan 50% dilewati, tidak dihitung sebagai kalah.
 - Bila jumlah candle menurun atau melompat, putaran diulang daripada menilai dengan candle yang salah.
 
-Karena candle yang berjalan tidak dipakai sebagai dasar, area chart perlu menampilkan **6 candle** (bukan 5). Sejarah benar/salah disimpan di `data.json` (`live_rounds`).
+Karena candle yang berjalan tidak dipakai sebagai dasar, area chart perlu menampilkan **6 candle** (bukan 5).
+
+**Sertakan ruang kosong di kanan candle terakhir.** Kalau kotak area berhenti tepat di candle terakhir, candle berikutnya berada di luar area, jumlah candle tidak pernah berubah, dan badge akan terus menampilkan `0/0`. Selama menunggu, badge menampilkan titik berkedip dan lama menunggu (mis. `42s`); angka yang terus naik tanpa pernah dinilai berarti area perlu dipilih ulang. Sejarah benar/salah disimpan di `data.json` (`live_rounds`).
 
 Model mulai bekerja dari **5 candle** (5 non-doji). Bila candle non-doji kurang dari **20**, badge hanya menampilkan arah tanpa persen dan diberi tanda **perkiraan lemah**, karena pada rentang itu angkanya sebagian besar berasal dari prior, bukan dari pola.
 

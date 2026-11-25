@@ -112,3 +112,30 @@ class VisionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WarningThresholdTests(unittest.TestCase):
+    """Regresi: 12 candle sempat memicu 'Kurang dari 5 candle'."""
+
+    def _chart(self, count):
+        from PIL import Image, ImageDraw
+        image = Image.new("RGB", (40 + count * 24, 260), "#101513")
+        draw = ImageDraw.Draw(image)
+        for index in range(count):
+            x = 20 + index * 24
+            colour = "#26A69A" if index % 2 else "#EF5350"
+            draw.line((x + 5, 30, x + 5, 230), fill=colour)
+            draw.rectangle((x, 70, x + 10, 190), fill=colour)
+        return image
+
+    def test_enough_candles_produce_no_warning(self):
+        from candlelab.model import MIN_CANDLES
+        result = detect_candles(self._chart(MIN_CANDLES + 7))
+        self.assertGreaterEqual(len(result.candles), MIN_CANDLES)
+        self.assertNotIn("candle terdeteksi", result.warning)
+
+    def test_warning_only_when_below_minimum(self):
+        from candlelab.model import MIN_CANDLES
+        result = detect_candles(self._chart(MIN_CANDLES - 2))
+        if len(result.candles) < MIN_CANDLES:
+            self.assertIn(f"Kurang dari {MIN_CANDLES}", result.warning)

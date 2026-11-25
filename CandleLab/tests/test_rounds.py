@@ -135,6 +135,20 @@ class RoundTrackerTests(unittest.TestCase):
             except AttributeError:
                 self.fail(f"atribut {name} tidak dapat ditulis dari UI")
 
+    def test_waiting_seconds_grows_while_candle_runs(self):
+        """Badge memakai ini agar tidak tampak diam."""
+        self.assertIsNone(self.tracker.waiting_seconds(), "belum ada putaran")
+        self.feed(series(GREEN, RED, GREEN, GREEN, RED, GREEN))
+        self.assertIsNotNone(self.tracker.waiting_seconds())
+
+    def test_waiting_seconds_stops_after_resolution(self):
+        self.feed(series(GREEN, RED, GREEN, GREEN, RED, GREEN))
+        locked = self.tracker.current.direction
+        self.feed(series(GREEN, RED, GREEN, GREEN, RED, GREEN, locked))
+        # Putaran baru sudah dibuka; tidak boleh melaporkan waktu putaran lama.
+        self.assertIsNotNone(self.tracker.waiting_seconds())
+        self.assertTrue(self.tracker.current is not None)
+
     def test_status_text(self):
         self.assertEqual(self.tracker.status_text(), "0/0 benar")
         self.tracker.stats.wins, self.tracker.stats.losses = 3, 1
