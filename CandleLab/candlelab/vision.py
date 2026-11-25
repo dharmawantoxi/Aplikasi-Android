@@ -240,6 +240,22 @@ def _regular_series(components: list[Component]) -> tuple[list[Component], float
     return selected, confidence
 
 
+def _too_small(detections: list[DetectedCandle]) -> bool:
+    """True bila body candle yang terbaca lebih mirip potongan ikon/teks.
+
+    Candle sungguhan pada chart broker biasanya minimal ~6 px pada sisi
+    pendeknya. Nilai ini sengaja rendah agar chart yang sangat di-zoom-out
+    tidak ikut ditolak.
+    """
+    if len(detections) < 3:
+        return False
+    heights = [item.body_box[3] - item.body_box[1] + 1 for item in detections]
+    widths = [item.body_box[2] - item.body_box[0] + 1 for item in detections]
+    # Potongan ikon/teks yang lolos sebagai "candle" luasnya sangat kecil,
+    # mis. 13 × 9 px. Candle sungguhan yang di-zoom-out tetap lebih besar.
+    return median(heights) * median(widths) <= 150 and median(heights) <= 10
+
+
 def _candles_touch(detections: list[DetectedCandle]) -> bool:
     """Candle yang hampir menempel menyulitkan pemisahan body saat terbaca."""
     if len(detections) < 4:
@@ -315,7 +331,13 @@ def detect_candles(image: "Image.Image") -> VisionResult:
             draw.line((x2 + 4, 0, x2 + 4, work.height), fill="#FFD166", width=1)
 
     warning = ""
-    if len(detections) < 20:
+    if detections and _too_small(detections):
+        # Ciri khas tangkapan yang salah: potongan ikon/teks, bukan body candle.
+        warning = (
+            "Objek terdeteksi terlalu kecil untuk candle (bisa jadi ikon/teks). "
+            "Pastikan area chart benar-benar terlihat saat dibaca; CandleLab tidak boleh menutupinya."
+        )
+    elif len(detections) < 20:
         warning = "Kurang dari 20 candle terdeteksi; model probabilitas mungkin belum tersedia."
     elif _candles_touch(detections):
         warning = "Candle tampak saling menempel sehingga batas body sulit dipisahkan. Perbesar skala chart lalu baca ulang."

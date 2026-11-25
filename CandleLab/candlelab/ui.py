@@ -44,6 +44,8 @@ class CandleLabApp(tk.Tk):
         self.live_events = queue.Queue(maxsize=3)
         self.live_generation = 0
         self.live_active = False
+        self.live_hidden = False
+        self.live_hidden_mode = ""
         self.live_candles = []
         self.live_sequence = ""
         self.live_pending_sequence = None
@@ -648,11 +650,40 @@ class CandleLabApp(tk.Tk):
             self.live_events, self.screen_region, self.live_generation, interval=2.0,
         )
         self.live_monitor.start()
+        if self.live_window_overlaps_region():
+            messagebox.showwarning(
+                "Jendela menutupi area chart",
+                "Area chart yang dipilih tertutup jendela CandleLab. Area ini akan tetap "
+                "terbaca nyaris kosong setiap kali jendela muncul kembali.\n\n"
+                "Pindahkan/geser jendela CandleLab agar area chart terlihat penuh, "
+                "lalu pilih area baru dengan Ctrl+F9.", parent=self,
+            )
         self.set_status(
             f"LIVE aktif • {len(self.live_candles)} candle • jangan tutupi area grafik yang dipilih."
         )
         self.show_page("prediction")
         self.after(120, self._poll_live_events)
+
+    def live_window_overlaps_region(self) -> bool:
+        """True bila jendela utama menutupi sebagian besar area yang dipilih."""
+        if not self.screen_region:
+            return False
+        try:
+            if self.state() != "normal":
+                return False
+            left = self.winfo_rootx()
+            top = self.winfo_rooty()
+            right = left + self.winfo_width()
+            bottom = top + self.winfo_height()
+        except tk.TclError:
+            return False
+        x1, y1, x2, y2 = self.screen_region
+        overlap_w = max(0, min(right, x2) - max(left, x1))
+        overlap_h = max(0, min(bottom, y2) - max(top, y1))
+        if overlap_w <= 0 or overlap_h <= 0:
+            return False
+        region_area = max(1, (x2 - x1) * (y2 - y1))
+        return (overlap_w * overlap_h) / region_area >= 0.30
 
     def stop_live_monitor(self, refresh=True):
         if self.live_monitor:
@@ -664,6 +695,7 @@ class CandleLabApp(tk.Tk):
         self.live_sequence = ""
         self.live_pending_sequence = None
         self.live_events = queue.Queue(maxsize=3)
+        self._show_after_capture()
         self.set_status("Mode live berhenti. Data tersimpan tidak berubah.")
         if refresh:
             self.refresh()
@@ -673,6 +705,7 @@ class CandleLabApp(tk.Tk):
             return
         latest = None
         error = ""
+        ready = False
         while True:
             try:
                 event = self.live_events.get_nowait()
@@ -680,10 +713,17 @@ class CandleLabApp(tk.Tk):
                 break
             if event.generation != self.live_generation:
                 continue
-            if event.error:
+            if event.ready:
+                ready = True
+            elif event.error:
                 error = event.error
             else:
                 latest = event
+        if ready and self.live_monitor is not None:
+            # Jendela harus hilang dari layar sebelum worker memotret, kalau tidak
+            # CandleLab membaca grafiknya sendiri.
+            self._hide_for_capture()
+            self.live_monitor.release()
         if error:
             self.stop_live_monitor(refresh=False)
             self.refresh()
@@ -695,8 +735,48 @@ class CandleLabApp(tk.Tk):
             return
         if latest is not None:
             self._process_live_result(latest)
+        self._show_after_capture()
         if self.live_active:
             self.after(120, self._poll_live_events)
+
+    def _hide_for_capture(self):
+        """Buat jendela tidak terlihat selama satu tangkapan live.
+
+        Transparansi dipakai lebih dulu karena tidak mengubah fokus/taskbar
+        sehingga tidak berkedip; ``withdraw`` menjadi cadangan bila window
+        manager tidak mendukung atribut alpha.
+        """
+        if self.live_hidden:
+            return
+        self.live_hidden = True
+        self.live_hidden_mode = "alpha"
+        try:
+            self.attributes("-alpha", 0.0)
+            self.update_idletasks()
+            return
+        except tk.TclError:
+            self.live_hidden_mode = "withdraw"
+        self.withdraw()
+
+    def _show_after_capture(self):
+        if not self.live_hidden:
+            return
+        self.live_hidden = False
+        mode, self.live_hidden_mode = self.live_hidden_mode, ""
+        try:
+            if mode == "withdraw":
+                self.deiconify()
+            else:
+                self.attributes("-alpha", 1.0)
+                self.deiconify()
+            self.update_idletasks()
+        except tk.TclError:
+            # Jangan biarkan jendela tetap tak terlihat bila pemulihan gagal.
+            try:
+                self.attributes("-alpha", 1.0)
+            except tk.TclError:
+                pass
+            self.deiconify()
 
     def _process_live_result(self, event: MonitorEvent):
         result = event.result
@@ -715,10 +795,15 @@ class CandleLabApp(tk.Tk):
         changed = sequence != self.live_sequence or not self.live_candles
         self.live_candles = list(result.candles)
         self.live_sequence = sequence
-        self.set_status(
-            f"LIVE • {len(self.live_candles)} candle • konsistensi {format_percent(result.confidence, 0)}"
-            f" • {event.elapsed:.1f} detik/baca • {datetime.now():%H:%M:%S}"
-        )
+        if changed and result.warning:
+            # Peringatan deteksi penting (mis. objek terlalu kecil) didahulukan,
+            # tetapi hanya saat urutan berubah agar status tidak berkedip.
+            self.set_status("LIVE • " + result.warning)
+        else:
+            self.set_status(
+                f"LIVE • {len(self.live_candles)} candle • konsistensi {format_percent(result.confidence, 0)}"
+                f" • {event.elapsed:.1f} detik/baca • {datetime.now():%H:%M:%S}"
+            )
         self._refresh_live_panels(redraw_chart=True, redraw_model=changed)
 
     def _refresh_live_panels(self, redraw_chart=True, redraw_model=True):

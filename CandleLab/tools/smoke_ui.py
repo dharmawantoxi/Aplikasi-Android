@@ -68,6 +68,16 @@ with tempfile.TemporaryDirectory() as directory:
         app.update()
         assert len(app._chart_candles()) == 24
         assert len(app._source_candles()) == 23  # candle forming dikecualikan
+
+        # Jendela harus benar-benar tidak terlihat selama penangkapan live,
+        # kalau tidak CandleLab akan membaca grafiknya sendiri.
+        app._hide_for_capture()
+        assert app.live_hidden, "jendela belum ditandai tersembunyi"
+        assert float(app.attributes("-alpha")) < 0.01
+        app._show_after_capture()
+        assert not app.live_hidden
+        assert float(app.attributes("-alpha")) > 0.99
+
         app.stop_live_monitor(refresh=False)
         print("GUI smoke test passed: pages, screen capture, vision preview, and live updates.")
     finally:

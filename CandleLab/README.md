@@ -90,8 +90,10 @@ Pintasan: `Ctrl+N` tambah candle, `Ctrl+I` impor CSV, `Ctrl+S` ekspor CSV, `F5` 
 
 1. Buka chart dan atur zoom/warna agar candle terlihat jelas.
 2. Tekan **`F9`** atau klik **Mulai live**. Jika belum ada area tersimpan, drag area price chart sekali.
-3. Kembalikan fokus ke CandleLab tanpa menutupi area chart. Aplikasi membaca area yang sama setiap **2 detik** dan memperbarui grafik serta probabilitas secara otomatis.
+3. Selama live, CandleLab **menyembunyikan jendelanya sendiri sesaat** sebelum setiap pembacaan (± tiap 2 detik), lalu menampilkannya kembali. Ini wajib: bila jendela menutupi area chart, aplikasi akan membaca grafiknya sendiri dan menghasilkan "candle" palsu berupa potongan kecil. Jika area yang dipilih tetap tertutup jendela, CandleLab menampilkan peringatan saat live dimulai — geser jendela lalu pilih area baru dengan `Ctrl+F9`.
 4. **Ctrl+F9** memilih area baru; **F9** atau **Stop live** menghentikan monitor.
+
+   Aplikasi memperingatkan bila objek yang terbaca terlalu kecil untuk sebuah candle (mis. potongan ikon atau teks). Itu tanda area tangkapan salah atau tertutup — perbaiki area, jangan melanjutkan dengan data tersebut.
 5. Opsi **Abaikan candle paling kanan** aktif secara default. Candle yang masih terbentuk tetap tampil pada grafik tetapi tidak ikut prediksi. Ketika candle baru muncul dan urutan stabil, candle yang sudah selesai otomatis dihitung.
 6. Untuk eksperimen, klik **Kunci prediksi live & berhenti**. Snapshot yang sedang dihitung disimpan, monitor berhenti, dan prediksi dikunci. Jika live dihentikan tanpa dikunci, data set lama tidak berubah.
 
