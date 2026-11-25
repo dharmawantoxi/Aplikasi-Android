@@ -43,6 +43,10 @@ class Round:
     # membandingkan apa yang "dilihat" aplikasi dengan chart aslinya.
     history: tuple[int, ...] = ()
     resolved_at: str = ""
+    # Nomor putaran sejak live dimulai. Dipakai agar klik otomatis mencatat
+    # "sudah klik untuk putaran ini" tanpa bergantung pada jumlah candle layar,
+    # yang bisa turun ketika candle lama keluar dari area pembacaan.
+    seq: int = 0
 
     @property
     def resolved(self) -> bool:
@@ -104,6 +108,7 @@ class RoundTracker:
 
     def __init__(self, start_monotonic: Optional[float] = None, keep: int = 200) -> None:
         self.stats = RoundStats()
+        self.rounds_opened = 0
         # Putaran yang sudah selesai, terbaru di akhir.
         self.log: list[Round] = []
         self.keep = keep
@@ -125,6 +130,7 @@ class RoundTracker:
 
     def reset(self) -> None:
         """Lupakan posisi; dipakai saat area/jendela pembacaan berubah."""
+        self.rounds_opened = 0
         self.current = None
         self._history = []
         self._reset_reason = ""
@@ -181,7 +187,9 @@ class RoundTracker:
     def _open(self, prediction, candle_count: int) -> Optional[Round]:
         if prediction is None or not getattr(prediction, "available", False):
             return None
+        self.rounds_opened += 1
         return Round(
+            seq=self.rounds_opened,
             green_probability=float(prediction.green_probability),
             direction=int(prediction.predicted_direction),
             candle_count=candle_count,

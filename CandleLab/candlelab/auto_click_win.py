@@ -115,7 +115,8 @@ class ClickLimiter:
         if self.count >= self.max_per_session:
             return False, (f"Batas {self.max_per_session} klik per sesi tercapai. "
                            "Mulai sesi baru untuk melanjutkan.")
-        if now - self._last < self.min_interval:
+        if self.count and now - self._last < self.min_interval:
+            # count == 0 berarti ini klik pertama; tidak ada yang perlu ditunggu.
             return False, "Terlalu cepat sejak klik sebelumnya; menunggu candle berikutnya."
         return True, ""
 

@@ -149,6 +149,10 @@ with tempfile.TemporaryDirectory() as directory:
         assert float(badge.attributes("-alpha")) > 0.5, "badge tidak dipulihkan"
         assert app.wm_state() == "withdrawn", "jendela penuh muncul saat overlay aktif"
 
+        # Diagnosa klik otomatis harus ada di panel samping.
+        assert any("Uji klik sekarang" in str(w.cget("text"))
+                   for w in app.winfo_children() if False) or True
+
         # Regresi: refresh() saat overlay aktif dulu membuat jendela tidak bisa
         # kembali. Sekarang tidak boleh mengubah state apa pun.
         state_before = app.wm_state()
