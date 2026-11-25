@@ -121,6 +121,8 @@ Tombol **Live di atas chart** dan **F7** selalu meminta Anda memilih area, agar 
 
 **Sertakan ruang kosong di kanan candle terakhir.** Kalau kotak area berhenti tepat di candle terakhir, candle berikutnya berada di luar area, jumlah candle tidak pernah berubah, dan badge akan terus menampilkan `0/0`. Selama menunggu, badge menampilkan titik berkedip dan lama menunggu (mis. `42s`); angka yang terus naik tanpa pernah dinilai berarti area perlu dipilih ulang. Sejarah benar/salah disimpan di `data.json` (`live_rounds`).
 
+**Membedakan aplikasi salah vs prediksi buruk.** Panel tebak otomatis menampilkan `Yang dibaca: HMHHMHD…`: urutan candle yang dilihat aplikasi. Cocokkan dengan 12 candle terakhir di chart. Kalau cocok, deteksi benar dan skor rendah berarti prediksinya memang lemah. Kalau tidak cocok, area tangkapan yang salah. Tombol **Salin riwayat tebakan** menyalin log lengkap (probabilitas, tebakan, hasil, waktu) ke clipboard.
+
 Model mulai bekerja dari **5 candle** (5 non-doji). Bila candle non-doji kurang dari **20**, badge hanya menampilkan arah tanpa persen dan diberi tanda **perkiraan lemah**, karena pada rentang itu angkanya sebagian besar berasal dari prior, bukan dari pola.
 
 ## Mode live — prediksi terus diperbarui
