@@ -164,13 +164,15 @@ class LiveHud:
                 text=f"{label}  {format_percent(green if direction == GREEN else red, 0)}",
                 fg=colour,
             )
+            thin = getattr(prediction, "thin_data", False)
             self.detail.configure(
                 text=(
                     f"Hijau {format_percent(green, 1)}  •  Merah {format_percent(red, 1)}\n"
-                    f"{candle_count} candle dihitung  •  pola {prediction.order}  •  "
+                    f"{candle_count} candle  •  pola {prediction.order}  •  "
                     f"{prediction.matches} kemunculan"
+                    + ("\nDATA SEDIKIT — anggap perkiraan lemah" if thin else "")
                 ),
-                fg="#B8C9C1",
+                fg="#C9A227" if thin else "#B8C9C1",
             )
         else:
             reason = prediction.reason if prediction is not None else "Menunggu pembacaan."

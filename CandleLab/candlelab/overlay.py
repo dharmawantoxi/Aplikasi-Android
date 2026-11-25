@@ -141,9 +141,17 @@ class OverlayBadge:
             else:
                 label, confidence = "SEIMBANG", 0.5
             colour = FORECAST_COLORS.get(direction, DOJI)
-            self.headline.configure(text=f"{label} {format_percent(confidence, 0)}", fg=colour)
-            note = warning or f"{candle_count} candle"
-            self.detail.configure(text=f"next\n{note}")
+            if getattr(prediction, "thin_data", False):
+                # Data sedikit: arah saja, tanpa persen yang menyesatkan.
+                self.headline.configure(text=label, fg=colour)
+                self.detail.configure(
+                    text=f"next · data {candle_count}\nperkiraan lemah",
+                    fg="#C9A227",
+                )
+            else:
+                self.headline.configure(text=f"{label} {format_percent(confidence, 0)}", fg=colour)
+                note = warning or f"{candle_count} candle"
+                self.detail.configure(text=f"next\n{note}", fg="#8FA49A")
         else:
             reason = prediction.reason if prediction is not None else "Menunggu pembacaan"
             self.headline.configure(text="Belum cukup", fg="#C9D6CF")

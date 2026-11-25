@@ -103,7 +103,7 @@ Ini mode yang disarankan bila Anda ingin **IQ Option tetap menjadi layar utama**
    Badge selalu di atas jendela lain, **bisa diseret**, dan **klik kanan** untuk berpindah sudut. CandleLab memilih sudut yang tidak menutupi area chart.
 5. Klik **⚙** atau dobel-klik badge untuk membuka jendela penuh (live tetap berjalan). Klik **✕** untuk berhenti.
 
-Badge disembunyikan sesaat setiap kali piksel dibaca, sehingga tidak pernah ikut terpotret. Angka pada badge hanya berlaku bila data cukup (minimal 20 candle, 12 non-doji); jika belum, badge menampilkan **"Belum cukup"** — itu bukan gangguan, melainkan tanda data masih kurang.
+Badge disembunyikan sesaat setiap kali piksel dibaca, sehingga tidak pernah ikut terpotret. Model mulai bekerja dari **5 candle** (5 non-doji). Bila candle non-doji kurang dari **20**, badge hanya menampilkan arah tanpa persen dan diberi tanda **perkiraan lemah**, karena pada rentang itu angkanya sebagian besar berasal dari prior, bukan dari pola.
 
 ## Mode live — prediksi terus diperbarui
 
@@ -127,7 +127,7 @@ Worker berjalan di background thread dan berhenti saat aplikasi ditutup. Antrean
 
 ## Membaca candle langsung dari layar
 
-1. Buka chart pada aplikasi atau situs yang ingin dibaca. Atur zoom agar body candle dan jaraknya terlihat jelas (± 8–30 px per candle) dan tampilkan minimal 20 candle.
+1. Buka chart pada aplikasi atau situs yang ingin dibaca. Atur zoom agar body candle dan jaraknya terlihat jelas (± 8–30 px per candle). Minimal 5 candle; 20+ candle non-doji disarankan agar hasil tidak ditandai DATA SEDIKIT.
 2. Di CandleLab, klik **Baca layar** atau tekan `F8`. CandleLab akan diminimalkan.
 3. Drag hanya pada **area price chart**. Usahakan tidak menyertakan volume, indikator, toolbar, teks berwarna, atau panel lain. Lepaskan mouse untuk menangkap; tekan `Esc` untuk batal.
 4. Periksa preview. Setiap candle yang digunakan diberi kotak hijau/merah, dan candle terakhir diberi garis kuning. Urutan `H/M/D` serta tingkat konsistensi deteksi ditampilkan.

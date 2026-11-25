@@ -16,6 +16,8 @@ from .live_hud import LiveHud
 from .overlay import BADGE_HEIGHT, BADGE_WIDTH, OverlayBadge
 from .live_monitor import LiveScreenMonitor, MonitorEvent
 from .model import (
+    MIN_CANDLES,
+    MIN_DIRECTIONAL,
     DOJI, GREEN as GREEN_DIRECTION, PRIOR_STRENGTH, RED as RED_DIRECTION,
     Candle, CandleModel, make_demo_candles,
 )
@@ -326,13 +328,12 @@ class CandleLabApp(tk.Tk):
         if not prediction.available:
             text(parent, "Data belum cukup", 22, "#FFFFFF", "bold", SIDEBAR).pack(anchor="w", pady=(14, 7))
             text(parent, prediction.reason, 10, "#B8C9C1", bg=SIDEBAR, wraplength=340).pack(anchor="w")
-            text(parent, f"Minimal 20 candle dan 12 non-doji. Saat ini {len(self._source_candles())} candle yang dihitung.",
+            text(parent, f"Minimal {MIN_CANDLES} candle ({MIN_DIRECTIONAL} non-doji). "
+                         f"Saat ini {len(self._source_candles())} candle yang dihitung.",
                  9, "#82998F", bg=SIDEBAR).pack(anchor="w", pady=(16, 0))
             if self.live_active:
-                text(parent, "Pada mode live, tangkap minimal 21 candle jika candle paling kanan diabaikan.",
+                text(parent, f"Pada mode live, tangkap minimal {MIN_CANDLES + 1} candle jika candle paling kanan diabaikan.",
                      8, ACCENT, bg=SIDEBAR, wraplength=340).pack(anchor="w", pady=(8, 0))
-                text(parent, "Chart broker yang menampilkan sedikit candle: perkecil zoom agar lebih banyak candle terlihat di area yang dipilih.",
-                     8, "#82998F", bg=SIDEBAR, wraplength=340).pack(anchor="w", pady=(6, 0))
                 button(parent, "Stop live", self.toggle_live, "accent").pack(anchor="w", pady=(18, 0))
             else:
                 button(parent, "Tambah candle", self.add_candle_dialog, "accent").pack(anchor="w", pady=(18, 0))
@@ -368,6 +369,14 @@ class CandleLabApp(tk.Tk):
                  8, "#B8C9C1", bg=SIDEBAR_SOFT).pack(anchor="w", pady=(3, 0))
             button(parent, "Tambah candle aktual", self.add_candle_dialog, "accent").pack(fill="x", pady=(10, 0))
         else:
+            if getattr(prediction, "thin_data", True):
+                tk.Frame(parent, bg="#4A3A12", height=1).pack(fill="x", pady=(12, 9))
+                text(parent, "DATA SEDIKIT", 8, "#F0C36B", "bold", SIDEBAR).pack(anchor="w")
+                text(parent,
+                     f"Angka di atas sebagian besar berasal dari prior, bukan pola. "
+                     f"Hanya {prediction.directional_count} candle non-doji. "
+                     f"Perlakukan sebagai perkiraan lemah, bukan dasar keputusan.",
+                     8, "#D8C79A", bg=SIDEBAR, wraplength=340, justify="left").pack(anchor="w", pady=(4, 0))
             lock_text = "Kunci prediksi live & berhenti" if self.live_active else "Kunci prediksi untuk eksperimen"
             button(parent, lock_text, self.lock_prediction, "accent").pack(fill="x", pady=(14, 0))
 
@@ -1284,6 +1293,7 @@ class CandleLabApp(tk.Tk):
                 "Tekan F9 atau klik ‘Mulai live’. Jika belum ada area, pilih area price chart sekali. Setelah itu worker membaca area yang sama setiap 2 detik dan probabilitas diperbarui otomatis; Anda tidak perlu mengambil screenshot manual.",
                 "Ctrl+F9 memilih area baru. Selama live, jangan menutupi area chart dengan CandleLab atau jendela lain dan jangan mengubah zoom/warna chart. Tekan ‘Stop live’ atau F9 untuk berhenti.",
                 "Perubahan urutan warna harus muncul pada dua pembacaan berturut-turut sebelum diterima. Ini meredam satu deteksi yang keliru, tetapi menambah jeda sekitar satu interval.",
+                "Model dapat mulai dari 5 candle, tetapi di bawah 20 candle non-doji hasilnya ditandai DATA SEDIKIT: angkanya sebagian besar berasal dari prior, bukan dari pola. Perlakukan sebagai perkiraan lemah.",
                 "Opsi ‘Abaikan candle paling kanan’ aktif secara default karena candle tersebut biasanya masih terbentuk. Grafik tetap menampilkannya, tetapi prediksi memakai candle sebelumnya. Saat candle baru muncul, candle yang sudah selesai otomatis masuk perhitungan.",
                 "Data live dan screenshot hanya berada di memori; aplikasi tidak menulis data set setiap interval. ‘Kunci prediksi live & berhenti’ menyimpan snapshot yang sedang dihitung, menghentikan monitor, dan membuat prediksi eksperimen. Jika live dihentikan tanpa dikunci, data tersimpan sebelumnya tetap dipakai.",
             ]),

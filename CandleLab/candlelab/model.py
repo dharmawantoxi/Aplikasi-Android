@@ -10,8 +10,12 @@ from typing import Optional, Sequence
 GREEN = 1
 RED = -1
 DOJI = 0
-MIN_CANDLES = 20
-MIN_DIRECTIONAL = 12
+# Ambang rendah supaya chart broker dengan sedikit candle tetap bisa dibaca.
+# Angka prediction pada rentang ini sebagian besar berasal dari prior, bukan data.
+MIN_CANDLES = 5
+MIN_DIRECTIONAL = 5
+# Di bawah jumlah ini hasil dianggap tidak layak untuk dijadikan dasar keputusan.
+WEAK_EVIDENCE_CANDLES = 20
 PRIOR_STRENGTH = 6.0
 MAX_CANDLES = 2000
 
@@ -56,6 +60,7 @@ class Prediction:
     window: int = 60
     pattern: tuple[int, ...] = ()
     reason: str = ""
+    thin_data: bool = False
 
     @property
     def red_probability(self) -> float:
@@ -150,6 +155,7 @@ class CandleModel:
         probability = min(1.0, max(0.0, probability))
         return Prediction(
             available=True,
+            thin_data=directional_count < WEAK_EVIDENCE_CANDLES,
             green_probability=probability,
             matches=matches,
             green_matches=green_matches,
