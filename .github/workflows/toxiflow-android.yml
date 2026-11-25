@@ -34,15 +34,22 @@ jobs:
             "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
           fi
 
+      - name: Check Gradle and AGP configuration
+        working-directory: ToxiFlow
+        shell: bash
+        # Gagal cepat dengan pesan jelas bila versi Gradle/AGP tidak sinkron atau
+        # wrapper tidak lengkap, alih-alih error unduh yang membingungkan.
+        run: python3 tools/check_gradle_setup.py
+
       - name: Assemble debug APK
         working-directory: ToxiFlow
         shell: bash
+        # Runner menyalin output Gradle ke log dan mencetak sebab gagal sebagai
+        # anotasi. Gangguan jaringan (unduh wrapper/Maven terputus) diulang otomatis.
         run: |
-          set +e
-          ./gradlew assembleDebug --no-daemon --stacktrace --console=plain > "$RUNNER_TEMP/toxiflow-assemble.log" 2>&1
-          result=$?
-          cat "$RUNNER_TEMP/toxiflow-assemble.log"
-          exit "$result"
+          python3 tools/run_gradle_with_report.py \
+            --log "$RUNNER_TEMP/toxiflow-assemble.log" \
+            --cwd . -- assembleDebug
 
       - name: Upload debug APK
         if: always()
@@ -57,11 +64,9 @@ jobs:
         working-directory: ToxiFlow
         shell: bash
         run: |
-          set +e
-          ./gradlew testDebugUnitTest --no-daemon --stacktrace --console=plain > "$RUNNER_TEMP/toxiflow-unit-tests.log" 2>&1
-          result=$?
-          cat "$RUNNER_TEMP/toxiflow-unit-tests.log"
-          exit "$result"
+          python3 tools/run_gradle_with_report.py \
+            --log "$RUNNER_TEMP/toxiflow-unit-tests.log" \
+            --cwd . -- testDebugUnitTest
 
       - name: Summarize unit-test failures
         if: always()
@@ -104,7 +109,10 @@ jobs:
       - name: Compile instrumentation tests
         working-directory: ToxiFlow
         shell: bash
-        run: ./gradlew assembleDebugAndroidTest --no-daemon --stacktrace --console=plain
+        run: |
+          python3 tools/run_gradle_with_report.py \
+            --log "$RUNNER_TEMP/toxiflow-instrumentation.log" \
+            --cwd . -- assembleDebugAndroidTest
 
       - name: Upload build and test diagnostics
         if: always()
@@ -114,6 +122,7 @@ jobs:
           path: |
             ${{ runner.temp }}/toxiflow-assemble.log
             ${{ runner.temp }}/toxiflow-unit-tests.log
+            ${{ runner.temp }}/toxiflow-instrumentation.log
             ToxiFlow/app/build/reports/tests/testDebugUnitTest/
             ToxiFlow/app/build/test-results/testDebugUnitTest/
           if-no-files-found: ignore
