@@ -247,6 +247,8 @@ Pengaman yang selalu berlaku:
 - maksimal satu klik per candle,
 - berhenti otomatis setelah **50 klik** per sesi.
 
+**Kapan klik terjadi:** hanya saat mode live berjalan, ketika muncul tebakan **baru** untuk candle yang sedang berjalan. Maksimal satu klik per candle, dan hanya bila jendela IQ Option aktif. Urutan yang disarankan: mulai live → pastikan area benar → baru aktifkan klik otomatis.
+
 Alasan pembatasannya: pada payout 82% (seperti di IQ Option), akurasi impas adalah **54,9%**. Model ini terukur berkisar 49–55%, jadi gunakan hanya dengan uang demo.
 
 ## Lab hipotesis
