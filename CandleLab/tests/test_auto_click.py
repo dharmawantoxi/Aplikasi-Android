@@ -266,9 +266,14 @@ class ClickSafetyPointTests(unittest.TestCase):
         self.assertTrue(hasattr(auto_click_win, "window_root_at"))
 
     def test_non_windows_is_refused_before_anything_else(self):
+        from unittest.mock import patch
+
         from candlelab.auto_click_win import click_safety
 
-        guard = click_safety((900, 300), (100, 200, 400, 600), True)
+        # Harus dipaksa: di runner Windows platform_supported() bernilai True,
+        # sehingga pemeriksaan area yang lebih dulu menolak.
+        with patch("candlelab.auto_click_win.platform_supported", return_value=False):
+            guard = click_safety((900, 300), (100, 200, 400, 600), True)
         self.assertFalse(guard.allowed)
         self.assertIn("Windows", guard.reason)
 
