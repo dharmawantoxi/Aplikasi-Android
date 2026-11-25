@@ -417,3 +417,44 @@ class LiveErrorResilienceTests(unittest.TestCase):
         body = ui[start:start + 700]
         self.assertIn("live_active", body)
         self.assertIn("KLIK DITOLAK", body)
+
+
+class BadgeClickColourTests(unittest.TestCase):
+    """⚡ harus berwarna hanya saat klik otomatis aktif.
+
+    tkinter tidak tersedia di semua lingkungan tes (mis. runner Linux tanpa
+    X), jadi warna dibaca dari sumber, bukan dengan mengimpor overlay.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import re
+        from pathlib import Path
+
+        cls.source = (Path(__file__).resolve().parents[1] / "candlelab"
+                      / "overlay.py").read_text(encoding="utf-8")
+        cls.re = re
+
+    def _colour(self, name: str) -> str:
+        found = self.re.search(rf'^{name} = "(#[0-9A-Fa-f]{{6}})"', self.source, self.re.M)
+        self.assertIsNotNone(found, f"{name} tidak ditemukan")
+        return found.group(1)
+
+    @staticmethod
+    def _lum(hex_colour: str) -> float:
+        r, g, b = (int(hex_colour[i:i + 2], 16) for i in (1, 3, 5))
+        return 0.299 * r + 0.587 * g + 0.114 * b
+
+    def test_off_colour_is_muted_not_coloured(self):
+        off = self._colour("CLICK_OFF_FG")
+        on = self._colour("CLICK_ON_FG")
+        self.assertLess(self._lum(off), self._lum(on))
+        r, g, b = (int(off[i:i + 2], 16) for i in (1, 3, 5))
+        self.assertLess(max(r, g, b) - min(r, g, b), 40,
+                        "warna saat mati terlalu mencolok; harus mendekati abu-abu")
+
+    def test_state_uses_the_on_colour(self):
+        self.assertIn("fg=CLICK_ON_FG if enabled else CLICK_OFF_FG", self.source)
+
+    def test_button_starts_uncoloured(self):
+        self.assertIn('("⚡", self._toggle_click, CLICK_OFF_FG)', self.source)
