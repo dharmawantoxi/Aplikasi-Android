@@ -19,6 +19,15 @@ import time
 from typing import Optional, Sequence
 
 
+# Di bawah jumlah putaran ini, skor belum layak disimpulkan: variasi acak
+# jauh lebih besar daripada perbedaan yang mungkin disebabkan model.
+MIN_ROUNDS_FOR_SIGNAL = 30
+
+
+def accuracy_is_meaningful(played: int) -> bool:
+    return played >= MIN_ROUNDS_FOR_SIGNAL
+
+
 @dataclass
 class Round:
     """Satu tebakan yang dikunci untuk satu candle tertentu."""

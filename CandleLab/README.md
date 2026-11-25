@@ -111,7 +111,8 @@ Saat live berjalan, CandleLab menebak **candle yang sedang berjalan** lalu membi
 
 - Tebakan **dikunci** selama candle berjalan dan tidak diperbarui, agar tidak "selalu benar".
 - Ketika candle selesai (chart bergeser satu langkah, atau riwayat bertambah), arah candle itu dibandingkan dengan tebakan.
-- Badge menampilkan `BENAR · 12/20` atau `SALAH · 11/20`.
+- Badge menampilkan `tebakan candle INI / sisa 7/12 ... 40 dtk` selama menunggu, lalu `tebakan tadi BENAR / skor 8/12` atau `SALAH`.
+- Di bawah 30 putaran, aplikasi menyatakan skor **belum bisa disimpulkan**.
 - Doji dan tebakan 50% dilewati, tidak dihitung sebagai kalah.
 - Bila jumlah candle menurun atau melompat, putaran diulang daripada menilai dengan candle yang salah.
 

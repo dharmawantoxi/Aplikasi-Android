@@ -14,7 +14,11 @@ from .experiments import summarise
 from .hud_layout import best_badge_corner
 from .live_hud import LiveHud
 from .overlay import BADGE_HEIGHT, BADGE_WIDTH, OverlayBadge
-from .rounds import RoundTracker
+from .rounds import (
+    MIN_ROUNDS_FOR_SIGNAL,
+    RoundTracker,
+    accuracy_is_meaningful,
+)
 from .live_monitor import LiveScreenMonitor, MonitorEvent
 from .model import (
     MIN_CANDLES,
@@ -391,15 +395,20 @@ class CandleLabApp(tk.Tk):
             button(parent, lock_text, self.lock_prediction, "accent").pack(fill="x", pady=(14, 0))
 
     def _fill_round_panel(self, parent):
-        """Ringkasan tebak otomatis: putaran berjalan + skor benar/salah."""
+        """Penjelasan singkat + skor: apa yang ditebak, dan apakah benar."""
         round_obj = self.rounds.current
         stats = self.rounds.stats
         box = tk.Frame(parent, bg=SIDEBAR_SOFT, padx=12, pady=10)
         box.pack(fill="x", pady=(13, 0))
         text(box, "TEBAK OTOMATIS", 8, ACCENT, "bold", SIDEBAR_SOFT).pack(anchor="w")
+        text(box, "Aplikasi menebak warna candle yang sedang berjalan. Candle itu "
+                  "sendiri yang menentukan tebakan benar atau salah.",
+             7, "#8FA49A", bg=SIDEBAR_SOFT, wraplength=320, justify="left").pack(
+            anchor="w", pady=(3, 0))
 
         if round_obj is None:
-            text(box, "Menunggu candle terbaca", 9, "#B8C9C1", bg=SIDEBAR_SOFT).pack(anchor="w", pady=(4, 0))
+            text(box, "Menunggu candle terbaca", 9, "#B8C9C1", bg=SIDEBAR_SOFT).pack(
+                anchor="w", pady=(6, 0))
             return
 
         arah = direction_name(round_obj.direction)
@@ -410,10 +419,11 @@ class CandleLabApp(tk.Tk):
                 hasil, warna = "BENAR", "#3FE08A"
             else:
                 hasil, warna = "SALAH", "#FF8A7A"
-            text(box, f"Tebakan {arah}: {hasil}", 10, warna, "bold", SIDEBAR_SOFT).pack(anchor="w", pady=(4, 0))
+            text(box, f"Tebakan tadi: {arah} → {hasil}", 10, warna, "bold",
+                 SIDEBAR_SOFT).pack(anchor="w", pady=(6, 0))
         else:
-            text(box, f"Tebakan {arah} untuk candle berjalan", 9, "#FFFFFF",
-                 "bold", SIDEBAR_SOFT).pack(anchor="w", pady=(4, 0))
+            text(box, f"Tebakan: {arah} (untuk candle yang sedang berjalan)", 9,
+                 "#FFFFFF", "bold", SIDEBAR_SOFT).pack(anchor="w", pady=(6, 0))
 
         played = stats.played
         if played:
@@ -423,10 +433,20 @@ class CandleLabApp(tk.Tk):
                         else f"{-streak} salah beruntun" if streak < 0 else "")
             text(box, f"Skor {stats.wins}/{played} benar ({akurasi})"
                       + (f" • {rentetan}" if rentetan else ""),
-                 8, "#B8C9C1", bg=SIDEBAR_SOFT, wraplength=320, justify="left").pack(anchor="w", pady=(3, 0))
+                 8, "#B8C9C1", bg=SIDEBAR_SOFT, wraplength=320, justify="left").pack(
+                anchor="w", pady=(3, 0))
+            if not accuracy_is_meaningful(played):
+                sisa = MIN_ROUNDS_FOR_SIGNAL - played
+                text(box, f"Belum bisa disimpulkan: butuh ~{sisa} putaran lagi. "
+                          f"Dengan sedikit putaran, hasil bagus maupun buruk "
+                          f"bisa terjadi karena kebetulan.",
+                     7, "#C9A227", bg=SIDEBAR_SOFT, wraplength=320, justify="left").pack(
+                    anchor="w", pady=(3, 0))
         else:
-            text(box, "Skor dihitung dari candle yang sudah selesai.",
-                 8, "#B8C9C1", bg=SIDEBAR_SOFT, wraplength=320, justify="left").pack(anchor="w", pady=(3, 0))
+            text(box, "Skor muncul setelah candle pertama selesai — tunggu "
+                      "beberapa saat sampai candle menutup.",
+                 8, "#B8C9C1", bg=SIDEBAR_SOFT, wraplength=320, justify="left").pack(
+                anchor="w", pady=(3, 0))
 
         if stats.skipped:
             text(box, f"{stats.skipped} candle dilewati (doji/seimbang).",

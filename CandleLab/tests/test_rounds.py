@@ -174,6 +174,12 @@ class RoundTrackerTests(unittest.TestCase):
             del tracker.log[:-tracker.keep]
         self.assertEqual(len(tracker.log), 3)
 
+    def test_stats_have_enough_data_for_significance(self):
+        """Menentukan kapan skor layak dipercaya (dipakai UI)."""
+        from candlelab.rounds import MIN_ROUNDS_FOR_SIGNAL, accuracy_is_meaningful
+        self.assertFalse(accuracy_is_meaningful(MIN_ROUNDS_FOR_SIGNAL - 1))
+        self.assertTrue(accuracy_is_meaningful(MIN_ROUNDS_FOR_SIGNAL))
+
     def test_status_text(self):
         self.assertEqual(self.tracker.status_text(), "0/0 benar")
         self.tracker.stats.wins, self.tracker.stats.losses = 3, 1
