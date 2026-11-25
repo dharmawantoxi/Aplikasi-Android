@@ -493,6 +493,10 @@ class CandleLabApp(tk.Tk):
         if not self.state.click_region:
             text(box, "Belum dikalibrasi. Atur di halaman Data.",
                  7, "#C9A227", bg=SIDEBAR_SOFT).pack(anchor="w", pady=(2, 0))
+        else:
+            x1, y1, x2, y2 = self.state.click_region
+            text(box, f"Area tombol: {x1},{y1} → {x2},{y2}",
+                 7, "#6F8377", bg=SIDEBAR_SOFT).pack(anchor="w", pady=(2, 0))
 
         if self.rounds.log:
             button(box, "Salin riwayat tebakan", self.copy_round_log, "secondary").pack(
@@ -563,7 +567,12 @@ class CandleLabApp(tk.Tk):
             messagebox.showinfo(
                 "Tombol dikenali",
                 f"Higher di {pair.higher}, Lower di {pair.lower} (relatif area).\n\n"
-                f"Area disimpan: {box[0]}, {box[1]} → {box[2]}, {box[3]}",
+                f"Area disimpan: {box[0]}, {box[1]} → {box[2]}, {box[3]}\n\n"
+                "KAPAN KLIK TERJADI:\n"
+                "Hanya saat mode live berjalan, ketika muncul tebakan BARU untuk "
+                "candle yang sedang berjalan. Maksimal satu klik per candle.\n\n"
+                "Urutan yang disarankan: mulai live dulu → atur durasi → baru "
+                "aktifkan klik otomatis.",
                 parent=self)
 
     def _maybe_auto_click(self, direction: int, candle_index: int):
