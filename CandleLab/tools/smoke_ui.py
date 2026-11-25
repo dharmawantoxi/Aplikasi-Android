@@ -85,7 +85,7 @@ with tempfile.TemporaryDirectory() as directory:
         assert app.live_hud is not None, "HUD tidak dibuat"
         hud = app.live_hud.window
         assert hud.winfo_exists()
-        assert app.state() == "withdrawn", "jendela utama masih terlihat"
+        assert app.wm_state() == "withdrawn", "jendela utama masih terlihat"
         assert int(hud.attributes("-topmost")) == 1, "HUD tidak always-on-top"
         before = (hud.winfo_x(), hud.winfo_y())
         app.live_hud.cycle_corner()
@@ -98,17 +98,17 @@ with tempfile.TemporaryDirectory() as directory:
         app._show_after_capture()
         app.update()
         assert float(hud.attributes("-alpha")) > 0.99, "HUD tidak dipulihkan"
-        assert app.state() == "withdrawn", "jendela penuh muncul lagi saat HUD aktif"
+        assert app.wm_state() == "withdrawn", "jendela penuh muncul lagi saat HUD aktif"
 
         app.expand_from_hud()
         app.update()
-        assert app.state() == "normal", "jendela utama tidak kembali"
+        assert app.wm_state() == "normal", "jendela utama tidak kembali"
 
         app.show_live_hud()
         app.stop_live_monitor(refresh=False)
         app.update()
         assert app.live_hud is None, "HUD tidak ditutup saat live berhenti"
-        assert app.state() == "normal", "jendela utama tidak dipulihkan"
+        assert app.wm_state() == "normal", "jendela utama tidak dipulihkan"
         assert not app.hud_mode, "mode HUD tidak direset"
 
         app.stop_live_monitor(refresh=False)

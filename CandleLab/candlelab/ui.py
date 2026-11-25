@@ -677,7 +677,7 @@ class CandleLabApp(tk.Tk):
         if not self.screen_region:
             return False
         try:
-            if self.state() != "normal":
+            if self.wm_state() != "normal":
                 return False
             left = self.winfo_rootx()
             top = self.winfo_rooty()
@@ -706,7 +706,7 @@ class CandleLabApp(tk.Tk):
         self.hud_mode = False
         self.close_live_hud()
         self._show_after_capture()
-        self.state("normal")
+        self.wm_state("normal")
         self.deiconify()
         self.lift()
         self.set_status("Mode live berhenti. Data tersimpan tidak berubah.")
@@ -822,7 +822,7 @@ class CandleLabApp(tk.Tk):
         if self.live_hud is not None:
             self.live_hud.set_hidden(False)
         self.deiconify()
-        self.state("normal")
+        self.wm_state("normal")
         self.lift()
         self.refresh()
 
