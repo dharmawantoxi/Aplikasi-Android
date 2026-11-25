@@ -343,3 +343,77 @@ class BadgeFocusTests(unittest.TestCase):
                   / "ui.py").read_text(encoding="utf-8")
         self.assertIn("def _restore_previous_window", source)
         self.assertIn("def _remember_foreign_window", source)
+
+
+class WindowsBindingTests(unittest.TestCase):
+    """Regresi: GetWindowThreadProcessId ada di user32, bukan kernel32."""
+
+    def _patch_windll(self, user32, kernel32=None):
+        from unittest.mock import MagicMock, patch
+
+        from candlelab import auto_click_win as mod
+
+        kernel32 = kernel32 or MagicMock()
+        windll = MagicMock()
+        windll.user32 = user32
+        windll.kernel32 = kernel32
+        fake_ctypes = MagicMock(windll=windll, byref=mod.ctypes.byref,
+                                c_ulong=mod.ctypes.c_ulong,
+                                wintypes=mod.ctypes.wintypes)
+        return patch.multiple(
+            mod, platform_supported=MagicMock(return_value=True),
+            ctypes=fake_ctypes, _user32=MagicMock(return_value=user32))
+
+    def test_pid_lookup_uses_user32(self):
+        from unittest.mock import MagicMock
+
+        from candlelab import auto_click_win as mod
+
+        user32 = MagicMock()
+        user32.GetWindowThreadProcessId.side_effect = (
+            lambda handle, ref: setattr(ref._obj, "value", 4321))
+        kernel32 = MagicMock()
+        kernel32.GetCurrentProcessId.return_value = 4321
+
+        with self._patch_windll(user32, kernel32):
+            self.assertTrue(mod.is_our_window(12345))
+        user32.GetWindowThreadProcessId.assert_called_once()
+
+    def test_missing_function_does_not_raise(self):
+        from unittest.mock import MagicMock
+
+        from candlelab import auto_click_win as mod
+
+        user32 = MagicMock()
+        user32.GetWindowThreadProcessId.side_effect = AttributeError(
+            "function 'GetWindowThreadProcessId' not found")
+
+        with self._patch_windll(user32):
+            # Tidak boleh melempar; jawaban False membuat pengaman lain bekerja.
+            self.assertFalse(mod.is_our_window(12345))
+            self.assertIsNone(mod.window_process_id(12345))
+
+    def test_window_root_at_survives_missing_function(self):
+        from unittest.mock import MagicMock
+
+        from candlelab import auto_click_win as mod
+
+        user32 = MagicMock()
+        user32.WindowFromPoint.side_effect = AttributeError("nope")
+
+        with self._patch_windll(user32):
+            self.assertIsNone(mod.window_root_at((10, 10)))
+
+
+class LiveErrorResilienceTests(unittest.TestCase):
+    """Kegagalan klak ctypes tidak boleh menutup live dengan dialog."""
+
+    def test_live_keeps_running_on_click_error(self):
+        from pathlib import Path
+
+        ui = (Path(__file__).resolve().parents[1] / "candlelab" / "ui.py").read_text(
+            encoding="utf-8")
+        start = ui.index("def report_callback_exception")
+        body = ui[start:start + 700]
+        self.assertIn("live_active", body)
+        self.assertIn("KLIK DITOLAK", body)

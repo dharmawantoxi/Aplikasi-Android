@@ -2013,6 +2013,12 @@ class CandleLabApp(tk.Tk):
 
     def report_callback_exception(self, exc, val, tb):
         traceback.print_exception(exc, val, tb)
+        # Kegagalan pada fitur klik tidak boleh menghentikan live: callback Tk
+        # yang melempar akan memutus rantai pembaruan badge dan tebakan.
+        if self.live_active:
+            self.click_status = f"KLIK DITOLAK • kesalahan internal: {val}"
+            self.set_status("Fitur klik otomatis gagal, tetapi live tetap berjalan.")
+            return
         messagebox.showerror("Terjadi kesalahan", f"{val}\n\nData Anda tidak dikirim ke mana pun.", parent=self)
 
 
