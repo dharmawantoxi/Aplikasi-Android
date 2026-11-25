@@ -11,6 +11,7 @@ tetap. Versi sebelumnya memakai lebar tetap sehingga teks seperti
 """
 from __future__ import annotations
 
+import sys
 import time
 import tkinter as tk
 from typing import Callable
@@ -47,6 +48,8 @@ def _short(text: str, limit: int = 34) -> str:
 class OverlayBadge:
     """Badge always-on-top: 'HIJAU 67%' beserta opsi mini."""
 
+    WIN32_EX_NOACTIVATE = 0x08000000
+
     def __init__(
         self,
         root: tk.Tk,
@@ -70,6 +73,14 @@ class OverlayBadge:
         self.window.attributes("-topmost", True)
         self._apply_alpha(self._alpha)
         self.window.attributes("-toolwindow", True)
+        # Badge tidak boleh merebut fokus. Tanpa ini, jendela broker kehilangan
+        # fokus setiap badge tampil, dan pengaman klik menolak kliknya sendiri.
+        try:
+            self.window.attributes("-disabled", False)
+            self.window.wm_attributes("-topmost", True)
+            self._make_no_activate(self.window)
+        except tk.TclError:
+            pass
 
         self.frame = tk.Frame(self.window, bg=BG, highlightthickness=1,
                               highlightbackground=BORDER)
@@ -113,6 +124,29 @@ class OverlayBadge:
         self._apply_geometry()
 
     # -- ukuran & posisi ---------------------------------------------------
+    def _make_no_activate(self, window):
+        """Tambahkan WS_EX_NOACTIVATE agar klik pada badge tidak membajak fokus.
+
+        Windows: badge tetap menerima klik, tetapi jendela broker tetap menjadi
+        jendela aktif. Di sistem lain fungsi ini tidak melakukan apa pun.
+        """
+        if sys.platform != "win32":
+            return
+        try:
+            import ctypes
+            window.update_idletasks()
+            hwnd = ctypes.windll.user32.GetParent(window.winfo_id())
+            if not hwnd:
+                hwnd = window.winfo_id()
+            GWL_EXSTYLE = -20
+            style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            ctypes.windll.user32.SetWindowLongW(
+                hwnd, GWL_EXSTYLE, style | self.WIN32_EX_NOACTIVATE)
+        except Exception:
+            # Fitur ini menambah kenyamanan, bukan syarat keamanan; bila gagal,
+            # badge tetap berfungsi dan pengaman klik tetap menolak dengan jujur.
+            pass
+
     def _apply_alpha(self, value: float):
         self._alpha = value
         try:

@@ -20,9 +20,9 @@ from .hypotheses import HYPOTHESES, run_hypothesis
 from .hypothesis_stats import evaluate, evaluate_many
 from .auto_click_win import (
     ClickLimiter,
-    check_before_click,
+    click_safety,
+    foreground_title,
     is_point_inside,
-    is_window_active,
     left_click,
     platform_supported,
 )
@@ -77,6 +77,7 @@ class CandleLabApp(tk.Tk):
         # tertimpa status deteksi live yang berganti setiap 2 detik.
         self.click_status = ""
         self._clicking = False
+        self._last_foreign_hwnd = 0
         self.screen_region = self.state.screen_region
         self.live_monitor = None
         self.live_events = queue.Queue(maxsize=3)
@@ -618,13 +619,17 @@ class CandleLabApp(tk.Tk):
                 ok = False
             else:
                 lines.append(f"✓ Tombol dikenali (Higher {pair.higher}, Lower {pair.lower})")
-        aktif = is_window_active("IQ Option")
-        if aktif:
-            lines.append("✓ Jendela IQ Option sedang aktif")
-        else:
-            lines.append("✗ Jendela IQ Option TIDAK aktif")
-            lines.append("  → Klik judul jendela broker sebelum klik otomatis.")
+        judul_aktif = foreground_title()
+        if not judul_aktif:
+            lines.append("✗ Tidak ada jendela aktif yang terbaca")
             ok = False
+        elif self._needs_own_window_exception():
+            lines.append(f"✗ Yang aktif justru CandleLab sendiri: '{judul_aktif}'")
+            lines.append("  → Klik ke chart broker dulu; klik otomatis akan mencoba")
+            lines.append("    mengembalikan fokus secara otomatis, tetapi tidak selalu bisa.")
+            ok = False
+        else:
+            lines.append(f"✓ Jendela aktif: '{judul_aktif}'")
         if image is not None and pair is not None:
             for arah, nilai, nama in ((1, pair.higher, "HIGHER"), (-1, pair.lower, "LOWER")):
                 point = click_point(image.size, box[:2], pair, arah)
@@ -690,10 +695,21 @@ class CandleLabApp(tk.Tk):
             self._click_problem(reason)
             return
         point = click_point(image.size, self.state.click_region[:2], pair, direction)
-        guard = check_before_click(point, self.state.click_region, True, "IQ Option")
+        guard = click_safety(point, self.state.click_region, True)
+        restored = ""
+        if not guard.allowed and self._needs_own_window_exception():
+            # Jendela CandleLab sendiri yang aktif. Mengaktifkan klik otomatis
+            # lewat tombol memang membuat itu terjadi, jadi fokus dikembalikan
+            # ke jendela sebelumnya lalu percobaan diulang sekali.
+            if self._restore_previous_window():
+                time.sleep(0.15)
+                restored = guard.reason
+                guard = click_safety(point, self.state.click_region, True)
         if not guard.allowed:
             self._click_problem(guard.reason)
             return
+        if restored:
+            self.set_status("Fokus dikembalikan ke broker sebelum mengklik.")
         left_click(point)
         self.click_guard.record(time.monotonic())
         self._clicked_candle = candle_index
@@ -701,6 +717,36 @@ class CandleLabApp(tk.Tk):
         self.click_status = (f"KLIK {arah} di {point[0]},{point[1]} • "
                              f"{self.click_guard.count} klik sesi ini")
         self.set_status(self.click_status)
+
+    def _needs_own_window_exception(self) -> bool:
+        aktif = foreground_title()
+        return bool(aktif) and "candellab" in aktif.lower()
+
+    def _restore_previous_window(self) -> bool:
+        """Aktifkan kembali jendela yang terakhir dipakai sebelum CandleLab."""
+        if not platform_supported():
+            return False
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            if self._last_foreign_hwnd and user32.IsWindow(self._last_foreign_hwnd):
+                user32.SetForegroundWindow(self._last_foreign_hwnd)
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _remember_foreign_window(self):
+        """Ingat jendela non-CandleLab terakhir, sebagai tujuan pemulihan fokus."""
+        if not platform_supported():
+            return
+        try:
+            from .auto_click_win import foreground_window, is_our_window
+            handle = foreground_window()
+            if handle and not is_our_window(handle):
+                self._last_foreign_hwnd = handle
+        except Exception:
+            pass
 
     def _click_problem(self, reason: str):
         """Catat penolakan klik agar terlihat di badge, bukan hanya status live."""
@@ -1019,6 +1065,7 @@ class CandleLabApp(tk.Tk):
             self.configure(cursor="")
             self.deiconify()
 
+        self._remember_foreign_window()
         self.live_generation += 1
         self.live_active = True
         self.live_candles = list(initial.candles)

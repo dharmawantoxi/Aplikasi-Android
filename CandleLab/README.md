@@ -240,6 +240,10 @@ Aktifkan lewat panel tebak otomatis setelah mengalibrasi tombol:
 3. **Dari badge:** klik **⚡** langsung di badge — tidak perlu membuka jendela.
    Dari jendela penuh: panel tebak otomatis → **Aktifkan klik otomatis**.
 
+**Badge tidak merebut fokus.** Sejak v1.10.2 badge memakai `WS_EX_NOACTIVATE`, jadi menekan ⚡ atau ⚙ tidak memindahkan fokus dari IQ Option. Bila fokus tetap berpindah, aplikasi mengingat jendela broker dan mengaktifkannya kembali sebelum mengklik.
+
+**Pengaman klik berbasis titik, bukan judul jendela.** Yang diperiksa adalah: titik yang akan diklik memang milik jendela yang sedang aktif, dan jendela itu bukan CandleLab sendiri. Ini membuat fitur tetap bekerja saat IQ Option berjalan di peramban dengan judul berbeda.
+
 **Bila tidak ada klik sama sekali:** klik **"Uji klik sekarang (tanpa klik)"** di panel samping. Tombol ini memeriksa seluruh rantai tanpa menekan apa pun — area tombol, pengenalan tombol Higher/Lower, dan apakah jendela IQ Option sedang aktif. Baris bertanda ✗ adalah penyebabnya.
 
 Badge juga menampilkan `klik ditolak` beserta alasan singkatnya. Tombol **⚡** berubah jingga saat aktif. Tombol **⚙** membuka jendela penuh, **✕** menghentikan live.
