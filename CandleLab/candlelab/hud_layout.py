@@ -102,3 +102,51 @@ def best_badge_corner(region, screen_w: int, screen_h: int,
     if not free:
         return min(positions, key=lambda name: (_overlap_area(region, *positions[name]), name))
     return max(free, key=lambda name: (_distance(region, *positions[name]), name))
+
+
+# -- badge overlay ---------------------------------------------------------
+
+BADGE_PAD_X = 10
+BADGE_BUTTON_W = 22
+
+# Lebar karakter relatif terhadap tinggi font (Segoe UI).
+_CHAR_WIDTH = 0.60
+_CHAR_WIDTH_BOLD = 0.66
+
+
+def estimate_badge_width(headline: str, detail: str, line_height: int,
+                         button_width: int = BADGE_BUTTON_W) -> int:
+    """Perkiraan lebar badge dari isi teksnya.
+
+    Dihitung aditif seperti cara Tk memaketkan widget: headline (kiri) +
+    detail (tengah) + tombol (kanan) + padding. Dipakai sebagai batas bawah
+    sebelum jendela dipetakan; setelah itu lebar sebenarnya diambil dari
+    ``winfo_reqwidth``.
+    """
+    headline_len = len(headline)
+    detail_len = max((len(line) for line in detail.splitlines()), default=0)
+    headline_w = headline_len * line_height * _CHAR_WIDTH_BOLD
+    detail_w = detail_len * line_height * _CHAR_WIDTH
+    pad_left, pad_mid, pad_right = 10, 8, 6
+    return int(headline_w + detail_w + pad_left + pad_mid + pad_right
+               + button_width + pad_right + 2)
+
+
+def clamp_position(x: int, y: int, screen_w: int, screen_h: int,
+                   width: int, height: int, margin: int = 4) -> tuple[int, int]:
+    """Jepit posisi agar badge selalu utuh di dalam layar.
+
+    Perlindungan terhadap monitor yang lebih kecil dari layar utama, taskbar,
+    dan posisi hasil seret pengguna.
+    """
+    max_x = max(margin, screen_w - width - margin)
+    max_y = max(margin, screen_h - height - margin)
+    return min(max(margin, int(x)), max_x), min(max(margin, int(y)), max_y)
+
+
+def fit_size(desired_w: int, desired_h: int, screen_w: int, screen_h: int,
+             min_w: int = 120, min_h: int = 30) -> tuple[int, int]:
+    """Batasi ukuran badge agar tidak melebihi layar."""
+    width = max(min_w, min(int(desired_w), screen_w - 8))
+    height = max(min_h, min(int(desired_h), screen_h - 8))
+    return width, height
