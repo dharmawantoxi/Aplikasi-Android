@@ -11,7 +11,9 @@ from . import APP_NAME, __version__
 from .charts import CandleChart, LogoMark, ProbabilityBar
 from .csv_io import export_csv, load_csv
 from .experiments import summarise
+from .hud_layout import best_badge_corner
 from .live_hud import LiveHud
+from .overlay import BADGE_HEIGHT, BADGE_WIDTH, OverlayBadge
 from .live_monitor import LiveScreenMonitor, MonitorEvent
 from .model import (
     DOJI, GREEN as GREEN_DIRECTION, PRIOR_STRENGTH, RED as RED_DIRECTION,
@@ -40,7 +42,7 @@ class CandleLabApp(tk.Tk):
         self.configure(bg=BG)
         self.store = JsonStore()
         self.state = self.store.load()
-        self.screen_region = None
+        self.screen_region = self.state.screen_region
         self.live_monitor = None
         self.live_events = queue.Queue(maxsize=3)
         self.live_generation = 0
@@ -49,6 +51,9 @@ class CandleLabApp(tk.Tk):
         self.live_hidden_mode = ""
         self.live_hud = None
         self.hud_mode = False
+        self.overlay = None
+        self.overlay_mode = False
+        self.quiet_live = False
         self.live_candles = []
         self.live_sequence = ""
         self.live_pending_sequence = None
@@ -180,6 +185,7 @@ class CandleLabApp(tk.Tk):
         self.bind("<F5>", lambda _event: self.refresh())
         self.bind("<F8>", lambda _event: self.read_screen())
         self.bind("<Control-F8>", lambda _event: self.read_screen(reuse_region=True))
+        self.bind("<F7>", lambda _event: None if self.live_active else self.start_overlay_live())
         self.bind("<F9>", lambda _event: self.toggle_live())
         self.bind("<F10>", lambda _event: self.expand_from_hud() if self.live_hud else None)
         self.bind("<Control-F9>", lambda _event: self.toggle_live(select_new=True))
@@ -281,8 +287,13 @@ class CandleLabApp(tk.Tk):
         self.data_badge_label = text(badge, badge_text, 8, badge_fg, "bold", badge_bg)
         self.data_badge_label.pack()
         button(chart_header, "▣  Baca layar", self.read_screen, "secondary").pack(side="right", padx=(0, 8))
-        live_button = button(chart_header, "■ Stop live" if self.live_active else "● Mulai live",
-                             self.toggle_live, "danger" if self.live_active else "primary")
+        if self.live_active:
+            live_button = button(chart_header, "■ Stop live", self.toggle_live, "danger")
+        else:
+            overlay_button = button(chart_header, "◱ Live di atas chart",
+                                    self.start_overlay_live, "primary")
+            overlay_button.pack(side="right", padx=(0, 8))
+            live_button = button(chart_header, "● Live (panel)", self.toggle_live, "secondary")
         live_button.pack(side="right", padx=(0, 8))
         chart = CandleChart(chart_card)
         self.prediction_chart = chart
@@ -391,8 +402,13 @@ class CandleLabApp(tk.Tk):
         check.pack(anchor="w", pady=(7, 5))
         text(parent, "Perubahan urutan diterima setelah 2 pembacaan konsisten." if self.live_active else "Pilih area sekali, lalu biarkan CandleLab membaca otomatis.",
              8, MUTED, wraplength=240).pack(anchor="w", pady=(0, 8))
-        button(parent, "■ Stop live" if self.live_active else "● Mulai live",
-               self.toggle_live, "danger" if self.live_active else "secondary").pack(fill="x")
+        if self.live_active:
+            button(parent, "■ Stop live", self.toggle_live, "danger").pack(fill="x")
+        else:
+            button(parent, "◱ Live di atas chart (F7)", self.start_overlay_live,
+                   "primary").pack(fill="x")
+            button(parent, "● Live dengan panel (F9)", self.toggle_live,
+                   "secondary").pack(fill="x", pady=(6, 0))
 
     def _model_changed(self, _event=None):
         self.refresh()
@@ -607,7 +623,7 @@ class CandleLabApp(tk.Tk):
         else:
             self.start_live_monitor(select_new=select_new)
 
-    def start_live_monitor(self, select_new=False):
+    def start_live_monitor(self, select_new=False, overlay=False):
         pending = self.state.pending
         if pending:
             if not messagebox.askyesno(
@@ -619,6 +635,8 @@ class CandleLabApp(tk.Tk):
             pending.cancel("Dibatalkan saat mode live dimulai")
             if not self._save():
                 return
+        if overlay:
+            self.quiet_live = True
         try:
             self.configure(cursor="watch")
             if select_new or not self.screen_region:
@@ -637,6 +655,8 @@ class CandleLabApp(tk.Tk):
                     self.update()
             initial = detect_candles(image)
             self.screen_region = box
+            self.state.screen_region = box
+            self._save()
         except (RuntimeError, ValueError, OSError) as exc:
             messagebox.showerror("Mode live gagal", str(exc), parent=self)
             return
@@ -656,9 +676,12 @@ class CandleLabApp(tk.Tk):
         covered = self.live_window_overlaps_region()
         self.live_monitor.start()
         self.show_page("prediction")
-        # Jendela utama hilang dan diganti panel kecil, sehingga chart tetap
-        # terlihat penuh selama pemantauan.
-        self.show_live_hud()
+        if overlay:
+            # Mode diam: IQ Option tetap layar utama, hanya badge tebakan tampil.
+            self.show_overlay()
+        else:
+            # Jendela utama hilang dan diganti panel kecil.
+            self.show_live_hud()
         if covered:
             messagebox.showwarning(
                 "Jendela sempat menutupi area chart",
@@ -704,6 +727,8 @@ class CandleLabApp(tk.Tk):
         self.live_pending_sequence = None
         self.live_events = queue.Queue(maxsize=3)
         self.hud_mode = False
+        self.quiet_live = False
+        self.close_overlay()
         self.close_live_hud()
         self._show_after_capture()
         self.wm_state("normal")
@@ -758,9 +783,11 @@ class CandleLabApp(tk.Tk):
         HUD ikut disembunyikan sebentar karena panel itu juga berada di atas
         chart. Keduanya memakai transparansi agar fokus/taskbar tidak berubah.
         """
+        if self.overlay is not None:
+            self.overlay.set_hidden(True)
         if self.live_hud is not None:
             self.live_hud.set_hidden(True)
-        if self.hud_mode:
+        if self.hud_mode or self.overlay_mode:
             # Jendela utama memang sudah tidak terlihat selama HUD aktif.
             return
         if self.live_hidden:
@@ -776,9 +803,11 @@ class CandleLabApp(tk.Tk):
         self.withdraw()
 
     def _show_after_capture(self):
+        if self.overlay is not None:
+            self.overlay.set_hidden(False)
         if self.live_hud is not None:
             self.live_hud.set_hidden(False)
-        if self.hud_mode:
+        if self.hud_mode or self.overlay_mode:
             # Jangan munculkan jendela penuh; chart harus tetap terlihat.
             return
         if not self.live_hidden:
@@ -831,6 +860,58 @@ class CandleLabApp(tk.Tk):
             self.live_hud.close()
             self.live_hud = None
 
+    # -- overlay di atas chart (IQ Option tetap layar utama) ---------------
+    def start_overlay_live(self, select_new=False):
+        """Mode diam: tanpa jendela CandleLab, hanya badge tebakan di layar."""
+        if self.overlay_mode:
+            return
+        self.quiet_live = True
+        self.start_live_monitor(select_new=select_new and not self.screen_region,
+                                overlay=True)
+
+    def show_overlay(self):
+        """Sembunyikan semua jendela CandleLab dan tampilkan badge saja."""
+        if self.overlay is None:
+            self.overlay = OverlayBadge(
+                self, on_expand=self.expand_from_overlay,
+                on_stop=self.stop_live_monitor,
+            )
+        corner = best_badge_corner(
+            self.screen_region, self.winfo_screenwidth(), self.winfo_screenheight(),
+            BADGE_WIDTH, BADGE_HEIGHT,
+        )
+        self.overlay.place(corner)
+        self.close_live_hud()
+        self.overlay_mode = True
+        self.withdraw()
+        self.overlay.window.deiconify()
+        self.overlay.window.lift()
+        self._refresh_overlay()
+
+    def expand_from_overlay(self):
+        """Buka jendela penuh untuk melihat detail; live tetap berjalan."""
+        self.overlay_mode = False
+        if self.overlay is not None:
+            self.overlay.close()
+            self.overlay = None
+        self.deiconify()
+        self.wm_state("normal")
+        self.lift()
+        self.refresh()
+
+    def close_overlay(self):
+        if self.overlay is not None:
+            self.overlay.close()
+            self.overlay = None
+        self.overlay_mode = False
+
+    def _refresh_overlay(self):
+        if self.overlay is None:
+            return
+        self.overlay.show_prediction(
+            self._prediction(), len(self._source_candles()),
+        )
+
     def _refresh_live_hud(self):
         if self.live_hud is None:
             return
@@ -867,6 +948,7 @@ class CandleLabApp(tk.Tk):
             )
         self._refresh_live_panels(redraw_chart=True, redraw_model=changed)
         self._refresh_live_hud()
+        self._refresh_overlay()
 
     def _refresh_live_panels(self, redraw_chart=True, redraw_model=True):
         if self.current_page != "prediction":
@@ -909,6 +991,8 @@ class CandleLabApp(tk.Tk):
                     return
                 image, box = captured
             self.screen_region = box
+            self.state.screen_region = box
+            self._save()
             self.set_status("Menganalisis warna candle pada tangkapan layar…")
             self.update_idletasks()
             result = detect_candles(image)

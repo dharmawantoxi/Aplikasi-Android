@@ -68,3 +68,37 @@ def next_corner(corner: str) -> str:
         return CORNERS[(CORNERS.index(corner) + 1) % len(CORNERS)]
     except ValueError:
         return CORNERS[0]
+
+
+BADGE_CORNERS = ("top-right", "bottom-right", "top-left", "bottom-left")
+
+
+def badge_positions(screen_w: int, screen_h: int, width: int, height: int,
+                    margins=(MARGIN, 90, MARGIN, 110)) -> dict[str, tuple[int, int]]:
+    """Empat sudut untuk badge kecil. ``margins`` = (kiri, atas, kanan, bawah).
+
+    Margin atas/bawah lebih besar agar badge tidak menutupi toolbar chart atau
+    baris tombol broker.
+    """
+    left_m, top_m, right_m, bottom_m = margins
+    right = max(0, screen_w - width - right_m)
+    bottom = max(0, screen_h - height - bottom_m)
+    return {
+        "top-left": (left_m, top_m),
+        "top-right": (right, top_m),
+        "bottom-left": (left_m, bottom),
+        "bottom-right": (right, bottom),
+    }
+
+
+def best_badge_corner(region, screen_w: int, screen_h: int,
+                      width: int, height: int) -> str:
+    """Sudut badge yang tidak menutupi area chart; utamakan pojok atas."""
+    positions = badge_positions(screen_w, screen_h, width, height)
+    if not region:
+        return "top-right"
+    free = [name for name in BADGE_CORNERS
+            if not overlaps(region, *positions[name], width, height)]
+    if not free:
+        return min(positions, key=lambda name: (_overlap_area(region, *positions[name]), name))
+    return max(free, key=lambda name: (_distance(region, *positions[name]), name))

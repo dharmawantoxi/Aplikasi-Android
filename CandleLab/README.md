@@ -86,6 +86,25 @@ python3 candlelab.py
 
 Pintasan: `Ctrl+N` tambah candle, `Ctrl+I` impor CSV, `Ctrl+S` ekspor CSV, `F5` muat ulang tampilan, **`F8` baca area layar baru**, **`Ctrl+F8` tangkap ulang area**, **`F9` mulai/stop live**, dan **`Ctrl+F9` pilih area live baru**.
 
+## Mode overlay — tebakan langsung di atas chart IQ Option
+
+Ini mode yang disarankan bila Anda ingin **IQ Option tetap menjadi layar utama**.
+
+1. Buka chart di IQ Option, atur zoom agar **20+ candle** terlihat.
+2. Tekan **`F7`** (atau klik **◱ Live di atas chart**).
+3. Bila belum ada area tersimpan, drag area price chart satu kali. Setelah itu area **diingat**, jadi berikutnya `F7` langsung mulai.
+4. Jendela CandleLab **hilang seluruhnya**. Yang tersisa hanya badge kecil di pojok layar:
+
+   ```
+   HIJAU 67%   next
+               34 candle
+   ```
+
+   Badge selalu di atas jendela lain, **bisa diseret**, dan **klik kanan** untuk berpindah sudut. CandleLab memilih sudut yang tidak menutupi area chart.
+5. Klik **⚙** atau dobel-klik badge untuk membuka jendela penuh (live tetap berjalan). Klik **✕** untuk berhenti.
+
+Badge disembunyikan sesaat setiap kali piksel dibaca, sehingga tidak pernah ikut terpotret. Angka pada badge hanya berlaku bila data cukup (minimal 20 candle, 12 non-doji); jika belum, badge menampilkan **"Belum cukup"** — itu bukan gangguan, melainkan tanda data masih kurang.
+
 ## Mode live — prediksi terus diperbarui
 
 1. Buka chart dan atur zoom/warna agar candle terlihat jelas.

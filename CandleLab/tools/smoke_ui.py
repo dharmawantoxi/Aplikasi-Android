@@ -111,7 +111,46 @@ with tempfile.TemporaryDirectory() as directory:
         assert app.wm_state() == "normal", "jendela utama tidak dipulihkan"
         assert not app.hud_mode, "mode HUD tidak direset"
 
+        # Mode overlay: IQ Option tetap layar utama, hanya badge tebakan tampil.
+        app.screen_region = (100, 250, 1430, 800)
+        app.state.screen_region = app.screen_region
+        app.overlay_mode = True
+        app.show_overlay()
+        app.update()
+        assert app.overlay is not None, "overlay tidak dibuat"
+        badge = app.overlay.window
+        assert badge.winfo_exists()
+        assert app.wm_state() == "withdrawn", "jendela utama terlihat saat overlay"
+        assert int(badge.attributes("-topmost")) == 1, "badge tidak always-on-top"
+        assert badge.winfo_width() <= 200 and badge.winfo_height() <= 60, "badge terlalu besar"
+        before = (badge.winfo_x(), badge.winfo_y())
+        app.overlay.cycle_corner()
+        app.update()
+        assert (badge.winfo_x(), badge.winfo_y()) != before, "badge tidak berpindah"
+
+        # Badge harus hilang saat piksel diambil, lalu kembali.
+        app._hide_for_capture()
+        assert float(badge.attributes("-alpha")) < 0.01, "badge ikut terpotret"
+        app._show_after_capture()
+        app.update()
+        assert float(badge.attributes("-alpha")) > 0.5, "badge tidak dipulihkan"
+        assert app.wm_state() == "withdrawn", "jendela penuh muncul saat overlay aktif"
+
+        # Area chart tersimpan agar live bisa dimulai tanpa memilih ulang.
+        app._save()
+        assert app.store.load().screen_region == (100, 250, 1430, 800)
+
+        app.expand_from_overlay()
+        app.update()
+        assert app.wm_state() == "normal", "jendela tidak kembali"
+        assert app.overlay is None, "overlay tidak ditutup"
+
+        app.show_overlay()
         app.stop_live_monitor(refresh=False)
-        print("GUI smoke test passed: pages, capture, preview, live updates, and live HUD.")
+        app.update()
+        assert app.overlay is None and not app.overlay_mode, "overlay tidak dibersihkan"
+
+        app.stop_live_monitor(refresh=False)
+        print("GUI smoke test passed: pages, capture, preview, live HUD, and overlay.")
     finally:
         app.destroy()

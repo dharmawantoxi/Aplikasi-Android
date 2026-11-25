@@ -69,3 +69,6 @@ def format_price(value):
 
 def direction_name(direction):
     return {1: "Hijau", -1: "Merah", 0: "Doji"}.get(direction, "—")
+
+# Warna tebakan pada overlay: dipakai badge live dan panel HUD.
+FORECAST_COLORS = {1: GREEN_BRIGHT, -1: RED, 0: DOJI}
