@@ -256,6 +256,8 @@ Pengaman yang selalu berlaku:
 - maksimal satu klik per candle,
 - berhenti otomatis setelah **50 klik** per sesi.
 
+**Area kalibrasi harus memuat keduanya.** Saat memilih area tombol broker, pastikan kotaknya mencakup tombol **HIGHER**, **LOWER**, dan tombol oranye **+ NEW OPTION** bila sedang tampil. Ketiganya menempati posisi yang sama, jadi satu kotak cukup. Kalibrasi tetap diterima walaupun saat itu hanya NEW OPTION yang terlihat.
+
 **Tombol NEW OPTION.** Setelah satu posisi dibuka, IQ Option mengganti tombol Higher/Lower dengan tombol oranye **+ NEW OPTION**. Klik otomatis mengenali tombol itu dan menekannya lebih dulu, menunggu form order terbuka, lalu menekan Higher/Lower sesuai tebakan. Karena itu satu candle tetap menghasilkan satu posisi, walaupun form order tertutup setelah trade sebelumnya.
 
 **Kapan klik terjadi:** hanya saat mode live berjalan, ketika muncul tebakan **baru** untuk candle yang sedang berjalan. Maksimal satu klik per candle, dan hanya bila jendela IQ Option aktif. Urutan yang disarankan: mulai live → pastikan area benar → baru aktifkan klik otomatis.
