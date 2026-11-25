@@ -264,6 +264,15 @@ class CandleLabApp(tk.Tk):
             self._guide_page()
 
     def refresh(self):
+        """Bangun ulang halaman aktif.
+
+        Saat mode overlay aktif, jendela utama sedang disembunyikan. Membangun
+        ulang di sana membuat overlay macet: jendela tidak pernah tampil lagi
+        dan pengguna terjebak di badge tanpa jalan kembali. Karena itu halaman
+        hanya dibangun ulang bila jendela memang terlihat.
+        """
+        if self.overlay_mode or self.hud_mode:
+            return
         self.show_page(self.current_page)
 
     def _order(self):
@@ -508,25 +517,33 @@ class CandleLabApp(tk.Tk):
 
     # -- klik otomatis ---------------------------------------------------
     def toggle_auto_click(self):
-        """Aktifkan/matikan klik otomatis, dengan konfirmasi eksplisit."""
-        if self.auto_click_enabled:
+        """Aktifkan/matikan klik otomatis dari jendela penuh."""
+        self.set_auto_click(not self.auto_click_enabled)
+
+    def set_auto_click(self, enable: bool) -> bool:
+        """Nyalakan/matikan klik otomatis. Aman dipanggil dari badge overlay.
+
+        Mengembalikan True bila keadaan berubah. Tidak memanggil ``refresh()``
+        agar tidak mengganggu mode overlay.
+        """
+        if not enable:
             self.auto_click_enabled = False
             self.set_status("Klik otomatis dimatikan.")
-            self.refresh()
-            return
+            self._refresh_overlay()
+            return True
         if not platform_supported():
             messagebox.showinfo(
                 "Klik otomatis hanya di Windows",
                 "Fitur ini memakai SendInput Windows. Di sistem lain, gunakan "
-                "mode latihan (catat sinyal tanpa klik).", parent=self)
-            return
+                "mode latihan (catat sinyal tanpa klik).", parent=self._dialog_parent())
+            return False
         if not self.state.click_region:
             messagebox.showinfo(
                 "Kalibrasi tombol belum ada",
                 "Klik otomatis perlu tahu posisi tombol Higher/Lower.\n\n"
                 "Gunakan ‘Kalibrasi tombol broker’ di halaman Data, lalu pilih "
-                "area yang memuat kedua tombol tersebut.", parent=self)
-            return
+                "area yang memuat kedua tombol tersebut.", parent=self._dialog_parent())
+            return False
         if not messagebox.askyesno(
             "Aktifkan klik otomatis?",
             "CandleLab akan MENGKLIK tombol Higher/Lower di layar Anda setiap "
@@ -537,14 +554,21 @@ class CandleLabApp(tk.Tk):
             "• maksimal satu klik per candle\n"
             "• berhenti otomatis setelah 50 klik\n\n"
             "Gunakan hanya pada akun demo. Lanjutkan?",
-            parent=self,
+            parent=self._dialog_parent(),
         ):
-            return
+            return False
         self.auto_click_enabled = True
         self.click_guard = ClickLimiter()
         self._clicked_candle = -1
         self.set_status("Klik otomatis AKTIF — hanya pada akun demo.")
-        self.refresh()
+        self._refresh_overlay()
+        return True
+
+    def _dialog_parent(self):
+        """Induk dialog: badge saat overlay aktif, jika tidak jendela utama."""
+        if self.overlay is not None:
+            return self.overlay.window
+        return self
 
     def calibrate_click_region(self):
         """Pilih area panel tombol Higher/Lower."""
@@ -1168,6 +1192,7 @@ class CandleLabApp(tk.Tk):
             self.overlay = OverlayBadge(
                 self, on_expand=self.expand_from_overlay,
                 on_stop=self.stop_live_monitor,
+                on_auto_click=self.toggle_auto_click_from_badge,
             )
         corner = best_badge_corner(
             self.screen_region, self.winfo_screenwidth(), self.winfo_screenheight(),
@@ -1183,6 +1208,14 @@ class CandleLabApp(tk.Tk):
         self.overlay.window.deiconify()
         self.overlay.window.lift()
         self._refresh_overlay()
+
+    def toggle_auto_click_from_badge(self):
+        """Nyalakan/matikan klik otomatis langsung dari badge, tanpa buka jendela."""
+        if self.set_auto_click(not self.auto_click_enabled):
+            self.set_status(
+                "Klik otomatis AKTIF (dari badge)."
+                if self.auto_click_enabled else "Klik otomatis dimatikan (dari badge).")
+            self._refresh_overlay()
 
     def expand_from_overlay(self):
         """Buka jendela penuh untuk melihat detail; live tetap berjalan."""
@@ -1204,6 +1237,7 @@ class CandleLabApp(tk.Tk):
     def _refresh_overlay(self):
         if self.overlay is None:
             return
+        self.overlay.set_auto_click_state(self.auto_click_enabled)
         if self.live_active:
             self.overlay.show_round(
                 self.rounds.current, self.rounds.stats, len(self.live_candles),

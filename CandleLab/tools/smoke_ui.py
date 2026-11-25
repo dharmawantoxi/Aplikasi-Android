@@ -149,6 +149,16 @@ with tempfile.TemporaryDirectory() as directory:
         assert float(badge.attributes("-alpha")) > 0.5, "badge tidak dipulihkan"
         assert app.wm_state() == "withdrawn", "jendela penuh muncul saat overlay aktif"
 
+        # Regresi: refresh() saat overlay aktif dulu membuat jendela tidak bisa
+        # kembali. Sekarang tidak boleh mengubah state apa pun.
+        state_before = app.wm_state()
+        app.refresh()
+        app.update()
+        assert app.wm_state() == state_before, "refresh() mengubah state saat overlay"
+        # Badge harus punya tombol klik otomatis (⚡) selain ⚙ dan ✕.
+        labels = [child.cget("text") for child in app.overlay.buttons.winfo_children()]
+        assert "⚡" in labels, f"tombol klik otomatis tidak ada: {labels}"
+
         # Tebak otomatis: tebakan dikunci, lalu dinilai saat chart bergeser.
         app.live_candles = list(make_demo_candles(8))
         app._advance_round(app.live_candles)
