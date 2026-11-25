@@ -263,3 +263,58 @@ def needed_candles(visible: int) -> int:
     """
     from .model import MIN_CANDLES
     return max(0, MIN_CANDLES + 1 - int(visible))
+
+
+class CandleClock:
+    """Mengukur durasi candle dari waktu pergantian candle.
+
+    TF tidak perlu diisi manual: selisih waktu antar-pergantian candle yang
+    terdeteksi sudah cukup. Dipakai untuk memberi tahu pengguna kapan candle
+    berikutnya dimulai, karena entry 1 menit hanya masuk akal di awal candle.
+    """
+
+    MIN_STEP = 5.0      # abaikan selisih yang terlalu pendek (deteksi berkedip)
+    MAX_STEP = 3600.0   # abaikan celah panjang (live dihentikan)
+    KEEP = 8
+
+    def __init__(self) -> None:
+        self._last: Optional[float] = None
+        self._deltas: list[float] = []
+
+    def mark_new_candle(self, now: float) -> None:
+        if self._last is not None:
+            delta = now - self._last
+            if self.MIN_STEP <= delta <= self.MAX_STEP:
+                self._deltas.append(delta)
+                del self._deltas[:-self.KEEP]
+        self._last = now
+
+    def reset(self) -> None:
+        self._last = None
+        self._deltas = []
+
+    @property
+    def period(self) -> Optional[float]:
+        if len(self._deltas) < 2:
+            return None
+        ordered = sorted(self._deltas)
+        return ordered[len(ordered) // 2]
+
+    def seconds_to_next(self, now: float) -> Optional[float]:
+        """Sisa waktu sampai candle berikutnya, bila durasi sudah terukur."""
+        period = self.period
+        if period is None or self._last is None:
+            return None
+        elapsed = max(0.0, now - self._last)
+        remaining = period - (elapsed % period)
+        return remaining if remaining > 0.05 else 0.0
+
+    def label(self) -> str:
+        """'1 mnt', '15 mnt', '30 dtk' — untuk ditampilkan ke pengguna."""
+        period = self.period
+        if period is None:
+            return "?"
+        if period >= 55:
+            # TF 1 menit harus terbaca "1 mnt", bukan "60 dtk".
+            return f"{round(period / 60)} mnt"
+        return f"{round(period)} dtk"

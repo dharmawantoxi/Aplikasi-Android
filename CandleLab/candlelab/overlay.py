@@ -191,7 +191,7 @@ class OverlayBadge:
 
     # -- isi --------------------------------------------------------------
     def show_round(self, round_obj, stats, candle_count: int, pending: bool = True,
-                   seconds_left=None):
+                   seconds_left=None, next_in=None, timeframe="?"):
         """Tampilkan tebakan yang sedang berjalan beserta skor benar/salah.
 
         ``round_obj`` adalah ``rounds.Round``; ``stats`` adalah
@@ -223,10 +223,18 @@ class OverlayBadge:
             # Tanpa penanda waktu, badge tampak diam selama satu candle penuh
             # dan pengguna mengira aplikasi berhenti.
             tick = "." * (1 + int(time.monotonic() * 2) % 3)
-            sisa = ""
-            if seconds_left is not None and seconds_left >= 0:
-                sisa = f" {int(seconds_left)} dtk"
-            detail = f"tebakan candle INI\nsisa {stats.wins}/{stats.played}{tick}{sisa}"
+            # Sisa waktu ke candle berikutnya adalah saat entry 1 menit masuk
+            # akal; tanpa itu badge hanya diam tanpa memberi waktu berguna.
+            if next_in is not None and next_in >= 0:
+                ketiga = f"candle baru {int(next_in)} dtk"
+            elif seconds_left is not None and seconds_left >= 0:
+                ketiga = f"menunggu {int(seconds_left)} dtk"
+            else:
+                ketiga = ""
+            baris = f"skor {stats.wins}/{stats.played}{tick}"
+            if ketiga:
+                baris = ketiga + "\n" + baris
+            detail = f"tebakan {timeframe}\n{baris}"
             tint = DETAIL_FG
         self.headline.configure(text=label, fg=colour)
         self.detail.configure(text=detail, fg=tint)

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import queue
+import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import traceback
@@ -16,6 +17,7 @@ from .live_hud import LiveHud
 from .overlay import BADGE_HEIGHT, BADGE_WIDTH, OverlayBadge
 from .rounds import (
     MIN_ROUNDS_FOR_SIGNAL,
+    CandleClock,
     RoundTracker,
     accuracy_is_meaningful,
 )
@@ -52,6 +54,7 @@ class CandleLabApp(tk.Tk):
         # Putaran tebak otomatis: tebakan dikunci per candle lalu dinilai
         # oleh candle itu sendiri saat selesai.
         self.rounds = RoundTracker()
+        self.clock = CandleClock()
         self._round_status = ""
         self.screen_region = self.state.screen_region
         self.live_monitor = None
@@ -749,6 +752,7 @@ class CandleLabApp(tk.Tk):
         # Putaran baru dimulai: tebakan lama tidak boleh dinilai dengan candle
         # dari area pembacaan yang berbeda.
         self.rounds.reset()
+        self.clock.reset()
         try:
             self.configure(cursor="watch")
             if select_new or not self.screen_region:
@@ -1065,6 +1069,8 @@ class CandleLabApp(tk.Tk):
             self.overlay.show_round(
                 self.rounds.current, self.rounds.stats, len(self.live_candles),
                 seconds_left=self.rounds.waiting_seconds(),
+                next_in=self.clock.seconds_to_next(time.monotonic()),
+                timeframe=self.clock.label(),
             )
         else:
             self.overlay.show_prediction(
@@ -1132,6 +1138,10 @@ class CandleLabApp(tk.Tk):
                 return
         self.live_pending_sequence = None
         changed = sequence != self.live_sequence or not self.live_candles
+        if changed:
+            # Setiap perubahan urutan berarti satu candle baru muncul; selisih
+            # waktunya adalah durasi candle (TF) yang bisa diukur otomatis.
+            self.clock.mark_new_candle(time.monotonic())
         self.live_candles = list(result.candles)
         self.live_sequence = sequence
         previous_status = self._round_status or ""
