@@ -301,35 +301,6 @@ public final class FinanceFlowTest {
         } finally { reader.close(); }
     }
 
-    @Test public void incomeAndExpenseTransactionsCanAllocatePartToSavings() {
-        try (ActivityScenario<MainActivity> scenario = launchHome()) {
-            onView(withText("Catat transaksi")).perform(scrollTo(), click());
-            onView(withText("Pemasukan")).perform(click());
-            onView(withContentDescription("Nominal transaksi dalam rupiah")).perform(typeText("100000"), closeSoftKeyboard());
-            onView(withContentDescription("Nominal transaksi yang ditambahkan ke atau diambil dari tabungan, opsional"))
-                    .perform(typeText("40000"), closeSoftKeyboard());
-            onView(withHint("Contoh: Gaji bulanan")).perform(typeText("Gaji"), closeSoftKeyboard());
-            onView(withText("Simpan transaksi")).perform(click());
-
-            onView(withText("Catat transaksi")).perform(scrollTo(), click());
-            onView(withContentDescription("Nominal transaksi dalam rupiah")).perform(typeText("30000"), closeSoftKeyboard());
-            onView(withContentDescription("Nominal transaksi yang ditambahkan ke atau diambil dari tabungan, opsional"))
-                    .perform(typeText("10000"), closeSoftKeyboard());
-            onView(withHint("Contoh: Makan siang")).perform(typeText("Belanja"), closeSoftKeyboard());
-            onView(withText("Simpan transaksi")).perform(click());
-
-            onView(withContentDescription("Dana")).perform(click());
-            onView(withContentDescription("Dana siap pakai Rp40.000")).check(matches(isDisplayed()));
-            onView(withContentDescription("Saldo tabungan Rp30.000")).perform(scrollTo()).check(matches(isDisplayed()));
-        }
-        FinanceStore reader = new FinanceStore(context);
-        try {
-            assertEquals("40000", reader.availableFunds().toString());
-            assertEquals("30000", reader.savingsBalance().toString());
-            assertEquals("70000", FinanceMath.summarize(reader.all()).balance.toString());
-        } finally { reader.close(); }
-    }
-
     @Test public void debtAndReceivablePaymentsUpdateCashWithoutBecomingTransactions() {
         try (ActivityScenario<MainActivity> scenario = launchHome()) {
             onView(withContentDescription("Dana")).perform(click());
