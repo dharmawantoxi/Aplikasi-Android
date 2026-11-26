@@ -640,6 +640,7 @@ class CandleLabApp(tk.Tk):
             side="left")
         button(bar, "Tutup", window.destroy, "secondary").pack(side="right")
         _isi()
+        return window
 
     def test_click_now(self):
         """Periksa seluruh rantai klik tanpa benar-benar menekan tombol.

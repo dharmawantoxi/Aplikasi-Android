@@ -149,12 +149,13 @@ with tempfile.TemporaryDirectory() as directory:
         assert float(badge.attributes("-alpha")) > 0.5, "badge tidak dipulihkan"
         assert app.wm_state() == "withdrawn", "jendela penuh muncul saat overlay aktif"
 
-        # Jendela log harus bisa dibuka tanpa galat.
-        app.open_log_window()
+        # Jendela log harus bisa dibuka tanpa galat. Tutup hanya jendela itu:
+        # menghancurkan semua Toplevel akan ikut menghapus badge overlay.
+        log_window = app.open_log_window()
         app.update()
-        for w in app.winfo_children():
-            if isinstance(w, __import__("tkinter").Toplevel):
-                w.destroy()
+        assert log_window.winfo_exists(), "jendela log tidak terbuka"
+        log_window.destroy()
+        app.update()
 
         # Diagnosa klik otomatis harus ada di panel samping.
         assert any("Uji klik sekarang" in str(w.cget("text"))
