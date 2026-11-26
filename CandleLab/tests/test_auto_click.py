@@ -251,7 +251,7 @@ class ClickRecursionTests(unittest.TestCase):
             encoding="utf-8")
         self.assertIn("self._clicking", ui)
         start = ui.index("def _try_auto_click_for_current")
-        body = ui[start:start + 1200]
+        body = ui[start:start + 2600]
         self.assertIn("if self._clicking:", body)
 
 

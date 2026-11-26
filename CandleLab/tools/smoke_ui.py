@@ -149,6 +149,15 @@ with tempfile.TemporaryDirectory() as directory:
         assert float(badge.attributes("-alpha")) > 0.5, "badge tidak dipulihkan"
         assert app.wm_state() == "withdrawn", "jendela penuh muncul saat overlay aktif"
 
+        # Batas waktu entry harus bisa diubah tanpa galat.
+        awal = app.entry_window
+        app.cycle_entry_window()
+        app.update()
+        assert app.entry_window != awal, "batas entry tidak berubah"
+        app.cycle_entry_window()
+        app.cycle_entry_window()
+        app.update()
+
         # Jendela log harus bisa dibuka tanpa galat. Tutup hanya jendela itu:
         # menghancurkan semua Toplevel akan ikut menghapus badge overlay.
         log_window = app.open_log_window()

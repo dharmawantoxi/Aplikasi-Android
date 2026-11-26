@@ -91,7 +91,10 @@ class PredictionTests(unittest.TestCase):
         expected = (greens + PRIOR_STRENGTH * base) / (matches + PRIOR_STRENGTH)
         self.assertEqual(result.matches, matches)
         self.assertEqual(result.green_matches, greens)
-        self.assertAlmostEqual(result.green_probability, expected)
+        # Model kini juga memakai informasi harga, jadi nilai mentah Bayesian
+        # hanya berlaku bila tidak ada sinyal harga yang aktif.
+        if not result.price_signal:
+            self.assertAlmostEqual(result.green_probability, expected)
         self.assertAlmostEqual(result.green_probability + result.red_probability, 1.0)
 
     def test_rare_pattern_is_shrunk_towards_base(self):

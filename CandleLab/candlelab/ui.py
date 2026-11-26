@@ -76,6 +76,7 @@ class CandleLabApp(tk.Tk):
         # Putaran tebak otomatis: tebakan dikunci per candle lalu dinilai
         # oleh candle itu sendiri saat selesai.
         self.rounds = RoundTracker()
+        self.entry_window = 0.5
         self.clock = CandleClock()
         self._round_status = ""
         # Klik otomatis: nonaktif secara bawaan.
@@ -521,6 +522,8 @@ class CandleLabApp(tk.Tk):
             fill="x", pady=(3, 0))
         button(box, "Uji klik sekarang (tanpa klik)", self.test_click_now,
                "secondary").pack(fill="x", pady=(3, 0))
+        button(box, self._entry_window_label(), self.cycle_entry_window,
+               "secondary").pack(fill="x", pady=(3, 0))
         button(box, "Buka log (bisa disalin)", self.open_log_window,
                "secondary").pack(fill="x", pady=(3, 0))
         text(box, self.log.summary(), 7, "#6F8377",
@@ -598,6 +601,28 @@ class CandleLabApp(tk.Tk):
         if self.overlay is not None:
             return self.overlay.window
         return self
+
+    def _entry_window_label(self) -> str:
+        if self.entry_window >= 0.99:
+            return "Entry: kapan saja (klik untuk ubah)"
+        return f"Entry: bagian awal candle ≤{self.entry_window * 100:.0f}% (klik untuk ubah)"
+
+    def cycle_entry_window(self):
+        """Ubah batas waktu entry: 50% -> 80% -> kapan saja -> 50%."""
+        urutan = [0.5, 0.8, 1.0]
+        try:
+            posisi = urutan.index(self.entry_window)
+        except ValueError:
+            posisi = 0
+        self.entry_window = urutan[(posisi + 1) % len(urutan)]
+        pesan = {
+            0.5: "Entry hanya di paruh awal candle. Paling cocok dengan tebakan.",
+            0.8: "Entry di 80% pertama candle. Lebih longgar, hasil lebih banyak.",
+            1.0: "Entry kapan saja. Hasil akan tercampur candle yang sedang berjalan.",
+        }[self.entry_window]
+        self._log(INFO, f"batas waktu entry diubah ke {self.entry_window * 100:.0f}%")
+        self.set_status(pesan)
+        self.refresh()
 
     def open_log_window(self):
         """Tampilkan log untuk diperiksa dan disalin."""
@@ -1557,6 +1582,15 @@ class CandleLabApp(tk.Tk):
         if not self.auto_click_enabled or not self.state.click_region:
             return
         if self._clicked_candle == current.seq:
+            return
+        bagian = self.clock.elapsed_fraction(time.monotonic())
+        if self.entry_window < 1 and (bagian is None or bagian > self.entry_window):
+            alasan = ("menunggu pengukuran durasi candle" if bagian is None
+                      else "di luar batas waktu entry")
+            if getattr(self, "_last_entry_skip", None) != (current.seq, alasan):
+                self._last_entry_skip = (current.seq, alasan)
+                self._log(INFO, f"klik ditunda • {alasan}")
+            self.click_status = alasan
             return
         if self._clicking:
             # Menolak klik memperbarui badge, dan badge memicu percobaan klik

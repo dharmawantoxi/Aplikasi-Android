@@ -264,9 +264,24 @@ Pengaman yang selalu berlaku:
 
 **Tombol NEW OPTION.** Setelah satu posisi dibuka, IQ Option mengganti tombol Higher/Lower dengan tombol oranye **+ NEW OPTION**. Klik otomatis mengenali tombol itu dan menekannya lebih dulu, menunggu form order terbuka, lalu menekan Higher/Lower sesuai tebakan. Karena itu satu candle tetap menghasilkan satu posisi, walaupun form order tertutup setelah trade sebelumnya.
 
+**Batas waktu entry.** Pada TF 1 menit, klik otomatis mencoba satu entry per candle yang terkonfirmasi, bukan setiap pembacaan layar. Pilih 50% pertama (bawaan), 80% pertama, atau kapan saja. Jam ini perkiraan dari layar, bukan jam expiry broker.
+
 **Kapan klik terjadi:** hanya saat mode live berjalan, ketika muncul tebakan **baru** untuk candle yang sedang berjalan. Maksimal satu klik per candle, dan hanya bila jendela IQ Option aktif. Urutan yang disarankan: mulai live → pastikan area benar → baru aktifkan klik otomatis.
 
 Alasan pembatasannya: pada payout 82% (seperti di IQ Option), akurasi impas adalah **54,9%**. Model ini terukur berkisar 49–55%, jadi gunakan hanya dengan uang demo.
+
+## Informasi harga
+
+Model warna memperlakukan candle hijau raksasa dan candle hijau seujung jarum sebagai sama. Karena itu prediksi juga memakai **angka harga**:
+
+- **arah tick terakhir** — selisih close ke close, momentum sangat pendek;
+- **posisi close di dalam rentang high-low** — candle yang ditutup di dekat puncak menandakan pembeli masih memegang kendali.
+
+Keduanya digabungkan sebagai bukti tambahan dengan bobot kecil (0,30), jadi model warna tetap dominan dan hasil tidak pernah melompat ke 0% atau 100%. Bila sinyal harga aktif, label bukti berubah menjadi mis. `Bukti cukup + harga`.
+
+Lab memisahkan skor jam 07:00–16:00 UTC dari jam lainnya, memakai timestamp CSV. Jam bukan penanda OTC. Untuk membandingkan OTC dengan non-OTC, jalankan Lab pada dua CSV berlabel sumber berbeda dan bandingkan kelompok jam yang sama.
+
+Informasi harga juga dapat diuji sendiri di **Lab hipotesis**: *Arah tick terakhir*, *Dua tick searah*, *Penutupan di dekat puncak/dasar*, dan *Celah harga antar-candle*. Keempatnya dinilai dengan uji binomial dan koreksi Benjamini-Hochberg yang sama seperti hipotesis warna.
 
 ## Lab hipotesis
 

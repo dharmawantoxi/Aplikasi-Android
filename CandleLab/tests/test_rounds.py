@@ -230,3 +230,41 @@ class CandleClockTests(unittest.TestCase):
         clock.reset()
         self.assertIsNone(clock.period)
         self.assertIsNone(clock.seconds_to_next(500.0))
+
+
+class ElapsedFractionTests(unittest.TestCase):
+    """Penjaga waktu entry bergantung pada bagian candle yang sudah lewat."""
+
+    def _clock_with_period(self, period: float = 60.0):
+        from candlelab.rounds import CandleClock
+
+        clock = CandleClock()
+        # Tiga pergantian candle membentuk period.
+        for step in range(4):
+            clock.mark_new_candle(1000.0 + step * period)
+        return clock, 1000.0 + 3 * period
+
+    def test_unknown_before_enough_candles(self):
+        from candlelab.rounds import CandleClock
+
+        self.assertIsNone(CandleClock().elapsed_fraction(100.0))
+
+    def test_at_candle_open_is_near_zero(self):
+        clock, start = self._clock_with_period()
+        self.assertAlmostEqual(clock.elapsed_fraction(start), 0.0, places=3)
+
+    def test_midway(self):
+        clock, start = self._clock_with_period()
+        self.assertAlmostEqual(clock.elapsed_fraction(start + 30), 0.5, places=3)
+
+    def test_late_entry_is_detected(self):
+        """Entry di detik 48 dari candle 60 detik = 80%, melewati batas 50%."""
+        clock, start = self._clock_with_period()
+        fraction = clock.elapsed_fraction(start + 48)
+        self.assertGreater(fraction, 0.5)
+        self.assertAlmostEqual(fraction, 0.8, places=3)
+
+    def test_stays_closed_until_confirmed(self):
+        clock, start = self._clock_with_period()
+        # Tanpa konfirmasi baru, jendela tetap tertutup.
+        self.assertAlmostEqual(clock.elapsed_fraction(start + 65), 1.0, places=3)

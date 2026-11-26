@@ -317,6 +317,17 @@ class CandleClock:
         remaining = period - (elapsed % period)
         return remaining if remaining > 0.05 else 0.0
 
+    def elapsed_fraction(self, now: float) -> Optional[float]:
+        """Berapa bagian candle yang sedang berjalan sudah terlewati (0..1).
+
+        Tunggu konfirmasi candle baru sebelum membuka jendela entry lagi.
+        """
+        period = self.period
+        if period is None or self._last is None or period <= 0:
+            return None
+        elapsed = max(0.0, now - self._last)
+        return min(1.0, elapsed / period)
+
     def label(self) -> str:
         """'1 mnt', '15 mnt', '30 dtk' — untuk ditampilkan ke pengguna."""
         period = self.period

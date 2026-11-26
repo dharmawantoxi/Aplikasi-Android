@@ -17,6 +17,9 @@ MIN_DIRECTIONAL = 5
 # Di bawah jumlah ini hasil dianggap tidak layak untuk dijadikan dasar keputusan.
 WEAK_EVIDENCE_CANDLES = 20
 PRIOR_STRENGTH = 6.0
+# Seberapa besar informasi harga boleh menggeser probabilitas. Kecil dengan
+# sengaja: harga hanya menambah bukti, dan model warna tetap dominan.
+PRICE_SIGNAL_WEIGHT = 0.30
 MAX_CANDLES = 2000
 
 
@@ -58,6 +61,7 @@ class Prediction:
     directional_count: int = 0
     order: int = 1
     window: int = 60
+    price_signal: bool = False
     pattern: tuple[int, ...] = ()
     reason: str = ""
     thin_data: bool = False
@@ -80,6 +84,13 @@ class Prediction:
 
     @property
     def evidence_label(self) -> str:
+        """Keterangan singkat; menyebut harga bila sinyalnya ikut dipakai."""
+        dasar = self._volume_label()
+        if self.price_signal:
+            return dasar + " + harga"
+        return dasar
+
+    def _volume_label(self) -> str:
         if self.matches < 5:
             return "Bukti sangat terbatas"
         if self.matches < 20:
@@ -95,6 +106,43 @@ class Backtest:
     accuracy: Optional[float]
     baseline_accuracy: Optional[float]
     brier_score: Optional[float]
+
+
+def price_signal_direction(candles: Sequence[Candle]) -> tuple[int, float]:
+    """Arah yang disarankan informasi harga, beserta kekuatannya.
+
+    Model warna memperlakukan candle hijau raksasa dan candle hijau seujung
+    jarum sebagai sama. Harga memberi dua petunjuk yang tidak terlihat dari
+    warna saja:
+
+    - arah tick terakhir (close ke close), sebagai momentum sangat pendek;
+    - posisi close di dalam rentang high-low, sebagai tekanan pembeli/penjual.
+
+    Mengembalikan (arah, bobot 0..1). Arah 0 berarti tidak ada petunjuk.
+    """
+    if len(candles) < 2:
+        return 0, 0.0
+    last = candles[-1]
+    before = candles[-2]
+    votes = 0.0
+    strength = 0.0
+    if last.close != before.close:
+        momentum = 1 if last.close > before.close else -1
+        votes += momentum
+        strength += 0.5
+    span = last.high - last.low
+    if span > 0:
+        position = (last.close - last.low) / span
+        if position >= 0.66:
+            votes += 1
+            strength += position - 0.5
+        elif position <= 0.34:
+            votes -= 1
+            strength += 0.5 - position
+    if votes == 0:
+        return 0, 0.0
+    direction = 1 if votes > 0 else -1
+    return direction, min(1.0, strength)
 
 
 class CandleModel:
@@ -151,6 +199,17 @@ class CandleModel:
         probability = (
             green_matches + PRIOR_STRENGTH * base
         ) / (matches + PRIOR_STRENGTH)
+        # Informasi harga digabungkan sebagai bukti tambahan, bukan pengganti.
+        # Bobotnya kecil dan tetap: pada data acak ini hanya menggeser beberapa
+        # persen, tetapi pada data yang memang punya pola harga efeknya nyata.
+        arah_harga, kekuatan = price_signal_direction(selected)
+        used_price = arah_harga != 0 and kekuatan > 0
+        if used_price:
+            bukti = PRICE_SIGNAL_WEIGHT * kekuatan
+            if arah_harga > 0:
+                probability += bukti * (1.0 - probability)
+            else:
+                probability -= bukti * probability
         # Batasi galat floating point agar kedua probabilitas selalu valid.
         probability = min(1.0, max(0.0, probability))
         return Prediction(
@@ -164,6 +223,7 @@ class CandleModel:
             order=order,
             window=window,
             pattern=pattern,
+            price_signal=used_price,
         )
 
     @staticmethod
