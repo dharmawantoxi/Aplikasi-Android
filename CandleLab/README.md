@@ -264,7 +264,7 @@ Pengaman yang selalu berlaku:
 
 **Tombol NEW OPTION.** Setelah satu posisi dibuka, IQ Option mengganti tombol Higher/Lower dengan tombol oranye **+ NEW OPTION**. Klik otomatis mengenali tombol itu dan menekannya lebih dulu, menunggu form order terbuka, lalu menekan Higher/Lower sesuai tebakan. Karena itu satu candle tetap menghasilkan satu posisi, walaupun form order tertutup setelah trade sebelumnya.
 
-**Batas waktu entry.** Pada TF 1 menit, klik otomatis mencoba satu entry per candle yang terkonfirmasi, bukan setiap pembacaan layar. Pilih 50% pertama (bawaan), 80% pertama, atau kapan saja. Jam ini perkiraan dari layar, bukan jam expiry broker.
+**Batas waktu entry TF 1 menit.** Sinkronkan jam Windows. Aplikasi membandingkan dua bacaan stabil dari akhir menit sebelumnya dengan dua bacaan riwayat candle tertutup pada awal menit baru. Perubahan warna candle berjalan diabaikan. Batas klik arah: 5, 8 (bawaan), atau 10 detik pertama menurut jam komputer; jika konfirmasi terlambat atau pergeseran ambigu, menit itu dilewati. Tidak mengejar entry yang terlewat.
 
 **Kapan klik terjadi:** hanya saat mode live berjalan, ketika muncul tebakan **baru** untuk candle yang sedang berjalan. Maksimal satu klik per candle, dan hanya bila jendela IQ Option aktif. Urutan yang disarankan: mulai live → pastikan area benar → baru aktifkan klik otomatis.
 

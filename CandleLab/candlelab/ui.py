@@ -15,6 +15,7 @@ from .csv_io import export_csv, load_csv
 from .experiments import summarise
 from .hud_layout import best_badge_corner
 from .live_hud import LiveHud
+from .minute import MinuteGate
 from .overlay import BADGE_HEIGHT, BADGE_WIDTH, OverlayBadge
 from .auto_click import (
     click_point,
@@ -77,7 +78,10 @@ class CandleLabApp(tk.Tk):
         # Putaran tebak otomatis: tebakan dikunci per candle lalu dinilai
         # oleh candle itu sendiri saat selesai.
         self.rounds = RoundTracker()
-        self.entry_window = 0.5
+        self.entry_window = 8
+        self.minute_gate = MinuteGate()
+        self.last_entry_minute = -1
+        self.locked_prediction = None
         self.clock = CandleClock()
         self._round_status = ""
         # Klik otomatis: nonaktif secara bawaan.
@@ -312,6 +316,8 @@ class CandleLabApp(tk.Tk):
         return candles
 
     def _prediction(self):
+        if self.live_active:
+            return self.locked_prediction or CandleModel.predict([], self._order(), self._window())
         return CandleModel.predict(self._source_candles(), self._order(), self._window())
 
     def _save(self):
@@ -603,25 +609,12 @@ class CandleLabApp(tk.Tk):
         return self
 
     def _entry_window_label(self) -> str:
-        if self.entry_window >= 0.99:
-            return "Entry: kapan saja (klik untuk ubah)"
-        return f"Entry: bagian awal candle ≤{self.entry_window * 100:.0f}% (klik untuk ubah)"
+        return f"Entry TF 1m: {self.entry_window} detik pertama (ubah)"
 
     def cycle_entry_window(self):
-        """Ubah batas waktu entry: 50% -> 80% -> kapan saja -> 50%."""
-        urutan = [0.5, 0.8, 1.0]
-        try:
-            posisi = urutan.index(self.entry_window)
-        except ValueError:
-            posisi = 0
-        self.entry_window = urutan[(posisi + 1) % len(urutan)]
-        pesan = {
-            0.5: "Entry hanya di paruh awal candle. Paling cocok dengan tebakan.",
-            0.8: "Entry di 80% pertama candle. Lebih longgar, hasil lebih banyak.",
-            1.0: "Entry kapan saja. Hasil akan tercampur candle yang sedang berjalan.",
-        }[self.entry_window]
-        self._log(INFO, f"batas waktu entry diubah ke {self.entry_window * 100:.0f}%")
-        self.set_status(pesan)
+        choices = [5, 8, 10]
+        self.entry_window = choices[(choices.index(self.entry_window) + 1) % 3]
+        self.set_status(self._entry_window_label())
         self.refresh()
 
     def open_log_window(self):
@@ -857,6 +850,12 @@ class CandleLabApp(tk.Tk):
         if not guard.allowed:
             self._click_problem(guard.reason)
             return
+        # NEW OPTION dan pemeriksaan fokus bisa melewati batas waktu.
+        now = time.time()
+        if not self.minute_gate.can_enter(now, self.entry_window, self.last_entry_minute):
+            self._click_problem("Jendela entry awal menit sudah lewat.")
+            return
+        self.last_entry_minute = int(now // 60)
         left_click(point)
         self.click_guard.record(time.monotonic())
         self._clicked_candle = candle_index
@@ -1176,6 +1175,8 @@ class CandleLabApp(tk.Tk):
         # dari area pembacaan yang berbeda.
         self.rounds.reset()
         self.clock.reset()
+        self.minute_gate = MinuteGate()
+        self.locked_prediction = None
         try:
             self.configure(cursor="watch")
             if select_new or not self.screen_region:
@@ -1551,14 +1552,8 @@ class CandleLabApp(tk.Tk):
             return
         if self._clicked_candle == current.seq:
             return
-        bagian = self.clock.elapsed_fraction(time.monotonic())
-        if self.entry_window < 1 and (bagian is None or bagian > self.entry_window):
-            alasan = ("menunggu pengukuran durasi candle" if bagian is None
-                      else "di luar batas waktu entry")
-            if getattr(self, "_last_entry_skip", None) != (current.seq, alasan):
-                self._last_entry_skip = (current.seq, alasan)
-                self._log(INFO, f"klik ditunda • {alasan}")
-            self.click_status = alasan
+        if not self.minute_gate.can_enter(time.time(), self.entry_window, self.last_entry_minute):
+            self.click_status = "menunggu awal candle 1 menit terkonfirmasi"
             return
         if self._clicking:
             # Menolak klik memperbarui badge, dan badge memicu percobaan klik
@@ -1574,6 +1569,7 @@ class CandleLabApp(tk.Tk):
         """Kunci atau nilai satu putaran tebak otomatis."""
         history = list(candles[:-1]) if candles else []
         prediction = CandleModel.predict(history, self._order(), self._window())
+        self.locked_prediction = prediction
         finished = self.rounds.observe(history, prediction)
         self._round_status = ""
         if finished is not None and finished.correct is not None:
@@ -1605,21 +1601,20 @@ class CandleLabApp(tk.Tk):
             self.set_status("LIVE • candle belum terbaca; periksa ukuran/warna area grafik.")
             return
         sequence = result.sequence
-        if self.live_sequence and sequence != self.live_sequence:
-            if sequence != self.live_pending_sequence:
-                self.live_pending_sequence = sequence
-                self.set_status("LIVE • perubahan candle terdeteksi; menunggu pembacaan kedua untuk konfirmasi.")
-                return
-        self.live_pending_sequence = None
-        changed = sequence != self.live_sequence or not self.live_candles
-        if changed:
-            # Setiap perubahan urutan berarti satu candle baru muncul; selisih
-            # waktunya adalah durasi candle (TF) yang bisa diukur otomatis.
-            self.clock.mark_new_candle(time.monotonic())
+        captured = event.captured
+        previous = self.minute_gate.signal
+        changed = self.minute_gate.observe(captured, sequence[:-1]) if captured else False
         self.live_candles = list(result.candles)
-        self.live_sequence = sequence
         previous_status = self._round_status or ""
-        self._advance_round(result.candles)
+        if changed:
+            if (self.minute_gate.signal != previous + 1
+                    or self.live_sequence != self.minute_gate.base[1]):
+                self.rounds.reset()
+                self._clicked_candle = -1
+            self.live_sequence = sequence[:-1]
+            self.clock.mark_new_candle(time.monotonic())
+            self._advance_round(result.candles)
+            self._log(INFO, f"sinyal 1m terkunci • {datetime.fromtimestamp(captured):%H:%M:%S}")
         if self._round_status and self._round_status != previous_status:
             # Hasil putaran lebih penting daripada statistik deteksi, tetapi
             # hanya ditampilkan sekali agar status tidak berkedip.

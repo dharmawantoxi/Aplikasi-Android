@@ -30,6 +30,7 @@ class MonitorEvent:
     error: str = ""
     elapsed: float = 0.0
     ready: bool = False
+    captured: float = 0.0
 
 
 class LiveScreenMonitor:
@@ -110,10 +111,11 @@ class LiveScreenMonitor:
             if self.capture_delay and self.stop_event.wait(self.capture_delay):
                 break
             try:
+                captured = time.time()
                 image = self.capture_fn(self.region)
                 result = self.detect_fn(image)
                 elapsed = time.monotonic() - started
-                self._emit(MonitorEvent(self.generation, result=result, elapsed=elapsed))
+                self._emit(MonitorEvent(self.generation, result=result, elapsed=elapsed, captured=captured))
             except Exception as exc:
                 # GUI menampilkan error dan menghentikan sesi; worker tidak memanggil Tk.
                 self._emit(MonitorEvent(self.generation, error=str(exc)))
