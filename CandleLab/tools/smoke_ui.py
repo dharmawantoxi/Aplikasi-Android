@@ -149,6 +149,13 @@ with tempfile.TemporaryDirectory() as directory:
         assert float(badge.attributes("-alpha")) > 0.5, "badge tidak dipulihkan"
         assert app.wm_state() == "withdrawn", "jendela penuh muncul saat overlay aktif"
 
+        # Jendela log harus bisa dibuka tanpa galat.
+        app.open_log_window()
+        app.update()
+        for w in app.winfo_children():
+            if isinstance(w, __import__("tkinter").Toplevel):
+                w.destroy()
+
         # Diagnosa klik otomatis harus ada di panel samping.
         assert any("Uji klik sekarang" in str(w.cget("text"))
                    for w in app.winfo_children() if False) or True
