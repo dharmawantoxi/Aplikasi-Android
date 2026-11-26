@@ -1,7 +1,6 @@
 package com.dharmawantoxi.rapiuang;
 
 import static androidx.test.espresso.Espresso.onView;
-import static androidx.test.espresso.Espresso.pressBackUnconditionally;
 import static androidx.test.espresso.Espresso.pressBack;
 import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.action.ViewActions.closeSoftKeyboard;
@@ -52,23 +51,6 @@ public final class FinanceFlowTest {
         if (testLanguage != null) testLanguage.close();
         FinanceStore.useDatabaseForUiTests(context, false);
         context.deleteDatabase(TEST_DB);
-    }
-
-    /**
-     * Tutup snackbar dan papan ketik sebelum membuka sheet berikutnya.
-     *
-     * Tanpa ini, Espresso menunggu jendela mendapat fokus selama 10 detik:
-     * snackbar "transaksi tersimpan" masih tampil dan papan ketik menutupi
-     * layar, sehingga RootViewPicker gagal menemukan root yang fokus. Itu
-     * penyebab kegagalan intermiten pada tes yang menyimpan dua transaksi
-     * berurutan.
-     */
-    private static void settleBeforeNextSheet() {
-        try {
-            pressBackUnconditionally();
-        } catch (RuntimeException ignored) {
-            // Tidak ada apa pun untuk ditutup.
-        }
     }
 
     // Exercise the home screen directly; launcher behavior is covered by SplashActivityTest.
@@ -328,7 +310,6 @@ public final class FinanceFlowTest {
                     .perform(typeText("40000"), closeSoftKeyboard());
             onView(withHint("Contoh: Gaji bulanan")).perform(typeText("Gaji"), closeSoftKeyboard());
             onView(withText("Simpan transaksi")).perform(click());
-            settleBeforeNextSheet();
 
             onView(withText("Catat transaksi")).perform(scrollTo(), click());
             onView(withContentDescription("Nominal transaksi dalam rupiah")).perform(typeText("30000"), closeSoftKeyboard());
