@@ -337,12 +337,16 @@ class BadgeFocusTests(unittest.TestCase):
         self.assertIn("def _make_no_activate", source)
 
     def test_ui_can_restore_focus(self):
-        from pathlib import Path
+        from unittest.mock import patch
+        from candlelab import auto_click_win as win
 
-        source = (Path(__file__).resolve().parents[1] / "candlelab"
-                  / "ui.py").read_text(encoding="utf-8")
-        self.assertIn("def _restore_previous_window", source)
-        self.assertIn("def _remember_foreign_window", source)
+        with patch.object(win, "foreground_window", side_effect=[1, 2, 1]), \
+             patch.object(win, "is_our_window", side_effect=lambda h: h == 1), \
+             patch.object(win, "window_root_at", side_effect=[2, 2, 2, 2, 3]), \
+             patch.object(win, "_user32") as api:
+            self.assertTrue(win.restore_chart_focus((1, 2), (3, 4)))
+            self.assertFalse(win.restore_chart_focus((1, 2), (3, 4)))
+            api.return_value.SetForegroundWindow.assert_called_once_with(2)
 
 
 class WindowsBindingTests(unittest.TestCase):

@@ -156,6 +156,21 @@ def window_root_at(point: tuple[int, int]):
         return None
 
 
+def restore_chart_focus(point, chart_center) -> bool:
+    """Jangan rebut fokus dari aplikasi lain atau aktifkan jendela tak dikenal."""
+    if not is_our_window(foreground_window()):
+        return False
+    target = window_root_at(point)
+    if not target or target != window_root_at(chart_center) or is_our_window(target):
+        return False
+    try:
+        return bool(_user32().SetForegroundWindow(target)
+                    and foreground_window() == target
+                    and window_root_at(point) == target)
+    except (AttributeError, OSError, ValueError):
+        return False
+
+
 def window_caption(handle) -> str:
     """Judul jendela; string kosong bila tidak diketahui."""
     if not platform_supported() or not handle:
