@@ -76,6 +76,7 @@ class CandleLabApp(tk.Tk):
         # Putaran tebak otomatis: tebakan dikunci per candle lalu dinilai
         # oleh candle itu sendiri saat selesai.
         self.rounds = RoundTracker()
+        self.entry_window = 0.5
         self.clock = CandleClock()
         self._round_status = ""
         # Klik otomatis: nonaktif secara bawaan.
@@ -604,7 +605,7 @@ class CandleLabApp(tk.Tk):
     def _entry_window_label(self) -> str:
         if self.entry_window >= 0.99:
             return "Entry: kapan saja (klik untuk ubah)"
-        return f"Entry: paruh awal candle <{self.entry_window * 100:.0f}% (klik untuk ubah)"
+        return f"Entry: bagian awal candle ≤{self.entry_window * 100:.0f}% (klik untuk ubah)"
 
     def cycle_entry_window(self):
         """Ubah batas waktu entry: 50% -> 80% -> kapan saja -> 50%."""
@@ -874,8 +875,6 @@ class CandleLabApp(tk.Tk):
         self.click_status = (f"KLIK {arah} di {point[0]},{point[1]} • "
                              f"{self.click_guard.count} klik sesi ini")
         self._last_skip = ""
-        # Batas bagian candle untuk boleh entry. 0,5 berarti paruh pertama.
-        self.entry_window = 0.5
         self._log(CLICK, f"{arah} di {point[0]},{point[1]} "
                          f"(klik ke-{self.click_guard.count} sesi ini)")
         self.set_status(self.click_status)
@@ -1584,20 +1583,15 @@ class CandleLabApp(tk.Tk):
             return
         if self._clicked_candle == current.seq:
             return
-        # Jaga waktu entry: tebakan berlaku untuk candle berikutnya, jadi entry
-        # harus terjadi di awal candle. Pada screenshot pengguna entry terjadi
-        # di detik ke-48, sehingga hasil ditentukan candle yang sedang berjalan.
         bagian = self.clock.elapsed_fraction(time.monotonic())
-        if bagian is not None and bagian > self.entry_window:
-            alasan = (f"terlalu telat ({bagian * 100:.0f}% candle sudah lewat, "
-                      f"batas {self.entry_window * 100:.0f}%)")
-            if getattr(self, "_last_entry_skip", "") != alasan:
-                self._last_entry_skip = alasan
+        if self.entry_window < 1 and (bagian is None or bagian > self.entry_window):
+            alasan = ("menunggu pengukuran durasi candle" if bagian is None
+                      else "di luar batas waktu entry")
+            if getattr(self, "_last_entry_skip", None) != (current.seq, alasan):
+                self._last_entry_skip = (current.seq, alasan)
                 self._log(INFO, f"klik ditunda • {alasan}")
-            self.click_status = "menunggu candle berikutnya • " + alasan
-            self._refresh_overlay()
+            self.click_status = alasan
             return
-        self._last_entry_skip = ""
         if self._clicking:
             # Menolak klik memperbarui badge, dan badge memicu percobaan klik
             # lagi; tanpa penjaga ini keduanya saling memanggil tanpa henti.

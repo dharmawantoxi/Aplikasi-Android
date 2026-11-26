@@ -182,37 +182,22 @@ def _hour_effect(candles: Sequence[Candle]) -> list[int]:
     return out
 
 
-def _session(candles: Sequence[Candle]) -> tuple[list[int], list[int]]:
-    """Bandingkan jam pasar aktif dengan jam sepi.
-
-    Broker menyebut instrumen "OTC" sebagai feed sintetis buatan sendiri.
-    Yang bisa diuji dari data: apakah candle pada jam pasar aktif (London/New
-    York) berperilaku berbeda dari jam sepi. Dipisah dua daftar agar keduanya
-    dapat dinilai sendiri-sendiri, bukan digabung menjadi satu angka.
-    """
-    import datetime as _dt
-    aktif: list[dict[int, int]] = []
-    sepi: list[dict[int, int]] = []
+def _session(candles: Sequence[Candle], active: bool) -> list[int]:
+    """Skor tebakan mayoritas dari candle sebelumnya di kelompok yang sama."""
+    from datetime import datetime, timezone
+    scores = []
+    green = total = 0
     for candle in candles:
         if candle.direction == DOJI or not candle.timestamp:
             continue
-        jam = _dt.datetime.fromtimestamp(candle.timestamp).hour
-        # 07:00-16:00 UTC kira-kira menutup sesi London dan New York.
-        bucket = aktif if 7 <= jam < 16 else sepi
-        bucket.append(candle.direction)
-
-    def skor(items: list[int]) -> list[int]:
-        """Apakah frekuensi hijau berbeda dari 50% pada kelompok ini?"""
-        if len(items) < 30:
-            return []
-        hijau = sum(1 for item in items if item == GREEN)
-        dasar = hijau / len(items)
-        if abs(dasar - 0.5) < 0.03:
-            return []
-        tebak = GREEN if dasar > 0.5 else RED
-        return [1 if item == tebak else 0 for item in items]
-
-    return skor(aktif), skor(sepi)
+        hour = datetime.fromtimestamp(candle.timestamp, timezone.utc).hour
+        if (7 <= hour < 16) != active:
+            continue
+        if total >= 30 and 2 * green != total:
+            scores.append(int((2 * green > total) == (candle.direction == GREEN)))
+        total += 1
+        green += int(candle.direction == GREEN)
+    return scores
 
 
 # -- 4b. hipotesis berbasis HARGA ----------------------------------------
@@ -335,10 +320,14 @@ HYPOTHESES: tuple[Hypothesis, ...] = (
         "model warna, karena candle hijau bisa ditutup di mana saja.",
         _close_position),
     Hypothesis(
-        "session", "Jam pasar vs jam sepi",
+        "session", "Jam 07–16 UTC",
         "Apakah frekuensi hijau berbeda pada jam pasar aktif dibanding jam sepi?",
         "Memakai jam dari timestamp CSV. Jam pasar aktif 07:00-16:00 UTC.",
-        lambda candles: _session(candles)[0]),
+        lambda candles: _session(candles, True)),
+    Hypothesis("session_other", "Di luar jam 07–16 UTC",
+               "Apakah arah mayoritas sebelumnya berlanjut?",
+               "Dinilai terpisah dengan aturan yang sama.",
+               lambda candles: _session(candles, False)),
     Hypothesis(
         "gap", "Celah harga antar-candle",
         "Apakah celah open terhadap close sebelumnya menentukan arah berikutnya?",

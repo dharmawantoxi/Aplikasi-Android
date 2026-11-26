@@ -320,17 +320,13 @@ class CandleClock:
     def elapsed_fraction(self, now: float) -> Optional[float]:
         """Berapa bagian candle yang sedang berjalan sudah terlewati (0..1).
 
-        Dipakai untuk menjaga waktu entry. Dengan expiry 1 menit pada candle
-        1 menit, entry di detik ke-48 berarti settle terjadi 12 detik kemudian:
-        hasilnya ditentukan candle yang SEDANG berjalan, bukan candle yang
-        diprediksi model. Semakin awal entry, semakin cocok tebakan dengan
-        taruhannya.
+        Tunggu konfirmasi candle baru sebelum membuka jendela entry lagi.
         """
         period = self.period
         if period is None or self._last is None or period <= 0:
             return None
         elapsed = max(0.0, now - self._last)
-        return (elapsed % period) / period
+        return min(1.0, elapsed / period)
 
     def label(self) -> str:
         """'1 mnt', '15 mnt', '30 dtk' — untuk ditampilkan ke pengguna."""

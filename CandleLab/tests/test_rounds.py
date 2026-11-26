@@ -264,7 +264,7 @@ class ElapsedFractionTests(unittest.TestCase):
         self.assertGreater(fraction, 0.5)
         self.assertAlmostEqual(fraction, 0.8, places=3)
 
-    def test_wraps_to_next_candle(self):
+    def test_stays_closed_until_confirmed(self):
         clock, start = self._clock_with_period()
-        # 65 detik setelah awal candle = 5 detik ke candle berikutnya.
-        self.assertAlmostEqual(clock.elapsed_fraction(start + 65), 5 / 60, places=3)
+        # Tanpa konfirmasi baru, jendela tetap tertutup.
+        self.assertAlmostEqual(clock.elapsed_fraction(start + 65), 1.0, places=3)
