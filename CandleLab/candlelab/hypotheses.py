@@ -182,6 +182,39 @@ def _hour_effect(candles: Sequence[Candle]) -> list[int]:
     return out
 
 
+def _session(candles: Sequence[Candle]) -> tuple[list[int], list[int]]:
+    """Bandingkan jam pasar aktif dengan jam sepi.
+
+    Broker menyebut instrumen "OTC" sebagai feed sintetis buatan sendiri.
+    Yang bisa diuji dari data: apakah candle pada jam pasar aktif (London/New
+    York) berperilaku berbeda dari jam sepi. Dipisah dua daftar agar keduanya
+    dapat dinilai sendiri-sendiri, bukan digabung menjadi satu angka.
+    """
+    import datetime as _dt
+    aktif: list[dict[int, int]] = []
+    sepi: list[dict[int, int]] = []
+    for candle in candles:
+        if candle.direction == DOJI or not candle.timestamp:
+            continue
+        jam = _dt.datetime.fromtimestamp(candle.timestamp).hour
+        # 07:00-16:00 UTC kira-kira menutup sesi London dan New York.
+        bucket = aktif if 7 <= jam < 16 else sepi
+        bucket.append(candle.direction)
+
+    def skor(items: list[int]) -> list[int]:
+        """Apakah frekuensi hijau berbeda dari 50% pada kelompok ini?"""
+        if len(items) < 30:
+            return []
+        hijau = sum(1 for item in items if item == GREEN)
+        dasar = hijau / len(items)
+        if abs(dasar - 0.5) < 0.03:
+            return []
+        tebak = GREEN if dasar > 0.5 else RED
+        return [1 if item == tebak else 0 for item in items]
+
+    return skor(aktif), skor(sepi)
+
+
 # -- 4b. hipotesis berbasis HARGA ----------------------------------------
 # Semua hipotesis warna di atas buta terhadap harga: candle hijau raksasa dan
 # candle hijau seujung jarum dianggap sama. Empat hipotesis berikut memakai
@@ -301,6 +334,11 @@ HYPOTHESES: tuple[Hypothesis, ...] = (
         "Posisi close dalam rentang high-low. Ini informasi yang tidak dimiliki "
         "model warna, karena candle hijau bisa ditutup di mana saja.",
         _close_position),
+    Hypothesis(
+        "session", "Jam pasar vs jam sepi",
+        "Apakah frekuensi hijau berbeda pada jam pasar aktif dibanding jam sepi?",
+        "Memakai jam dari timestamp CSV. Jam pasar aktif 07:00-16:00 UTC.",
+        lambda candles: _session(candles)[0]),
     Hypothesis(
         "gap", "Celah harga antar-candle",
         "Apakah celah open terhadap close sebelumnya menentukan arah berikutnya?",

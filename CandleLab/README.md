@@ -264,6 +264,8 @@ Pengaman yang selalu berlaku:
 
 **Tombol NEW OPTION.** Setelah satu posisi dibuka, IQ Option mengganti tombol Higher/Lower dengan tombol oranye **+ NEW OPTION**. Klik otomatis mengenali tombol itu dan menekannya lebih dulu, menunggu form order terbuka, lalu menekan Higher/Lower sesuai tebakan. Karena itu satu candle tetap menghasilkan satu posisi, walaupun form order tertutup setelah trade sebelumnya.
 
+**Batas waktu entry.** Model menebak **candle berikutnya**, jadi entry harus terjadi di awal candle. Bila entry dilakukan di detik ke-48 dari candle 1 menit, settle hanya 12 detik kemudian — hasilnya ditentukan candle yang **sedang berjalan**, bukan yang diprediksi. Panel samping punya tombol pengubah batas: **paruh awal (<50%)**, **80% pertama**, atau **kapan saja**. Pada batas 50%, klik ditunda sampai candle berikutnya dan alasannya dicatat di log.
+
 **Kapan klik terjadi:** hanya saat mode live berjalan, ketika muncul tebakan **baru** untuk candle yang sedang berjalan. Maksimal satu klik per candle, dan hanya bila jendela IQ Option aktif. Urutan yang disarankan: mulai live → pastikan area benar → baru aktifkan klik otomatis.
 
 Alasan pembatasannya: pada payout 82% (seperti di IQ Option), akurasi impas adalah **54,9%**. Model ini terukur berkisar 49–55%, jadi gunakan hanya dengan uang demo.
@@ -276,6 +278,8 @@ Model warna memperlakukan candle hijau raksasa dan candle hijau seujung jarum se
 - **posisi close di dalam rentang high-low** — candle yang ditutup di dekat puncak menandakan pembeli masih memegang kendali.
 
 Keduanya digabungkan sebagai bukti tambahan dengan bobot kecil (0,30), jadi model warna tetap dominan dan hasil tidak pernah melompat ke 0% atau 100%. Bila sinyal harga aktif, label bukti berubah menjadi mis. `Bukti cukup + harga`.
+
+Instrumen **OTC** memakai feed sintetis buatan broker, sedangkan instrumen live memakai pasar sebenarnya. Hipotesis **Jam pasar vs jam sepi** membandingkan candle pada 07:00–16:00 UTC (sesi London dan New York) dengan jam lainnya, supaya Anda bisa melihat apakah perilakunya berbeda.
 
 Informasi harga juga dapat diuji sendiri di **Lab hipotesis**: *Arah tick terakhir*, *Dua tick searah*, *Penutupan di dekat puncak/dasar*, dan *Celah harga antar-candle*. Keempatnya dinilai dengan uji binomial dan koreksi Benjamini-Hochberg yang sama seperti hipotesis warna.
 
