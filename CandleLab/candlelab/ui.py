@@ -27,10 +27,14 @@ from .auto_click_win import (
     ClickLimiter,
     click_safety,
     foreground_title,
+    foreground_window,
     is_point_inside,
     left_click,
+    same_window,
     platform_supported,
     wait_for_new_option,
+    window_caption,
+    window_root_at,
 )
 from .rounds import (
     MIN_ROUNDS_FOR_SIGNAL,
@@ -652,6 +656,22 @@ class CandleLabApp(tk.Tk):
                 point = click_point(image.size, box[:2], pair, arah)
                 inside = is_point_inside(point, box)
                 lines.append(("✓" if inside else "✗") + f" Titik {nama}: {point[0]},{point[1]}")
+                if inside:
+                    # Tanpa baris ini, penolakan "titik bukan milik jendela
+                    # aktif" tidak bisa ditelusuri: pengguna hanya melihat
+                    # pesan tanpa tahu jendela mana yang terbaca di titik itu.
+                    bawah = window_root_at(point)
+                    judul_bawah = window_caption(bawah) if bawah else ""
+                    aktif_hwnd = foreground_window()
+                    cocok = same_window(bawah, aktif_hwnd) if bawah else None
+                    if bawah is None:
+                        lines.append("  • Jendela di titik ini tidak terbaca (dianggap aman)")
+                    elif cocok:
+                        lines.append(f"  ✓ Jendela di titik: '{judul_bawah or '?'}' (sama dengan yang aktif)")
+                    else:
+                        lines.append(f"  ✗ Jendela di titik: '{judul_bawah or '?'}'")
+                        lines.append(f"    berbeda dari jendela aktif: '{foreground_title() or '?'}'")
+                        ok = False
         judul = "Siap mengklik" if ok else "Belum siap"
         pesan = "\n".join(lines) + "\n\n" + (
             "Semua pengaman lolos. Klik otomatis akan menekan tombol pada candle "

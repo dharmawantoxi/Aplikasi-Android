@@ -156,6 +156,41 @@ def window_root_at(point: tuple[int, int]):
         return None
 
 
+def window_caption(handle) -> str:
+    """Judul jendela; string kosong bila tidak diketahui."""
+    if not platform_supported() or not handle:
+        return ""
+    try:
+        return _window_text(handle)
+    except (AttributeError, OSError, ValueError):
+        return ""
+
+
+def same_window(first, second) -> bool:
+    """Apakah dua handle menunjuk jendela yang sama.
+
+    Membandingkan handle mentah saja tidak cukup. ``WindowFromPoint`` dapat
+    mengembalikan jendela **anak** (mis. elemen chart di dalam peramban), dan
+    aplikasi berbasis Chromium memecah jendela ke beberapa proses. Karena itu
+    pemeriksaan berlapis: handle yang sama, proses yang sama, lalu judul yang
+    sama. Bila salah satu tidak diketahui, jawabannya False agar pemanggil
+    memakai pengaman lain, bukan menolak tanpa dasar.
+    """
+    if first is None or second is None:
+        return False
+    if first == second:
+        return True
+    pid_first = window_process_id(first)
+    pid_second = window_process_id(second)
+    if pid_first and pid_second and pid_first == pid_second:
+        return True
+    caption_first = window_caption(first).strip().lower()
+    caption_second = window_caption(second).strip().lower()
+    if caption_first and caption_second:
+        return caption_first == caption_second
+    return False
+
+
 def click_safety(point: tuple[int, int], region: tuple[int, int, int, int],
                  require_active: bool) -> ClickGuard:
     """Pengaman klik berbasis *titik*, bukan judul jendela.
@@ -180,11 +215,17 @@ def click_safety(point: tuple[int, int], region: tuple[int, int, int, int],
             "Jendela CandleLab sendiri sedang aktif. Klik dulu ke chart broker "
             "agar klik otomatis boleh menekan tombol.")
     target = window_root_at(point)
-    if target is not None and target != active:
-        return ClickGuard(
-            "Titik klik bukan milik jendela yang sedang aktif; klik dibatalkan "
-            "agar tidak menekan aplikasi lain.")
-    return ClickGuard()
+    if target is None:
+        # Jendela di bawah titik tidak terbaca. Pengaman lain sudah lolos, jadi
+        # menolak di sini hanya akan mematikan fitur tanpa alasan.
+        return ClickGuard()
+    if same_window(target, active):
+        return ClickGuard()
+    return ClickGuard(
+        "Titik klik bukan milik jendela yang sedang aktif "
+        f"(titik: '{window_caption(target) or '?'}' / "
+        f"aktif: '{window_caption(active) or '?'}'); klik dibatalkan agar tidak "
+        "menekan aplikasi lain.")
 
 
 def check_before_click(point: tuple[int, int], region: tuple[int, int, int, int],

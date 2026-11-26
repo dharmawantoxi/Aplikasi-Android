@@ -546,3 +546,84 @@ class NewOptionTests(unittest.TestCase):
             return state["n"] < 2
 
         self.assertTrue(wait_for_new_option(hides_quickly, timeout=1.0, interval=0.02))
+
+
+class SameWindowTests(unittest.TestCase):
+    """Jendela anak / proses lain dalam aplikasi yang sama harus dianggap sama."""
+
+    def test_identical_handles_match(self):
+        from candlelab.auto_click_win import same_window
+
+        self.assertTrue(same_window(0x1234, 0x1234))
+
+    def test_child_element_in_same_process_matches(self):
+        """WindowFromPoint sering mengembalikan elemen chart, bukan jendela induk."""
+        from unittest.mock import patch
+
+        from candlelab.auto_click_win import same_window
+
+        with patch("candlelab.auto_click_win.window_process_id", return_value=4242), \
+                patch("candlelab.auto_click_win.window_caption", return_value=""):
+            self.assertTrue(same_window(0xABC, 0xDEF))
+
+    def test_chromium_helper_process_matches_by_title(self):
+        """IQ Option di peramban: jendela anak bisa beda PID, judul tetap sama."""
+        from unittest.mock import patch
+
+        from candlelab.auto_click_win import same_window
+
+        with patch("candlelab.auto_click_win.window_process_id",
+                   side_effect=[111, 222]), \
+                patch("candlelab.auto_click_win.window_caption",
+                      return_value="IQ Option - Google Chrome"):
+            self.assertTrue(same_window(0x1, 0x2))
+
+    def test_different_windows_do_not_match(self):
+        from unittest.mock import patch
+
+        from candlelab.auto_click_win import same_window
+
+        with patch("candlelab.auto_click_win.window_process_id",
+                   side_effect=[111, 222]), \
+                patch("candlelab.auto_click_win.window_caption",
+                      side_effect=["IQ Option", "Notepad"]):
+            self.assertFalse(same_window(0x1, 0x2))
+
+    def test_unknown_identity_does_not_reject(self):
+        from unittest.mock import patch
+
+        from candlelab.auto_click_win import same_window
+
+        with patch("candlelab.auto_click_win.window_process_id", return_value=None), \
+                patch("candlelab.auto_click_win.window_caption", return_value=""):
+            self.assertFalse(same_window(0x1, 0x2))
+
+    def test_click_safety_allows_when_target_window_is_unknown(self):
+        """Kalau jendela di titik tak terbaca, pengaman lain yang menentukan."""
+        from unittest.mock import patch
+
+        from candlelab.auto_click_win import click_safety
+
+        with patch("candlelab.auto_click_win.platform_supported", return_value=True), \
+                patch("candlelab.auto_click_win.foreground_window", return_value=111), \
+                patch("candlelab.auto_click_win.is_our_window", return_value=False), \
+                patch("candlelab.auto_click_win.window_root_at", return_value=None):
+            guard = click_safety((200, 300), (100, 200, 400, 600), True)
+        self.assertTrue(guard.allowed, guard.reason)
+
+    def test_rejection_names_both_windows(self):
+        from unittest.mock import patch
+
+        from candlelab.auto_click_win import click_safety
+
+        with patch("candlelab.auto_click_win.platform_supported", return_value=True), \
+                patch("candlelab.auto_click_win.foreground_window", return_value=111), \
+                patch("candlelab.auto_click_win.is_our_window", return_value=False), \
+                patch("candlelab.auto_click_win.window_root_at", return_value=999), \
+                patch("candlelab.auto_click_win.same_window", return_value=False), \
+                patch("candlelab.auto_click_win.window_caption",
+                      side_effect=["IQ Option", "Notepad"]):
+            guard = click_safety((200, 300), (100, 200, 400, 600), True)
+        self.assertFalse(guard.allowed)
+        self.assertIn("IQ Option", guard.reason)
+        self.assertIn("Notepad", guard.reason)

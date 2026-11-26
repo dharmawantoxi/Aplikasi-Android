@@ -244,6 +244,8 @@ Aktifkan lewat panel tebak otomatis setelah mengalibrasi tombol:
 
 **Pengaman klik berbasis titik, bukan judul jendela.** Yang diperiksa adalah: titik yang akan diklik memang milik jendela yang sedang aktif, dan jendela itu bukan CandleLab sendiri. Ini membuat fitur tetap bekerja saat IQ Option berjalan di peramban dengan judul berbeda.
 
+**Identitas jendela, bukan handle mentah.** `WindowFromPoint` dapat mengembalikan elemen **anak** di dalam chart, dan peramban memecah jendela ke beberapa proses. Karena itu titik klik dianggap sah bila jendela di bawahnya punya **handle, proses, atau judul** yang sama dengan jendela aktif. Bila jendela di titik itu sama sekali tidak terbaca, pengaman tidak menolak — pengaman lain yang menentukan.
+
 **Bila tidak ada klik sama sekali:** klik **"Uji klik sekarang (tanpa klik)"** di panel samping. Tombol ini memeriksa seluruh rantai tanpa menekan apa pun — area tombol, pengenalan tombol Higher/Lower, dan apakah jendela IQ Option sedang aktif. Baris bertanda ✗ adalah penyebabnya.
 
 Badge juga menampilkan `klik ditolak` beserta alasan singkatnya. Tombol **⚡** tidak berwarna saat mati dan berubah **jingga** saat aktif, jadi sekali lihat Anda tahu apakah klik otomatis menyala. Tombol **⚙** membuka jendela penuh, **✕** menghentikan live.
