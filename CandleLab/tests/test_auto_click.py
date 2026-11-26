@@ -458,3 +458,91 @@ class BadgeClickColourTests(unittest.TestCase):
 
     def test_button_starts_uncoloured(self):
         self.assertIn('("⚡", self._toggle_click, CLICK_OFF_FG)', self.source)
+
+
+class NewOptionTests(unittest.TestCase):
+    """Tombol NEW OPTION oranye harus dikenali tanpa tertukar dengan LOWER."""
+
+    ORANGE = (235, 110, 0)     # diukur dari screenshot IQ Option
+    LOWER_RED = (215, 76, 57)
+    GREEN = (0, 155, 46)
+
+    def _image(self, blocks):
+        from PIL import Image
+
+        image = Image.new("RGB", (420, 780), (255, 255, 255))
+        for box, colour in blocks:
+            for y in range(box[1], box[3]):
+                for x in range(box[0], box[2]):
+                    image.putpixel((x, y), colour)
+        return image
+
+    def _session_buttons(self):
+        """Susunan seperti layar IQ Option: HIGHER hijau, LOWER merah."""
+        return [
+            ((160, 460, 400, 580), self.GREEN),
+            ((160, 620, 400, 740), self.LOWER_RED),
+        ]
+
+    def test_orange_button_is_detected(self):
+        from candlelab.auto_click import find_new_option
+
+        image = self._image(self._session_buttons() + [((20, 60, 300, 300), self.ORANGE)])
+        box, reason = find_new_option(image)
+        self.assertIsNotNone(box, reason)
+        self.assertLess(box[1], 400, "tombol oranye harus ditemukan di bagian atas")
+
+    def test_orange_is_not_mistaken_for_lower(self):
+        from candlelab.auto_click import find_button_pair, find_new_option
+
+        image = self._image(self._session_buttons() + [((20, 60, 300, 300), self.ORANGE)])
+        self.assertIsNotNone(find_new_option(image)[0])
+        pair, reason = find_button_pair(image)
+        # Pasangan tetap harus ketemu, dan Lower tidak boleh jatuh di area oranye.
+        self.assertIsNotNone(pair, reason)
+        self.assertGreater(pair.lower[1], 500, "Lower tertukar dengan tombol NEW OPTION")
+
+    def test_no_orange_reports_nothing(self):
+        from candlelab.auto_click import find_new_option
+
+        image = self._image(self._session_buttons())
+        box, reason = find_new_option(image)
+        self.assertIsNone(box)
+        self.assertIn("tidak terlihat", reason)
+
+    def test_green_and_red_are_not_orange(self):
+        from candlelab.auto_click import orange_mask
+
+        image = self._image([((10, 10, 200, 200), self.GREEN),
+                             ((10, 210, 200, 400), self.LOWER_RED)])
+        self.assertEqual(sum(orange_mask(image)), 0,
+                         "hijau/merah tidak boleh masuk masker oranye")
+
+    def test_new_option_point_is_absolute(self):
+        from candlelab.auto_click import new_option_point
+
+        self.assertEqual(new_option_point((100, 100), (1450, 110), (20, 40, 80, 100)),
+                         (1450 + 50, 110 + 70))
+
+    def test_wait_helper_gives_up_after_timeout(self):
+        from candlelab.auto_click_win import wait_for_new_option
+
+        calls = []
+
+        def always_visible():
+            calls.append(1)
+            return True
+
+        self.assertFalse(wait_for_new_option(always_visible, timeout=0.2, interval=0.05))
+        self.assertGreater(len(calls), 1)
+
+    def test_wait_helper_returns_once_hidden(self):
+        from candlelab.auto_click_win import wait_for_new_option
+
+        state = {"n": 0}
+
+        def hides_quickly():
+            state["n"] += 1
+            return state["n"] < 2
+
+        self.assertTrue(wait_for_new_option(hides_quickly, timeout=1.0, interval=0.02))

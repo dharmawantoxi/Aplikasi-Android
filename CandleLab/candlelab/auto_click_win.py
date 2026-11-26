@@ -217,6 +217,28 @@ def left_click(point: tuple[int, int], settle: float = 0.02) -> None:
     user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
 
 
+def wait_for_new_option(probe, timeout: float = 1.5, interval: float = 0.15):
+    """Tunggu tombol NEW OPTION hilang setelah diklik.
+
+    Setelah NEW OPTION ditekan, form order butuh waktu singkat untuk tampil.
+    Mengklik Higher/Lower terlalu cepat berarti mengklik tombol yang belum ada,
+    sehingga klik pertama hilang. ``probe`` mengembalikan True selama tombol
+    masih terlihat.
+    """
+    deadline = time.monotonic() + max(0.0, timeout)
+    while time.monotonic() < deadline:
+        try:
+            if not probe():
+                return True
+        except Exception:
+            return False
+        time.sleep(interval)
+    try:
+        return not probe()
+    except Exception:
+        return False
+
+
 class ClickLimiter:
     """Batas jumlah klik agar kesalahan deteksi tidak berulang-ulang.
 
