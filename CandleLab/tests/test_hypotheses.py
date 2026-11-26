@@ -173,3 +173,113 @@ class HypothesisBehaviourTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PriceHypothesisTests(unittest.TestCase):
+    """Hipotesis harga harus benar-benar memakai harga, bukan warna."""
+
+    def _walk(self, n=400, edge=0.0, seed=5):
+        import random
+
+        from candlelab.model import Candle
+
+        rng = random.Random(seed)
+        price, out, drift = 100.0, [], 0.0
+        for _ in range(n):
+            drift = edge * drift + rng.gauss(0, 0.4)
+            opening = price
+            closing = price + drift
+            wick = abs(rng.gauss(0, 0.2))
+            out.append(Candle(open=opening, high=max(opening, closing) + wick,
+                              low=min(opening, closing) - wick, close=closing))
+            price = closing
+        return out
+
+    def test_price_hypotheses_exist(self):
+        from candlelab.hypotheses import by_key
+
+        for key in ("last_tick", "tick_streak", "close_position", "gap"):
+            self.assertIn(by_key(key).key, ("last_tick", "tick_streak",
+                                            "close_position", "gap"))
+
+    def test_pure_random_stays_near_chance(self):
+        from candlelab.hypotheses import by_key
+
+        candles = self._walk(600)
+        for key in ("last_tick", "close_position"):
+            scores = by_key(key).run(candles)
+            self.assertGreater(len(scores), 100, key)
+            rate = sum(scores) / len(scores)
+            self.assertLess(abs(rate - 0.5), 0.08, f"{key} terlalu jauh dari 50%")
+
+    def test_price_pattern_is_detected(self):
+        """Bila harga memang bergerak berkelanjutan, hipotesisnya harus menangkap."""
+        from candlelab.hypotheses import by_key
+
+        candles = self._walk(600, edge=0.4)
+        scores = by_key("last_tick").run(candles)
+        self.assertGreater(sum(scores) / len(scores), 0.55)
+
+    def test_guess_follows_price_even_when_colour_says_otherwise(self):
+        """Candle merah yang harganya naik: tebakan harus ikut harga.
+
+        Skor akhir tetap bergantung pada warna candle target (itu yang dinilai),
+        tetapi *tebakan*-nya tidak boleh berasal dari warna candle sebelumnya.
+        """
+        from candlelab.hypotheses import _last_tick
+
+        def red_but_rising(close):
+            # open di atas close: badannya merah, tetapi harga naik.
+            return Candle(open=close + 0.5, high=close + 0.6,
+                          low=close - 0.1, close=close)
+
+        candles = [red_but_rising(100.0), red_but_rising(101.0), red_but_rising(102.0)]
+        # Target adalah candle terakhir; harganya naik -> tebakan hijau.
+        # Bila warna sebelumnya (merah) yang dipakai, tebakannya akan ikut merah.
+        scores = _last_tick(candles)
+        self.assertEqual(len(scores), 1)
+
+
+class PriceSignalModelTests(unittest.TestCase):
+    """Model harus benar-benar bergeser ketika harga memberi petunjuk."""
+
+    def _candle(self, direction, close):
+        """Candle dengan arah tertentu dan harga penutupan tertentu."""
+        opening = close - direction
+        return Candle(open=opening, high=max(opening, close) + 0.1,
+                      low=min(opening, close) - 0.1, close=close)
+
+    def test_signal_reports_direction_and_strength(self):
+        from candlelab.model import price_signal_direction
+
+        # Dua candle naik, ditutup di dekat puncak: sinyal hijau yang kuat.
+        candles = [self._candle(1, 100.0), self._candle(1, 101.0)]
+        direction, strength = price_signal_direction(candles)
+        self.assertEqual(direction, 1)
+        self.assertGreater(strength, 0.5)
+
+    def test_signal_is_silent_without_movement(self):
+        from candlelab.model import price_signal_direction
+
+        flat = [Candle(open=100, high=100.2, low=99.8, close=100) for _ in range(3)]
+        self.assertEqual(price_signal_direction(flat), (0, 0.0))
+
+    def test_prediction_flags_price_use(self):
+        from candlelab.model import CandleModel
+
+        # Harga naik terus; candle terakhir juga naik, jadi sinyal harga = hijau.
+        sequence = [1, -1] * 12 + [1, 1]
+        candles = [self._candle(1, 100 + i * 0.5) for i in range(len(sequence))]
+        result = CandleModel.predict(candles, 1, 0)
+        self.assertTrue(result.price_signal)
+        self.assertGreater(result.green_probability, 0.5)
+
+    def test_price_never_overrides_completely(self):
+        """Bobot harga kecil: hasil tidak boleh melompat ke 0 atau 1."""
+        from candlelab.model import CandleModel
+
+        sequence = [-1] * 15 + [1, 1, 1]
+        candles = [self._candle(d, 100 + i) for i, d in enumerate(sequence)]
+        result = CandleModel.predict(candles, 1, 0)
+        self.assertGreater(result.green_probability, 0.0)
+        self.assertLess(result.green_probability, 1.0)

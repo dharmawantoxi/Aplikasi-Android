@@ -182,6 +182,71 @@ def _hour_effect(candles: Sequence[Candle]) -> list[int]:
     return out
 
 
+# -- 4b. hipotesis berbasis HARGA ----------------------------------------
+# Semua hipotesis warna di atas buta terhadap harga: candle hijau raksasa dan
+# candle hijau seujung jarum dianggap sama. Empat hipotesis berikut memakai
+# angka harga, sehingga bisa menjawab apakah informasi itu menambah sesuatu.
+def _last_tick(candles: Sequence[Candle]):
+    """Apakah arah tick terakhir (close ke close) berlanjut?"""
+    def decide(target: int) -> int | None:
+        if target < 2:
+            return None
+        now_close = candles[target - 1].close
+        before_close = candles[target - 2].close
+        if now_close == before_close:
+            return None
+        return GREEN if now_close > before_close else RED
+    return _scores(candles, decide)
+
+
+def _tick_streak(candles: Sequence[Candle]):
+    """Dua tick terakhir searah: apakah candle berikutnya ikut?"""
+    def decide(target: int) -> int | None:
+        if target < 3:
+            return None
+        a = candles[target - 3].close
+        b = candles[target - 2].close
+        c = candles[target - 1].close
+        if b > a and c > b:
+            return GREEN
+        if b < a and c < b:
+            return RED
+        return None
+    return _scores(candles, decide)
+
+
+def _close_position(candles: Sequence[Candle]):
+    """Posisi close di dalam rentang candle: penutupan di dekat puncak/dasar."""
+    def decide(target: int) -> int | None:
+        if target < 1:
+            return None
+        candle = candles[target - 1]
+        span = candle.high - candle.low
+        if span <= 0:
+            return None
+        position = (candle.close - candle.low) / span
+        if position >= 0.66:
+            return GREEN
+        if position <= 0.34:
+            return RED
+        return None
+    return _scores(candles, decide)
+
+
+def _gap(candles: Sequence[Candle]):
+    """Celah antara open candle terakhir dan close sebelumnya."""
+    def decide(target: int) -> int | None:
+        if target < 2:
+            return None
+        open_now = candles[target - 1].open
+        close_before = candles[target - 2].close
+        span = max(candles[target - 1].high - candles[target - 1].low, 1e-9)
+        if abs(open_now - close_before) / span < 0.10:
+            return None
+        return GREEN if open_now > close_before else RED
+    return _scores(candles, decide)
+
+
 HYPOTHESES: tuple[Hypothesis, ...] = (
     Hypothesis(
         "ngram1", "Pola 1 candle", "Apakah warna candle terakhir memprediksi yang berikutnya?",
@@ -220,6 +285,27 @@ HYPOTHESES: tuple[Hypothesis, ...] = (
         "hour", "Efek jam",
         "Apakah ada jam tertentu yang condong hijau atau merah?",
         "Memerlukan CSV dengan kolom timestamp.", _hour_effect),
+    Hypothesis(
+        "last_tick", "Arah tick terakhir (harga)",
+        "Apakah arah harga terakhir (close ke close) berlanjut ke candle berikutnya?",
+        "Memakai selisih harga antar-close, bukan warna. Hijau/merah candle diabaikan.",
+        _last_tick),
+    Hypothesis(
+        "tick_streak", "Dua tick searah (harga)",
+        "Setelah dua pergerakan harga searah, apakah candle berikutnya ikut?",
+        "Momentum harga jangka sangat pendek: dua selisih close berturut-turut.",
+        _tick_streak),
+    Hypothesis(
+        "close_position", "Penutupan di dekat puncak/dasar",
+        "Apakah candle yang ditutup dekat puncak diikuti candle hijau?",
+        "Posisi close dalam rentang high-low. Ini informasi yang tidak dimiliki "
+        "model warna, karena candle hijau bisa ditutup di mana saja.",
+        _close_position),
+    Hypothesis(
+        "gap", "Celah harga antar-candle",
+        "Apakah celah open terhadap close sebelumnya menentukan arah berikutnya?",
+        "Hanya candle dengan celah >10% rentang; memakai harga, bukan warna.",
+        _gap),
 )
 
 
