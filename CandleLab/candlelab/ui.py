@@ -9,6 +9,7 @@ from tkinter import filedialog, messagebox, ttk
 import traceback
 
 from . import APP_NAME, __version__
+from .applog import CLICK, ERROR, INFO, REJECT, AppLog
 from .charts import CandleChart, LogoMark, ProbabilityBar
 from .csv_io import export_csv, load_csv
 from .experiments import summarise
@@ -27,10 +28,14 @@ from .auto_click_win import (
     ClickLimiter,
     click_safety,
     foreground_title,
+    foreground_window,
     is_point_inside,
     left_click,
+    same_window,
     platform_supported,
     wait_for_new_option,
+    window_caption,
+    window_root_at,
 )
 from .rounds import (
     MIN_ROUNDS_FOR_SIGNAL,
@@ -83,6 +88,8 @@ class CandleLabApp(tk.Tk):
         # tertimpa status deteksi live yang berganti setiap 2 detik.
         self.click_status = ""
         self._clicking = False
+        # Log dipakai untuk menelusuri masalah klik; isinya bisa disalin utuh.
+        self.log = AppLog()
         self._last_foreign_hwnd = 0
         self.screen_region = self.state.screen_region
         self.live_monitor = None
@@ -514,6 +521,10 @@ class CandleLabApp(tk.Tk):
             fill="x", pady=(3, 0))
         button(box, "Uji klik sekarang (tanpa klik)", self.test_click_now,
                "secondary").pack(fill="x", pady=(3, 0))
+        button(box, "Buka log (bisa disalin)", self.open_log_window,
+               "secondary").pack(fill="x", pady=(3, 0))
+        text(box, self.log.summary(), 7, "#6F8377",
+             bg=SIDEBAR_SOFT).pack(anchor="w", pady=(2, 0))
         if not self.state.click_region:
             text(box, "Belum dikalibrasi. Atur di halaman Data.",
                  7, "#C9A227", bg=SIDEBAR_SOFT).pack(anchor="w", pady=(2, 0))
@@ -543,6 +554,7 @@ class CandleLabApp(tk.Tk):
         """
         if not enable:
             self.auto_click_enabled = False
+            self._log(INFO, "klik otomatis dimatikan")
             self.set_status("Klik otomatis dimatikan.")
             self._refresh_overlay()
             return True
@@ -573,6 +585,7 @@ class CandleLabApp(tk.Tk):
         ):
             return False
         self.auto_click_enabled = True
+        self._log(INFO, f"klik otomatis AKTIF • area {self.state.click_region}")
         self.click_guard = ClickLimiter()
         self.click_status = ""
         self._clicked_candle = -1
@@ -585,6 +598,49 @@ class CandleLabApp(tk.Tk):
         if self.overlay is not None:
             return self.overlay.window
         return self
+
+    def open_log_window(self):
+        """Tampilkan log untuk diperiksa dan disalin."""
+        window = tk.Toplevel(self)
+        window.title("Log CandleLab")
+        window.configure(bg=BG)
+        window.geometry("900x560")
+        window.transient(self)
+        header = tk.Frame(window, bg=BG, padx=16, pady=10)
+        header.pack(fill="x")
+        text(header, "Log kegiatan", 13, INK, "bold", bg=BG).pack(side="left")
+        text(header, "  salin seluruhnya lalu kirim bila perlu bantuan", 8, MUTED,
+             bg=BG).pack(side="left", padx=(8, 0))
+
+        body = tk.Text(window, bg="#0E1F19", fg="#C9D6CF", insertbackground="#C9D6CF",
+                       font=(FONT, 8), wrap="none", padx=10, pady=8)
+        scroll = tk.Scrollbar(window, command=body.yview)
+        body.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+        body.pack(fill="both", expand=True, padx=16)
+
+        def _isi():
+            body.delete("1.0", "end")
+            isi = self.log.text() or "Belum ada catatan."
+            body.insert("1.0", isi)
+            body.see("end")
+
+        def _salin():
+            isi = self.log.text()
+            self.clipboard_clear()
+            self.clipboard_append(isi)
+            self.update_idletasks()
+            self.set_status(f"{len(self.log.entries)} baris log disalin.")
+
+        bar = tk.Frame(window, bg=BG, padx=16, pady=10)
+        bar.pack(fill="x")
+        button(bar, "Salin semua", _salin, "primary").pack(side="left")
+        button(bar, "Muat ulang", _isi, "secondary").pack(side="left", padx=6)
+        button(bar, "Bersihkan", lambda: (self.log.clear(), _isi()), "secondary").pack(
+            side="left")
+        button(bar, "Tutup", window.destroy, "secondary").pack(side="right")
+        _isi()
+        return window
 
     def test_click_now(self):
         """Periksa seluruh rantai klik tanpa benar-benar menekan tombol.
@@ -652,6 +708,22 @@ class CandleLabApp(tk.Tk):
                 point = click_point(image.size, box[:2], pair, arah)
                 inside = is_point_inside(point, box)
                 lines.append(("✓" if inside else "✗") + f" Titik {nama}: {point[0]},{point[1]}")
+                if inside:
+                    # Tanpa baris ini, penolakan "titik bukan milik jendela
+                    # aktif" tidak bisa ditelusuri: pengguna hanya melihat
+                    # pesan tanpa tahu jendela mana yang terbaca di titik itu.
+                    bawah = window_root_at(point)
+                    judul_bawah = window_caption(bawah) if bawah else ""
+                    aktif_hwnd = foreground_window()
+                    cocok = same_window(bawah, aktif_hwnd) if bawah else None
+                    if bawah is None:
+                        lines.append("  • Jendela di titik ini tidak terbaca (dianggap aman)")
+                    elif cocok:
+                        lines.append(f"  ✓ Jendela di titik: '{judul_bawah or '?'}' (sama dengan yang aktif)")
+                    else:
+                        lines.append(f"  ✗ Jendela di titik: '{judul_bawah or '?'}'")
+                        lines.append(f"    berbeda dari jendela aktif: '{foreground_title() or '?'}'")
+                        ok = False
         judul = "Siap mengklik" if ok else "Belum siap"
         pesan = "\n".join(lines) + "\n\n" + (
             "Semua pengaman lolos. Klik otomatis akan menekan tombol pada candle "
@@ -732,6 +804,7 @@ class CandleLabApp(tk.Tk):
                 return
             left_click(point)
             self.click_status = "NEW OPTION ditekan • menunggu Higher/Lower"
+            self._log(CLICK, f"NEW OPTION di {point[0]},{point[1]}")
             self.set_status(self.click_status)
             self._refresh_overlay()
 
@@ -776,6 +849,9 @@ class CandleLabApp(tk.Tk):
         arah = "Higher" if direction == 1 else "Lower"
         self.click_status = (f"KLIK {arah} di {point[0]},{point[1]} • "
                              f"{self.click_guard.count} klik sesi ini")
+        self._last_skip = ""
+        self._log(CLICK, f"{arah} di {point[0]},{point[1]} "
+                         f"(klik ke-{self.click_guard.count} sesi ini)")
         self.set_status(self.click_status)
 
     def _needs_own_window_exception(self) -> bool:
@@ -808,9 +884,17 @@ class CandleLabApp(tk.Tk):
         except Exception:
             pass
 
+    def _log(self, level: str, message: str):
+        try:
+            self.log.add(level, message)
+        except Exception:
+            # Pencatatan tidak boleh menghentikan apa pun yang sedang berjalan.
+            pass
+
     def _click_problem(self, reason: str):
         """Catat penolakan klik agar terlihat di badge, bukan hanya status live."""
         self.click_status = "KLIK DITOLAK • " + reason
+        self._log(REJECT, reason)
         self.set_status(self.click_status)
         self._refresh_overlay()
 
@@ -1126,6 +1210,7 @@ class CandleLabApp(tk.Tk):
             self.deiconify()
 
         self._remember_foreign_window()
+        self._log(INFO, f"live dimulai • area {box} • {len(initial.candles)} candle")
         self.live_generation += 1
         self.live_active = True
         self.live_candles = list(initial.candles)
@@ -1463,6 +1548,11 @@ class CandleLabApp(tk.Tk):
         """
         current = self.rounds.current
         if current is None or current.resolved:
+            # Dicatat sekali saja agar log tidak banjir setiap 2 detik.
+            alasan = ("belum ada tebakan" if current is None else "candle sudah dinilai")
+            if self.auto_click_enabled and getattr(self, "_last_skip", "") != alasan:
+                self._last_skip = alasan
+                self._log(INFO, f"klik belum dilakukan • {alasan}")
             return
         if not self.auto_click_enabled or not self.state.click_region:
             return
@@ -2077,6 +2167,7 @@ class CandleLabApp(tk.Tk):
         # yang melempar akan memutus rantai pembaruan badge dan tebakan.
         if self.live_active:
             self.click_status = f"KLIK DITOLAK • kesalahan internal: {val}"
+            self._log(ERROR, f"kesalahan internal: {val}")
             self.set_status("Fitur klik otomatis gagal, tetapi live tetap berjalan.")
             return
         messagebox.showerror("Terjadi kesalahan", f"{val}\n\nData Anda tidak dikirim ke mana pun.", parent=self)
