@@ -137,7 +137,7 @@ class RoundTracker:
         self._opened_at = None
 
 
-    def observe(self, history_candles: Sequence, prediction) -> Optional[Round]:
+    def observe(self, history_candles: Sequence, prediction, *, geometry=False) -> Optional[Round]:
         """Perbarui putaran. Kembalikan putaran yang baru selesai (bila ada).
 
         Chart broker umumnya **bergeser**, bukan bertambah panjang: jumlah
@@ -154,6 +154,8 @@ class RoundTracker:
 
         if not old:
             pass
+        elif geometry and history:
+            resolved = self._resolve(self.current, history[-1])
         elif len(history) > len(old):
             if history[:len(old)] == old:
                 resolved = self._resolve(self.current, history[len(old)])

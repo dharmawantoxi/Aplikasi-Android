@@ -47,3 +47,16 @@ class MinuteTests(unittest.TestCase):
         for t, history in [(175, 'HMMH'), (177, 'HMMH'), (181, 'MMHM')]:
             gate.observe(t, history)
         self.assertTrue(gate.has_current_signal(181))
+
+    def test_geometry_on_repeated_colour(self):
+        old = tuple(zip(range(0, 60, 10), [5, 12, 8, 16, 6, 1]))
+        for new, expected in [
+                (old, False),
+                (old + ((60, 3),), True),
+                (tuple(zip(range(0, 60, 10), [12, 8, 16, 6, 9, 2])), True),
+                (tuple(zip(range(0, 60, 10), [9, -3, 1, -17, 8, 6])), False)]:
+            gate = MinuteGate()
+            for t in (55, 57):
+                gate.observe(t, 'H'*8, old)
+            self.assertEqual(gate.observe(61, 'H'*8, new), expected)
+            self.assertFalse(gate.observe(63, 'H'*8, new))
