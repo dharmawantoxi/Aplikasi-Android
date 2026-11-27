@@ -15,7 +15,7 @@ from .csv_io import export_csv, load_csv
 from .experiments import summarise
 from .hud_layout import best_badge_corner
 from .live_hud import LiveHud
-from .minute import MinuteGate
+from .minute import MinuteGate, bar_trace
 from .overlay import BADGE_HEIGHT, BADGE_WIDTH, OverlayBadge
 from .hypotheses import HYPOTHESES, run_hypothesis
 from .hypothesis_stats import evaluate, evaluate_many
@@ -1203,7 +1203,7 @@ class CandleLabApp(tk.Tk):
         prior_benchmark = getattr(self, "_benchmark_direction", DOJI)
         self._benchmark_direction = benchmark.predicted_direction if benchmark.available else DOJI
         self.locked_prediction = prediction
-        finished = self.rounds.observe(history, prediction)
+        finished = self.rounds.observe(history, prediction, geometry=self.minute_gate.used_geometry)
         self._round_status = ""
         if finished is not None and finished.correct is not None:
             pembanding = ("seimbang/tidak tersedia" if not prior_benchmark else
@@ -1246,7 +1246,7 @@ class CandleLabApp(tk.Tk):
         sequence = result.sequence
         captured = event.captured
         previous = self.minute_gate.signal
-        changed = self.minute_gate.observe(captured, sequence[:-1]) if captured else False
+        changed = self.minute_gate.observe(captured, sequence[:-1], bar_trace(result.detections)) if captured else False
         if captured and captured % 60 <= 10 and not changed and not self.minute_gate.has_current_signal(captured):
             key = (int(captured // 60), self.minute_gate.reason)
             if getattr(self, "_last_wait_log", None) != key:
@@ -1264,7 +1264,7 @@ class CandleLabApp(tk.Tk):
             arah = {1: "Higher", -1: "Lower"}.get(self.locked_prediction.predicted_direction)
             detail = arah or self.locked_prediction.reason
             self._log(INFO, f"Aba-aba manual 1m • {datetime.fromtimestamp(captured):%H:%M:%S}"
-                            f" • {detail}")
+                            f" • {detail} • {'posisi batang' if self.minute_gate.used_geometry else 'urutan warna'}")
         if self._round_status and self._round_status != previous_status:
             # Hasil putaran lebih penting daripada statistik deteksi, tetapi
             # hanya ditampilkan sekali agar status tidak berkedip.

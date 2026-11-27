@@ -263,3 +263,5 @@ Hasil hanya layak dipakai bila **dua syarat terpenuhi bersama**: nilai-p < 0,05 
 Satu hipotesis juga diverifikasi agar tidak menipu: efek jam sempat terlihat 60,4% pada data acak murni karena frekuensi dasarnya dihitung dari seluruh data (termasuk masa depan). Setelah dibuat walk-forward, hasilnya 51,7% dan tidak signifikan.
 
 **Strategi arah LIVE (TF 1 menit):** bandingkan close candle terakhir yang sudah tutup dengan rata-rata tiga close sebelumnya pada pembacaan layar yang sama. Di atas → Higher, di bawah → Lower, sama → arah live sebelumnya (tanpa arah awal: tunggu). Warna candle berjalan tidak dipakai. Ini aturan arah, bukan persentase peluang. Setelah putaran dinilai, log membandingkan hasil warna dengan model probabilitas lama tanpa membuka posisi kedua. Backtest model probabilitas di luar live tidak mengukur strategi ini.
+
+Dalam mode live, CandleLab juga mencocokkan posisi horizontal dan tinggi body candle tertutup. Ini membantu mengenali satu batang baru walau urutan warna sama. Grid yang diam tanpa bukti pergeseran tidak cukup. Log aba-aba menyebut `posisi batang` atau `urutan warna`.
