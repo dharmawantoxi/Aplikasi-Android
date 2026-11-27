@@ -1,7 +1,7 @@
 """Penyimpanan JSON lokal dengan penulisan atomik."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 import json
 import os
@@ -9,6 +9,7 @@ from pathlib import Path
 import sys
 from typing import Optional
 
+from .positions import Position
 from .experiments import Experiment
 from .model import Candle, MAX_CANDLES, make_demo_candles
 
@@ -50,6 +51,8 @@ class AppState:
     live_rounds: list[bool] = field(default_factory=list)
     # Area panel tombol Higher/Lower, untuk mode klik otomatis (opsional).
     click_region: tuple[int, int, int, int] | None = None
+
+    positions: list[Position] = field(default_factory=list)
 
     @property
     def pending(self) -> Optional[Experiment]:
@@ -133,6 +136,7 @@ class JsonStore:
             state = AppState(candles, experiments[-200:], bool(raw.get("is_demo", False)),
                              tuple(region) if region else None, live_rounds,
                              tuple(click_raw) if click_raw else None)
+            state.positions = [Position(**r) for r in raw.get("positions", [])[-LIVE_ROUNDS_KEPT:]]
             # Prediksi tertunda dari sesi lama hanya sah jika candle berikutnya belum masuk.
             pending = state.pending
             if pending and len(candles) == pending.candle_count + 1:
@@ -157,6 +161,7 @@ class JsonStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "format_version": 1,
+            "positions": [asdict(r) for r in state.positions[-LIVE_ROUNDS_KEPT:]],
             "is_demo": state.is_demo,
             "candles": [
                 {"open": c.open, "high": c.high, "low": c.low, "close": c.close, "timestamp": c.timestamp}

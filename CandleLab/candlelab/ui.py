@@ -34,7 +34,8 @@ from .model import (
     DOJI, GREEN as GREEN_DIRECTION, PRIOR_STRENGTH, RED as RED_DIRECTION,
     Candle, CandleModel, CloseSignal, close_vs_three, make_demo_candles,
 )
-from .storage import JsonStore
+from .positions import Position, session_result
+from .storage import JsonStore, LIVE_ROUNDS_KEPT
 from .screen_capture import capture_region, capture_after_overlay_closed
 from .screen_ui import select_and_capture
 from .vision import VisionResult, detect_candles
@@ -60,6 +61,7 @@ class CandleLabApp(tk.Tk):
         # Putaran tebak otomatis: tebakan dikunci per candle lalu dinilai
         # oleh candle itu sendiri saat selesai.
         self.rounds = RoundTracker()
+        self.position_session = datetime.now().isoformat(sep=" ", timespec="seconds")
         self.minute_gate = MinuteGate()
         self.locked_prediction = None
         self.clock = CandleClock()
@@ -1035,6 +1037,7 @@ class CandleLabApp(tk.Tk):
         # dari area pembacaan yang berbeda.
         self.rounds.reset()
         self.clock.reset()
+        self.position_session = datetime.now().isoformat(sep=" ", timespec="seconds")
         self.minute_gate = MinuteGate()
         self.locked_prediction = None
         try:
@@ -1463,11 +1466,17 @@ class CandleLabApp(tk.Tk):
             detail = arah or self.locked_prediction.reason
             self._log(INFO, f"Aba-aba 1m • {datetime.fromtimestamp(captured):%H:%M:%S}"
                             f" • {detail} • {'posisi batang' if self.minute_gate.used_geometry else 'urutan warna'}")
+            if arah:
+                self.state.positions.append(Position(self.position_session,
+                    datetime.fromtimestamp(captured).strftime("%H:%M:%S"), self.locked_prediction.predicted_direction))
+                del self.state.positions[:-LIVE_ROUNDS_KEPT]
             if self.auto_click_enabled and arah:
                 try:
                     self._maybe_auto_click(self.locked_prediction.predicted_direction)
                 except (OSError, RuntimeError, ValueError) as exc:
                     self._click_problem(str(exc))
+            if arah:
+                self._save_quietly()
         if self._round_status and self._round_status != previous_status:
             # Hasil putaran lebih penting daripada statistik deteksi, tetapi
             # hanya ditampilkan sekali agar status tidak berkedip.
@@ -1855,6 +1864,50 @@ class CandleLabApp(tk.Tk):
         text(right, acc, 13, INK, "bold", SURFACE).pack(anchor="e")
         text(right, f"n={verdict.total}  p={verdict.adjusted_p:.3f}", 8, MUTED, SURFACE).pack(anchor="e")
 
+    def _position_panel(self, page):
+        panel = card(page, padding=12)
+        panel.pack(fill="x", pady=8)
+        text(panel, "Akurasi arah posisi demo (bukan warna candle)", 12, INK, "bold").pack(anchor="w")
+        rows = list(reversed(self.state.positions))
+        if not rows:
+            text(panel, "Belum ada aba-aba live tercatat. Mulai live untuk mengunci arah.", 9, MUTED).pack(anchor="w")
+            return
+        text(panel, "Pilih aba-aba yang cocok dengan riwayat broker. Isi harga aktual hanya untuk posisi yang dibuka.", 9, MUTED).pack(anchor="w")
+        choices = [f"{r.session}  •  sinyal {r.stamp}  •  {'Higher' if r.direction == 1 else 'Lower'}" for r in rows]
+        chooser = ttk.Combobox(panel, values=choices, state="readonly", width=58)
+        chooser.pack(anchor="w")
+        chooser.current(0)
+        form = tk.Frame(panel)
+        form.pack(anchor="w")
+        fields = []
+        for name in ("Harga entry", "Harga expiry"):
+            ttk.Label(form, text=name).pack(side="left")
+            e = ttk.Entry(form, width=15)
+            e.pack(side="left")
+            fields.append(e)
+        status = ttk.Label(panel)
+        status.pack(anchor="w")
+
+        def selected(event=None):
+            row = rows[chooser.current()]
+            for widget, value in zip(fields, (row.entry, row.expiry)):
+                widget.delete(0, "end")
+                widget.insert(0, value)
+            status.configure(text="Skor sesi terpilih: " + session_result(self.state.positions, row.session))
+
+        def save():
+            row = rows[chooser.current()]
+            try:
+                row.settle(*(w.get() for w in fields))
+            except ValueError as exc:
+                messagebox.showwarning("Periksa harga", str(exc), parent=self)
+                return
+            if self._save():
+                selected()
+        button(form, "Simpan harga", save, "secondary").pack(side="left")
+        chooser.bind("<<ComboboxSelected>>", selected)
+        selected()
+
     def _experiments_page(self):
         scroller = ScrollFrame(self.page_host)
         scroller.pack(fill="both", expand=True)
@@ -1864,6 +1917,7 @@ class CandleLabApp(tk.Tk):
         heading.pack(fill="x")
         page_heading(heading, "Eksperimen prediksi", "Bandingkan prediksi yang benar-benar dikunci dengan candle aktual berikutnya.").pack(side="left", fill="x", expand=True)
         button(heading, "Bersihkan riwayat", self.clear_history, "ghost").pack(side="right")
+        self._position_panel(page)
         summary = summarise(self.state.experiments)
         metrics = tk.Frame(page, bg=BG)
         metrics.pack(fill="x", pady=(20, 14))
