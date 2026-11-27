@@ -317,7 +317,7 @@ class CandleLabApp(tk.Tk):
 
     def _prediction(self):
         if self.live_active:
-            return self.locked_prediction or CloseSignal()
+            return self.locked_prediction or CloseSignal(reason=self.minute_gate.reason)
         return CandleModel.predict(self._source_candles(), self._order(), self._window())
 
     def _save(self):
@@ -469,23 +469,22 @@ class CandleLabApp(tk.Tk):
             anchor="w", pady=(3, 0))
 
         if round_obj is None:
-            text(box, "Menunggu candle terbaca", 9, "#B8C9C1", bg=SIDEBAR_SOFT).pack(
+            text(box, self._waiting_reason(), 9, "#B8C9C1", bg=SIDEBAR_SOFT).pack(
                 anchor="w", pady=(6, 0))
-            return
-
-        arah = direction_name(round_obj.direction)
-        if round_obj.resolved:
-            if round_obj.correct is None:
-                hasil, warna = "tidak dinilai", "#B8C9C1"
-            elif round_obj.correct:
-                hasil, warna = "BENAR", "#3FE08A"
-            else:
-                hasil, warna = "SALAH", "#FF8A7A"
-            text(box, f"Tebakan tadi: {arah} → {hasil}", 10, warna, "bold",
-                 SIDEBAR_SOFT).pack(anchor="w", pady=(6, 0))
         else:
-            text(box, f"Tebakan: {arah} (untuk candle yang sedang berjalan)", 9,
-                 "#FFFFFF", "bold", SIDEBAR_SOFT).pack(anchor="w", pady=(6, 0))
+            arah = direction_name(round_obj.direction)
+            if round_obj.resolved:
+                if round_obj.correct is None:
+                    hasil, warna = "tidak dinilai", "#B8C9C1"
+                elif round_obj.correct:
+                    hasil, warna = "BENAR", "#3FE08A"
+                else:
+                    hasil, warna = "SALAH", "#FF8A7A"
+                text(box, f"Tebakan tadi: {arah} → {hasil}", 10, warna, "bold",
+                     SIDEBAR_SOFT).pack(anchor="w", pady=(6, 0))
+            else:
+                text(box, f"Tebakan: {arah} (untuk candle yang sedang berjalan)", 9,
+                     "#FFFFFF", "bold", SIDEBAR_SOFT).pack(anchor="w", pady=(6, 0))
 
         played = stats.played
         if played:
@@ -1512,12 +1511,18 @@ class CandleLabApp(tk.Tk):
                 seconds_left=self.rounds.waiting_seconds(),
                 next_in=self.clock.seconds_to_next(time.monotonic()),
                 timeframe=self.clock.label(),
+                waiting_note=self._waiting_reason(),
                 click_note=self.click_status if self.auto_click_enabled else "",
             )
         else:
             self.overlay.show_prediction(
                 self._prediction(), len(self._source_candles()),
             )
+
+    def _waiting_reason(self):
+        if self.locked_prediction and not self.locked_prediction.available:
+            return self.locked_prediction.reason
+        return self.minute_gate.reason
 
     def _refresh_live_hud(self):
         if self.live_hud is None:
@@ -1548,12 +1553,12 @@ class CandleLabApp(tk.Tk):
         current = self.rounds.current
         if current is None or current.resolved:
             # Dicatat sekali saja agar log tidak banjir setiap 2 detik.
-            alasan = ("belum ada tebakan" if current is None else "candle sudah dinilai")
+            alasan = (self._waiting_reason() if current is None else "candle sudah dinilai")
             if self.auto_click_enabled and getattr(self, "_last_skip", "") != alasan:
                 self._last_skip = alasan
                 self._log(INFO, f"klik belum dilakukan • {alasan}")
             return
-        if not self.auto_click_enabled or not self.state.click_region:
+        if not self.auto_click_enabled or not self.state.click_region or not self.live_candles:
             return
         if self._clicked_candle == current.seq:
             return
@@ -1611,6 +1616,11 @@ class CandleLabApp(tk.Tk):
         if result is None:
             return
         if not result.candles:
+            self.minute_gate.previous = None
+            self.minute_gate.reason = "Tidak ada candle terbaca; periksa area chart."
+            if self.live_candles:
+                self._log(INFO, self.minute_gate.reason)
+            self.live_candles = []
             self.set_status("LIVE • candle belum terbaca; periksa ukuran/warna area grafik.")
             return
         sequence = result.sequence
@@ -1621,7 +1631,7 @@ class CandleLabApp(tk.Tk):
         previous_status = self._round_status or ""
         if changed:
             if (self.minute_gate.signal != previous + 1
-                    or self.live_sequence != self.minute_gate.base[1]):
+                    or self.live_sequence[-8:] != self.minute_gate.base[1]):
                 self.rounds.reset()
                 self._clicked_candle = -1
             self.live_sequence = sequence[:-1]

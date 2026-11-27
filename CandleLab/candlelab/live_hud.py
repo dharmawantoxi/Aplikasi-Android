@@ -180,7 +180,7 @@ class LiveHud:
             )
         else:
             reason = prediction.reason if prediction is not None else "Menunggu pembacaan."
-            self.headline.configure(text="Data belum cukup", fg="#FFFFFF")
+            self.headline.configure(text="Data belum cukup" if candle_count < 4 else "Menunggu sinyal", fg="#FFFFFF")
             self.detail.configure(text=f"{reason}\n{candle_count} candle dihitung", fg="#B8C9C1")
         if warning:
             self.status_label.configure(text="periksa area", fg="#F0C36B")
