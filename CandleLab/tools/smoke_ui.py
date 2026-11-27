@@ -164,19 +164,15 @@ with tempfile.TemporaryDirectory() as directory:
         log_window.destroy()
         app.update()
 
-        # Diagnosa klik otomatis harus ada di panel samping.
-        assert any("Uji klik sekarang" in str(w.cget("text"))
-                   for w in app.winfo_children() if False) or True
-
         # Regresi: refresh() saat overlay aktif dulu membuat jendela tidak bisa
         # kembali. Sekarang tidak boleh mengubah state apa pun.
         state_before = app.wm_state()
         app.refresh()
         app.update()
         assert app.wm_state() == state_before, "refresh() mengubah state saat overlay"
-        # Badge harus punya tombol klik otomatis (⚡) selain ⚙ dan ✕.
+        # Badge manual hanya menyediakan kontrol jendela.
         labels = [child.cget("text") for child in app.overlay.buttons.winfo_children()]
-        assert "⚡" in labels, f"tombol klik otomatis tidak ada: {labels}"
+        assert labels == ["⚙", "✕"], f"kontrol badge tidak sesuai mode manual: {labels}"
 
         # Tebak otomatis: tebakan dikunci, lalu dinilai saat chart bergeser.
         app.live_candles = list(make_demo_candles(8))
