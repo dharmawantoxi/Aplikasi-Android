@@ -627,7 +627,8 @@ class CandleLabApp(tk.Tk):
         window.title("Log CandleLab")
         window.configure(bg=BG)
         window.geometry("900x560")
-        window.transient(self)
+        if self.winfo_viewable():
+            window.transient(self)
         header = tk.Frame(window, bg=BG, padx=16, pady=10)
         header.pack(fill="x")
         text(header, "Log kegiatan", 13, INK, "bold", bg=BG).pack(side="left")
