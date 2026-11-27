@@ -34,9 +34,6 @@ BG = "#0E1F19"
 BORDER = "#25372F"
 DETAIL_FG = "#8FA49A"
 WARN_FG = "#E6B84C"
-# Tombol klik otomatis: redup saat mati, jingga menyala saat aktif.
-CLICK_ON_FG = "#FF6B35"
-CLICK_OFF_FG = "#5E736B"
 
 
 def _short(text: str, limit: int = 34) -> str:
@@ -58,13 +55,10 @@ class OverlayBadge:
         root: tk.Tk,
         on_expand: Callable[[], None],
         on_stop: Callable[[], None],
-        on_auto_click: Callable[[], None] | None = None,
     ):
         self.root = root
         self.on_expand = on_expand
         self.on_stop = on_stop
-        self.on_auto_click = on_auto_click
-        self.auto_click_on = False
         self.corner = "top-right"
         self.width = BADGE_WIDTH
         self.height = BADGE_HEIGHT
@@ -106,8 +100,6 @@ class OverlayBadge:
         self.buttons = tk.Frame(self.frame, bg=BG, width=BADGE_PAD_X * 2)
         self.buttons.pack(side="right", padx=(6, 6), pady=(2, 2))
         for text, command, colour in (
-            # ⚡ mulai tanpa warna: warna hanya menandakan "sedang aktif".
-            ("⚡", self._toggle_click, CLICK_OFF_FG),
             ("⚙", self._expand, DETAIL_FG),
             ("✕", self._stop, "#D45E62"),
         ):
@@ -196,10 +188,6 @@ class OverlayBadge:
         self.window.geometry(f"{self.width}x{self.height}+{x}+{y}")
 
     # -- aksi -------------------------------------------------------------
-    def _toggle_click(self):
-        if self.on_auto_click is not None:
-            self.on_auto_click()
-
     def _expand(self):
         self.on_expand()
 
@@ -245,18 +233,9 @@ class OverlayBadge:
             pass
 
     # -- isi --------------------------------------------------------------
-    def set_auto_click_state(self, enabled: bool):
-        """Tandai status klik otomatis pada tombol ⚡."""
-        self.auto_click_on = bool(enabled)
-        try:
-            self.buttons.winfo_children()[0].configure(
-                fg=CLICK_ON_FG if enabled else CLICK_OFF_FG)
-        except (IndexError, tk.TclError):
-            pass
-
     def show_round(self, round_obj, stats, candle_count: int, pending: bool = True,
                    seconds_left=None, next_in=None, timeframe="?",
-                   click_note: str = "", waiting_note: str = ""):
+                   waiting_note: str = ""):
         """Tampilkan tebakan yang sedang berjalan beserta skor benar/salah.
 
         ``round_obj`` adalah ``rounds.Round``; ``stats`` adalah
@@ -300,13 +279,8 @@ class OverlayBadge:
                 baris = ketiga + "\n" + baris
             detail = f"tebakan {timeframe}\n{baris}"
             tint = DETAIL_FG
-        # Status klik otomatis menimpa baris skor: tanpa ini badge identik
-        # antara "klik berjalan" dan "klik terus ditolak", dan pengguna tidak
-        # punya cara mengetahui alasannya.
-        if click_note:
-            rejected = "DITOLAK" in click_note
-            detail = f"{'klik ditolak' if rejected else 'klik'}\n{_short(click_note)}"
-            tint = "#FF8A7A" if rejected else "#3FE08A"
+        if not round_obj.resolved and direction in (1, -1) and time.time() % 60 < 12:
+            label = "KLIK HIGHER" if direction == 1 else "KLIK LOWER"
         self.headline.configure(text=label, fg=colour)
         self.detail.configure(text=detail, fg=tint)
         self._apply_geometry()

@@ -63,18 +63,7 @@ class OverlayModeSafetyTests(unittest.TestCase):
                       "refresh() harus menahan diri saat overlay aktif")
         self.assertIn("return", source)
 
-    def test_toggle_auto_click_works_from_badge(self):
-        source = self._method_source("set_auto_click")
-        self.assertNotIn("self.refresh()", source,
-                         "mengaktifkan klik otomatis tidak boleh rebuild halaman")
-        self.assertIn("_refresh_overlay", source)
-
-    def test_badge_is_wired_to_auto_click(self):
-        self.assertIn("on_auto_click=self.toggle_auto_click_from_badge", self.text,
-                      "badge harus bisa menyalakan klik otomatis tanpa buka jendela")
-
-    def test_dialogs_use_a_safe_parent(self):
-        source = self._method_source("toggle_auto_click")
-        # pembungkus tidak boleh memakai self sebagai induk dialog saat overlay
-        self.assertIn("set_auto_click", source)
-        self.assertIn("_dialog_parent", self.text)
+    def test_live_is_manual_only(self):
+        self.assertNotIn("left_click", self.text)
+        self.assertNotIn("toggle_auto_click", self.text)
+        self.assertIn("Aba-aba manual", self.text)

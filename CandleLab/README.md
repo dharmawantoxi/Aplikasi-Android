@@ -229,46 +229,9 @@ python tools/smoke_ui.py
 
 Workflow Windows menjalankan smoke test ini sebelum membuat `.exe`; test tidak membaca atau mengubah data pengguna.
 
-## Klik otomatis (opsional, Windows)
+## Aba-aba manual
 
-Mengklik tombol Higher/Lower secara otomatis setiap kali tebakan baru muncul. **Mati secara bawaan** dan hanya untuk akun demo.
-
-Aktifkan lewat panel tebak otomatis setelah mengalibrasi tombol:
-
-1. Halaman **Data** → **Kalibrasi tombol broker** → pilih area yang memuat kedua tombol Higher dan Lower.
-2. Tombol dikenali hanya bila berbentuk blok besar (bukan candle) dan keduanya bersusun sejajar.
-3. **Dari badge:** klik **⚡** langsung di badge — tidak perlu membuka jendela.
-   Dari jendela penuh: panel tebak otomatis → **Aktifkan klik otomatis**.
-
-**Badge tidak merebut fokus.** Sejak v1.10.2 badge memakai `WS_EX_NOACTIVATE`, jadi menekan ⚡ atau ⚙ tidak memindahkan fokus dari IQ Option. Bila fokus tetap berpindah, aplikasi mengingat jendela broker dan mengaktifkannya kembali sebelum mengklik.
-
-**Pengaman klik berbasis titik, bukan judul jendela.** Yang diperiksa adalah: titik yang akan diklik memang milik jendela yang sedang aktif, dan jendela itu bukan CandleLab sendiri. Ini membuat fitur tetap bekerja saat IQ Option berjalan di peramban dengan judul berbeda.
-
-**Identitas jendela, bukan handle mentah.** `WindowFromPoint` dapat mengembalikan elemen **anak** di dalam chart, dan peramban memecah jendela ke beberapa proses. Karena itu titik klik dianggap sah bila jendela di bawahnya punya **handle, proses, atau judul** yang sama dengan jendela aktif. Bila jendela di titik itu sama sekali tidak terbaca, pengaman tidak menolak — pengaman lain yang menentukan.
-
-**Log.** Panel samping punya tombol **"Buka log (bisa disalin)"**. Isinya mencatat: area yang dibaca, saat klik otomatis dinyalakan, setiap tombol yang ditekan beserta koordinatnya, setiap penolakan beserta alasannya, dan setiap galat internal. Tombol **COPY LOG** di kanan atas menyalin seluruh log ke clipboard untuk dikirim sebagai laporan.
-
-**Bila tidak ada klik sama sekali:** klik **"Uji klik sekarang (tanpa klik)"** di panel samping. Tombol ini memeriksa seluruh rantai tanpa menekan apa pun — area tombol, pengenalan tombol Higher/Lower, dan apakah jendela IQ Option sedang aktif. Baris bertanda ✗ adalah penyebabnya.
-
-Badge juga menampilkan `klik ditolak` beserta alasan singkatnya. Tombol **⚡** tidak berwarna saat mati dan berubah **jingga** saat aktif, jadi sekali lihat Anda tahu apakah klik otomatis menyala. Tombol **⚙** membuka jendela penuh, **✕** menghentikan live.
-
-Pengaman yang selalu berlaku:
-
-- hanya berjalan di Windows,
-- hanya bila jendela **IQ Option** sedang aktif,
-- hanya bila titik klik berada di area yang dikalibrasi,
-- maksimal satu klik per candle,
-- berhenti otomatis setelah **50 klik** per sesi.
-
-**Area kalibrasi harus memuat keduanya.** Saat memilih area tombol broker, pastikan kotaknya mencakup tombol **HIGHER**, **LOWER**, dan tombol oranye **+ NEW OPTION** bila sedang tampil. Ketiganya menempati posisi yang sama, jadi satu kotak cukup. Kalibrasi tetap diterima walaupun saat itu hanya NEW OPTION yang terlihat.
-
-**Tombol NEW OPTION.** Setelah satu posisi dibuka, IQ Option mengganti tombol Higher/Lower dengan tombol oranye **+ NEW OPTION**. Klik otomatis mengenali tombol itu dan menekannya lebih dulu, menunggu form order terbuka, lalu menekan Higher/Lower sesuai tebakan. Karena itu satu candle tetap menghasilkan satu posisi, walaupun form order tertutup setelah trade sebelumnya.
-
-**Batas waktu entry TF 1 menit.** Sinkronkan jam Windows. Aplikasi membandingkan dua bacaan stabil dari akhir menit sebelumnya dengan bacaan pertama yang cocok dari riwayat candle tertutup pada awal menit baru. Perubahan warna candle berjalan diabaikan. Batas klik arah: 5, 8 (bawaan), atau 10 detik pertama menurut jam komputer; jika konfirmasi terlambat atau pergeseran ambigu, menit itu dilewati. Tidak mengejar entry yang terlewat.
-
-**Kapan klik terjadi:** hanya saat mode live berjalan, ketika muncul tebakan **baru** untuk candle yang sedang berjalan. Maksimal satu klik per candle, dan hanya bila jendela IQ Option aktif. Urutan yang disarankan: mulai live → pastikan area benar → baru aktifkan klik otomatis.
-
-Alasan pembatasannya: pada payout 82% (seperti di IQ Option), akurasi impas adalah **54,9%**. Model ini terukur berkisar 49–55%, jadi gunakan hanya dengan uang demo.
+Gunakan F7 untuk badge live. Saat candle baru terkonfirmasi, badge menunjukkan KLIK HIGHER atau KLIK LOWER. CandleLab hanya membaca chart; Anda sendiri yang membuka form dan mengklik tombol broker. Tidak perlu kalibrasi tombol. Aba-aba juga dicatat di log.
 
 ## Informasi harga
 
