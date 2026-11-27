@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import time
 import tkinter as tk
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -179,6 +180,12 @@ with tempfile.TemporaryDirectory() as directory:
         app._advance_round(app.live_candles)
         assert app.rounds.current is not None, "putaran tidak dimulai"
         locked = app.rounds.current.direction
+        # Batas aba-aba tidak bergantung pada kedatangan frame chart selanjutnya.
+        app.overlay.show_round(app.rounds.current, app.rounds.stats, 8, expires_at=time.time() + 0.08)
+        assert app.overlay.headline.cget("text").startswith("KLIK ")
+        app.after(120, app.quit)
+        app.mainloop()
+        assert app.overlay.headline.cget("text") == "KEDALUWARSA"
         next_direction = 1 if locked != 1 else -1
         shifted = app.live_candles[1:] + [Candle(1.0, 2.0, 0.0, 2.0 if next_direction == 1 else 0.5)]
         app.live_candles = shifted

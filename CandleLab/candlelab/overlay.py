@@ -56,6 +56,7 @@ class OverlayBadge:
         on_expand: Callable[[], None],
         on_stop: Callable[[], None],
     ):
+        self._expiry_job = None
         self.root = root
         self.on_expand = on_expand
         self.on_stop = on_stop
@@ -226,7 +227,19 @@ class OverlayBadge:
     def set_hidden(self, hidden: bool):
         self._apply_alpha(0.0 if hidden else 0.94)
 
+    def _cancel_expiry(self):
+        if self._expiry_job is not None:
+            self.window.after_cancel(self._expiry_job)
+            self._expiry_job = None
+
+    def _show_expired(self):
+        self._expiry_job = None
+        self.headline.configure(text="KEDALUWARSA", fg="#FFB454")
+        self.detail.configure(text="Jangan klik.\nTunggu sinyal baru.", fg=DETAIL_FG)
+        self._apply_geometry()
+
     def close(self):
+        self._cancel_expiry()
         try:
             self.window.destroy()
         except tk.TclError:
@@ -235,13 +248,14 @@ class OverlayBadge:
     # -- isi --------------------------------------------------------------
     def show_round(self, round_obj, stats, candle_count: int, pending: bool = True,
                    seconds_left=None, next_in=None, timeframe="?",
-                   waiting_note: str = ""):
+                   waiting_note: str = "", *, expires_at: float):
         """Tampilkan tebakan yang sedang berjalan beserta skor benar/salah.
 
         ``round_obj`` adalah ``rounds.Round``; ``stats`` adalah
         ``rounds.RoundStats``. Bila ``round_obj`` punya hasil, badge menampilkan
         apakah tebakan itu benar atau salah.
         """
+        self._cancel_expiry()
         if round_obj is None:
             kurang = max(0, 5 - candle_count)
             self.headline.configure(text="Belum cukup" if kurang else "Menunggu sinyal", fg="#C9D6CF")
@@ -279,13 +293,19 @@ class OverlayBadge:
                 baris = ketiga + "\n" + baris
             detail = f"tebakan {timeframe}\n{baris}"
             tint = DETAIL_FG
-        if not round_obj.resolved and direction in (1, -1) and time.time() % 60 < 12:
+        if not round_obj.resolved and direction in (1, -1):
+            remaining = expires_at - time.time()
+            if remaining <= 0:
+                self._show_expired()
+                return
+            self._expiry_job = self.window.after(int(remaining * 1000) + 1, self._show_expired)
             label = "KLIK HIGHER" if direction == 1 else "KLIK LOWER"
         self.headline.configure(text=label, fg=colour)
         self.detail.configure(text=detail, fg=tint)
         self._apply_geometry()
 
     def show_prediction(self, prediction, candle_count: int, warning: str = ""):
+        self._cancel_expiry()
         if prediction is not None and prediction.available:
             direction = prediction.predicted_direction
             if direction == 1:  # model.GREEN

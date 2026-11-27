@@ -1157,12 +1157,13 @@ class CandleLabApp(tk.Tk):
             return
         if self.live_active:
             self.overlay.show_round(
-                self.rounds.current if self.minute_gate.signal == int(time.time() // 60) else None,
+                self.rounds.current,
                 self.rounds.stats, len(self.live_candles),
                 seconds_left=self.rounds.waiting_seconds(),
                 next_in=self.clock.seconds_to_next(time.monotonic()),
                 timeframe=self.clock.label(),
                 waiting_note=self._waiting_reason(),
+                expires_at=self.minute_gate.signal * 60 + 12,
             )
         else:
             self.overlay.show_prediction(
