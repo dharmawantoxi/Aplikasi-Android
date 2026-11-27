@@ -246,7 +246,7 @@ Aktifkan lewat panel tebak otomatis setelah mengalibrasi tombol:
 
 **Identitas jendela, bukan handle mentah.** `WindowFromPoint` dapat mengembalikan elemen **anak** di dalam chart, dan peramban memecah jendela ke beberapa proses. Karena itu titik klik dianggap sah bila jendela di bawahnya punya **handle, proses, atau judul** yang sama dengan jendela aktif. Bila jendela di titik itu sama sekali tidak terbaca, pengaman tidak menolak — pengaman lain yang menentukan.
 
-**Log.** Panel samping punya tombol **"Buka log (bisa disalin)"**. Isinya mencatat: area yang dibaca, saat klik otomatis dinyalakan, setiap tombol yang ditekan beserta koordinatnya, setiap penolakan beserta alasannya, dan setiap galat internal. Tombol **Salin semua** menyalin seluruh log ke clipboard untuk dikirim sebagai laporan.
+**Log.** Panel samping punya tombol **"Buka log (bisa disalin)"**. Isinya mencatat: area yang dibaca, saat klik otomatis dinyalakan, setiap tombol yang ditekan beserta koordinatnya, setiap penolakan beserta alasannya, dan setiap galat internal. Tombol **COPY LOG** di kanan atas menyalin seluruh log ke clipboard untuk dikirim sebagai laporan.
 
 **Bila tidak ada klik sama sekali:** klik **"Uji klik sekarang (tanpa klik)"** di panel samping. Tombol ini memeriksa seluruh rantai tanpa menekan apa pun — area tombol, pengenalan tombol Higher/Lower, dan apakah jendela IQ Option sedang aktif. Baris bertanda ✗ adalah penyebabnya.
 

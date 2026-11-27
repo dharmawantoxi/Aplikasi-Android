@@ -163,6 +163,13 @@ with tempfile.TemporaryDirectory() as directory:
         log_window = app.open_log_window()
         app.update()
         assert log_window.winfo_exists(), "jendela log tidak terbuka"
+        app.log.info("Uji salin seluruh log")
+        header = log_window.winfo_children()[0]
+        copy = next(w for w in header.winfo_children() if w.winfo_class() == "Button"
+                    and w.cget("text") == "COPY LOG")
+        assert copy.winfo_ismapped(), "tombol copy tidak terlihat"
+        copy.invoke()
+        assert app.clipboard_get().splitlines() == app.log.text().splitlines()
         log_window.destroy()
         app.update()
 
