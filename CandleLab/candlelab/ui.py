@@ -1567,8 +1567,20 @@ class CandleLabApp(tk.Tk):
             return
         if self._clicked_candle == current.seq:
             return
-        if not self.minute_gate.can_enter(time.time(), self.entry_window, self.last_entry_minute):
-            self.click_status = "menunggu awal candle 1 menit terkonfirmasi"
+        now = time.time()
+        if not self.minute_gate.can_enter(now, self.entry_window, self.last_entry_minute):
+            minute, sec = divmod(now, 60)
+            if minute != self.minute_gate.signal:
+                alasan = self.minute_gate.reason
+            elif minute <= self.last_entry_minute:
+                alasan = "klik arah sudah dicoba pada menit ini"
+            else:
+                alasan = f"sinyal terlambat • detik {sec:.2f} > batas {self.entry_window} dtk"
+            self.click_status = alasan
+            key = (minute, current.seq, alasan if minute != self.minute_gate.signal else "lewat")
+            if getattr(self, "_skip_detail", None) != key:
+                self._skip_detail = key
+                self._log(INFO, f"LEWAT • {alasan}")
             return
         if self._clicking:
             # Menolak klik memperbarui badge, dan badge memicu percobaan klik
@@ -1642,7 +1654,10 @@ class CandleLabApp(tk.Tk):
             self.live_sequence = sequence[:-1]
             self.clock.mark_new_candle(time.monotonic())
             self._advance_round(result.candles)
-            self._log(INFO, f"sinyal 1m terkunci • {datetime.fromtimestamp(captured):%H:%M:%S}")
+            arah = {1: "Higher", -1: "Lower"}.get(self.locked_prediction.predicted_direction)
+            detail = arah or self.locked_prediction.reason
+            self._log(INFO, f"candle 1m terkonfirmasi • {datetime.fromtimestamp(captured):%H:%M:%S}"
+                            f" • {detail} • batas {self.entry_window} dtk")
         if self._round_status and self._round_status != previous_status:
             # Hasil putaran lebih penting daripada statistik deteksi, tetapi
             # hanya ditampilkan sekali agar status tidak berkedip.
