@@ -52,6 +52,31 @@ class Candle:
 
 
 @dataclass(frozen=True)
+class CloseSignal:
+    predicted_direction: int = DOJI
+    reason: str = "Menunggu candle baru terkonfirmasi."
+    green_probability = None  # Aturan arah, bukan estimasi peluang.
+
+    @property
+    def available(self):
+        return self.predicted_direction != DOJI
+
+
+def close_vs_three(history: Sequence[Candle], previous: int = DOJI) -> CloseSignal:
+    if len(history) < 4:
+        return CloseSignal(reason="Perlu empat candle tertutup.")
+    a, b, c, latest = (item.close for item in history[-4:])
+    # Selisih relatif menghindari pembulatan saat menjumlahkan harga besar.
+    delta = math.fsum((latest - a, latest - b, latest - c))
+    if delta == 0:
+        return CloseSignal(previous, "Close sama dengan rata-rata; pertahankan arah terakhir."
+                           if previous else "Close sama; belum ada arah sebelumnya.")
+    return CloseSignal(GREEN if delta > 0 else RED,
+                       "Close terakhir di atas rata-rata tiga close sebelumnya." if delta > 0
+                       else "Close terakhir di bawah rata-rata tiga close sebelumnya.")
+
+
+@dataclass(frozen=True)
 class Prediction:
     available: bool
     green_probability: float = 0.5

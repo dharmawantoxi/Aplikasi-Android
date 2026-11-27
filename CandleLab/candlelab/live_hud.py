@@ -154,7 +154,11 @@ class LiveHud:
 
     # -- isi --------------------------------------------------------------
     def update(self, prediction, candle_count: int, forming_excluded: bool, warning: str = ""):
-        if prediction is not None and prediction.available:
+        if prediction is not None and prediction.available and prediction.green_probability is None:
+            up = prediction.predicted_direction == GREEN
+            self.headline.configure(text="HIJAU" if up else "MERAH", fg=GREEN_BRIGHT if up else RED)
+            self.detail.configure(text=prediction.reason)
+        elif prediction is not None and prediction.available:
             green = prediction.green_probability
             red = prediction.red_probability
             direction = prediction.predicted_direction

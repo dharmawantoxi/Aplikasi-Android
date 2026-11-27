@@ -50,7 +50,7 @@ from .model import (
     MIN_CANDLES,
     MIN_DIRECTIONAL,
     DOJI, GREEN as GREEN_DIRECTION, PRIOR_STRENGTH, RED as RED_DIRECTION,
-    Candle, CandleModel, make_demo_candles,
+    Candle, CandleModel, CloseSignal, close_vs_three, make_demo_candles,
 )
 from .storage import JsonStore
 from .screen_capture import capture_after_overlay_closed, capture_region
@@ -317,7 +317,7 @@ class CandleLabApp(tk.Tk):
 
     def _prediction(self):
         if self.live_active:
-            return self.locked_prediction or CandleModel.predict([], self._order(), self._window())
+            return self.locked_prediction or CloseSignal()
         return CandleModel.predict(self._source_candles(), self._order(), self._window())
 
     def _save(self):
@@ -393,6 +393,11 @@ class CandleLabApp(tk.Tk):
     def _fill_forecast(self, parent):
         prediction = self._prediction()
         text(parent, "ESTIMASI CANDLE BERIKUTNYA", 8, GREEN_BRIGHT, "bold", SIDEBAR).pack(anchor="w")
+        if self.live_active:
+            text(parent, "LIVE • Close vs rata-rata 3", 14, GREEN_BRIGHT, "bold", SIDEBAR).pack(anchor="w")
+            text(parent, prediction.reason, 9, "#B8C9C1", bg=SIDEBAR).pack(anchor="w")
+            self._fill_round_panel(parent)
+            return
         if not prediction.available:
             text(parent, "Data belum cukup", 22, "#FFFFFF", "bold", SIDEBAR).pack(anchor="w", pady=(14, 7))
             text(parent, prediction.reason, 10, "#B8C9C1", bg=SIDEBAR, wraplength=340).pack(anchor="w")
@@ -1568,11 +1573,19 @@ class CandleLabApp(tk.Tk):
     def _advance_round(self, candles):
         """Kunci atau nilai satu putaran tebak otomatis."""
         history = list(candles[:-1]) if candles else []
-        prediction = CandleModel.predict(history, self._order(), self._window())
+        previous = self.locked_prediction.predicted_direction if self.locked_prediction else DOJI
+        prediction = close_vs_three(history, previous)
+        benchmark = CandleModel.predict(history, self._order(), self._window())
+        prior_benchmark = getattr(self, "_benchmark_direction", DOJI)
+        self._benchmark_direction = benchmark.predicted_direction if benchmark.available else DOJI
         self.locked_prediction = prediction
         finished = self.rounds.observe(history, prediction)
         self._round_status = ""
         if finished is not None and finished.correct is not None:
+            pembanding = ("seimbang/tidak tersedia" if not prior_benchmark else
+                          "benar" if prior_benchmark == finished.actual else "salah")
+            self._log(INFO, f"Close vs rata-rata 3: {'benar' if finished.correct else 'salah'}"
+                      f" • model lama: {pembanding} (tanpa klik)")
             self.state.record_live_round(finished.correct)
             self._save_quietly()
             self._round_status = (
