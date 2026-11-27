@@ -32,7 +32,7 @@ class MinuteGate:
         old_minute, old = self.base
         if old_minute != minute - 1:
             return False
-        self.reason = "Pergeseran satu candle belum terkonfirmasi."
+        self.reason = f"Pergeseran belum terkonfirmasi • acuan {old}, terbaca {closed}."
         if closed[:-1] != old and not (closed != old and closed[:-1] == old[1:]):
             return False
         self.signal = int(minute)
