@@ -18,10 +18,11 @@ class MinuteGate:
         if len(closed) < 4:
             self.reason = f"Terbaca {len(closed)}/4 candle tertutup; perlu 5 candle terlihat."
             return False
-        if not confirmed:
-            self.reason = "Menunggu bacaan kedua yang sama."
-            return False
         if sec >= 45:
+            if not confirmed:
+                self.base = None
+                self.reason = "Menunggu bacaan kedua untuk acuan akhir menit."
+                return False
             self.reason = "Acuan siap; tunggu awal menit baru."
             self.base = key
             return False

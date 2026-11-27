@@ -9,7 +9,7 @@ Dibangun dengan **Python dan Tkinter**. Grafik digambar dengan Canvas, sedangkan
 ## Fitur
 
 - **Mode live tanpa screenshot berulang**: pilih area sekali dengan `F9`, lalu grafik dan probabilitas diperbarui otomatis setiap 2 detik.
-- Perubahan urutan candle dikonfirmasi dalam dua pembacaan konsisten; candle paling kanan yang masih terbentuk dapat diabaikan dari model.
+- Acuan akhir menit dikonfirmasi dalam dua pembacaan konsisten; candle paling kanan yang masih terbentuk dapat diabaikan dari model.
 - **Baca langsung dari layar desktop**: pilih area chart dengan drag, deteksi candle hijau/teal dan merah, lalu verifikasi kotak deteksi sebelum mengimpor.
 - Tangkap ulang area yang sama dengan `Ctrl+F8`; area dan screenshot hanya berada di memori sesi berjalan.
 - Grafik hingga 64 candle terakhir dengan tooltip OHLC saat kursor diarahkan.
@@ -142,7 +142,7 @@ Model mulai bekerja dari **5 candle** (5 non-doji). Bila candle non-doji kurang 
 5. Opsi **Abaikan candle paling kanan** aktif secara default. Candle yang masih terbentuk tetap tampil pada grafik tetapi tidak ikut prediksi. Ketika candle baru muncul dan urutan stabil, candle yang sudah selesai otomatis dihitung.
 6. Untuk eksperimen, klik **Kunci prediksi live & berhenti**. Snapshot yang sedang dihitung disimpan, monitor berhenti, dan prediksi dikunci. Jika live dihentikan tanpa dikunci, data set lama tidak berubah.
 
-Perubahan urutan warna harus terlihat dalam **dua pembacaan berturut-turut** sebelum diterima. Ini meredam satu pembacaan yang keliru dengan konsekuensi jeda sekitar satu interval. Selama live, jangan menutupi chart dengan jendela lain atau mengubah zoom/warna. Indikator konsistensi dan waktu pembacaan terakhir tampil pada status bar.
+Acuan akhir menit harus stabil dalam dua pembacaan. Pada awal menit baru, bacaan pertama yang menunjukkan pergeseran satu candle langsung diterima; ini lebih cepat tetapi lebih peka terhadap salah baca sesaat. Selama live, jangan menutupi chart dengan jendela lain atau mengubah zoom/warna. Indikator konsistensi dan waktu pembacaan terakhir tampil pada status bar.
 
 Worker berjalan di background thread dan berhenti saat aplikasi ditutup. Antrean hanya menyimpan hasil terbaru agar UI tidak tertinggal. Screenshot/data live tidak ditulis ke disk setiap interval dan tidak dikirim ke internet.
 
@@ -264,7 +264,7 @@ Pengaman yang selalu berlaku:
 
 **Tombol NEW OPTION.** Setelah satu posisi dibuka, IQ Option mengganti tombol Higher/Lower dengan tombol oranye **+ NEW OPTION**. Klik otomatis mengenali tombol itu dan menekannya lebih dulu, menunggu form order terbuka, lalu menekan Higher/Lower sesuai tebakan. Karena itu satu candle tetap menghasilkan satu posisi, walaupun form order tertutup setelah trade sebelumnya.
 
-**Batas waktu entry TF 1 menit.** Sinkronkan jam Windows. Aplikasi membandingkan dua bacaan stabil dari akhir menit sebelumnya dengan dua bacaan riwayat candle tertutup pada awal menit baru. Perubahan warna candle berjalan diabaikan. Batas klik arah: 5, 8 (bawaan), atau 10 detik pertama menurut jam komputer; jika konfirmasi terlambat atau pergeseran ambigu, menit itu dilewati. Tidak mengejar entry yang terlewat.
+**Batas waktu entry TF 1 menit.** Sinkronkan jam Windows. Aplikasi membandingkan dua bacaan stabil dari akhir menit sebelumnya dengan bacaan pertama yang cocok dari riwayat candle tertutup pada awal menit baru. Perubahan warna candle berjalan diabaikan. Batas klik arah: 5, 8 (bawaan), atau 10 detik pertama menurut jam komputer; jika konfirmasi terlambat atau pergeseran ambigu, menit itu dilewati. Tidak mengejar entry yang terlewat.
 
 **Kapan klik terjadi:** hanya saat mode live berjalan, ketika muncul tebakan **baru** untuk candle yang sedang berjalan. Maksimal satu klik per candle, dan hanya bila jendela IQ Option aktif. Urutan yang disarankan: mulai live → pastikan area benar → baru aktifkan klik otomatis.
 
