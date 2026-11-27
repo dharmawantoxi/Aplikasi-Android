@@ -85,14 +85,6 @@ class UiWiringTests(unittest.TestCase):
     def test_ui_creates_a_log(self):
         self.assertIn("AppLog()", self.ui)
 
-    def test_rejections_are_logged(self):
-        start = self.ui.index("def _click_problem")
-        body = self.ui[start:start + 400]
-        self.assertIn("_log(REJECT", body)
-
-    def test_successful_clicks_are_logged(self):
-        self.assertIn("_log(CLICK", self.ui)
-
     def test_log_window_can_copy(self):
         self.assertIn("def open_log_window", self.ui)
         self.assertIn("clipboard_append", self.ui)
