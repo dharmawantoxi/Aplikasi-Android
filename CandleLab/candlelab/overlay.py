@@ -55,6 +55,7 @@ class OverlayBadge:
         root: tk.Tk,
         on_expand: Callable[[], None],
         on_stop: Callable[[], None],
+        on_auto_click: Callable[[], None],
     ):
         self._expiry_job = None
         self.root = root
@@ -101,15 +102,19 @@ class OverlayBadge:
         self.buttons = tk.Frame(self.frame, bg=BG, width=BADGE_PAD_X * 2)
         self.buttons.pack(side="right", padx=(6, 6), pady=(2, 2))
         for text, command, colour in (
+            ("⚡", on_auto_click, "#83938A"),
             ("⚙", self._expand, DETAIL_FG),
             ("✕", self._stop, "#D45E62"),
         ):
-            tk.Button(
+            control = tk.Button(
                 self.buttons, text=text, command=command, bg=BG, fg=colour,
                 activebackground="#1C342C", activeforeground="#FFFFFF",
                 borderwidth=0, highlightthickness=0, font=(FONT, 8, "bold"),
                 cursor="hand2", padx=2, pady=0,
-            ).pack(side="left")
+            )
+            control.pack(side="left")
+            if text == "⚡":
+                self.auto_button = control
 
         self._drag_origin = None
         for widget in (self.frame, self.headline, self.detail, self.buttons):
@@ -248,7 +253,7 @@ class OverlayBadge:
     # -- isi --------------------------------------------------------------
     def show_round(self, round_obj, stats, candle_count: int, pending: bool = True,
                    seconds_left=None, next_in=None, timeframe="?",
-                   waiting_note: str = "", *, expires_at: float):
+                   waiting_note: str = "", *, expires_at: float, automatic: bool = False):
         """Tampilkan tebakan yang sedang berjalan beserta skor benar/salah.
 
         ``round_obj`` adalah ``rounds.Round``; ``stats`` adalah
@@ -299,7 +304,7 @@ class OverlayBadge:
                 self._show_expired()
                 return
             self._expiry_job = self.window.after(int(remaining * 1000) + 1, self._show_expired)
-            label = "KLIK HIGHER" if direction == 1 else "KLIK LOWER"
+            label = ("AUTO " if automatic else "KLIK ") + ("HIGHER" if direction == 1 else "LOWER")
         self.headline.configure(text=label, fg=colour)
         self.detail.configure(text=detail, fg=tint)
         self._apply_geometry()

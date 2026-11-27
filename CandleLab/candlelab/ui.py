@@ -9,7 +9,9 @@ from tkinter import filedialog, messagebox, ttk
 import traceback
 
 from . import APP_NAME, __version__
-from .applog import ERROR, INFO, AppLog
+from .auto_click import click_point, find_button_pair, find_new_option, new_option_point
+from .auto_click_win import ClickLimiter, click_safety, restore_chart_focus, is_point_inside, left_click, platform_supported, wait_for_new_option
+from .applog import CLICK, REJECT, ERROR, INFO, AppLog
 from .charts import CandleChart, LogoMark, ProbabilityBar
 from .csv_io import export_csv, load_csv
 from .experiments import summarise
@@ -33,7 +35,7 @@ from .model import (
     Candle, CandleModel, CloseSignal, close_vs_three, make_demo_candles,
 )
 from .storage import JsonStore
-from .screen_capture import capture_after_overlay_closed
+from .screen_capture import capture_region, capture_after_overlay_closed
 from .screen_ui import select_and_capture
 from .vision import VisionResult, detect_candles
 from .theme import (
@@ -64,6 +66,9 @@ class CandleLabApp(tk.Tk):
         self._round_status = ""
         self.lab_results = []
         self.lab_payout_var = tk.StringVar(value="82")
+        self.auto_click_enabled = False
+        self.last_entry_minute = -1
+        self.click_status = ""
         self.log = AppLog()
         self.screen_region = self.state.screen_region
         self.live_monitor = None
@@ -186,6 +191,7 @@ class CandleLabApp(tk.Tk):
              wraplength=160).pack(anchor="w")
         text(footer, "Tidak ada prediksi yang pasti.\nJangan gunakan sebagai satu-satunya\ndasar keputusan finansial.",
              8, "#B5C5BE", bg=SIDEBAR_SOFT, justify="left").pack(anchor="w", pady=(7, 0))
+        button(sidebar, "Buka log (bisa disalin)", self.open_log_window, "secondary").pack(side="bottom")
         text(sidebar, f"v{__version__}  •  Offline", 8, "#789188", bg=SIDEBAR).pack(side="bottom", pady=(0, 2))
 
         shell = tk.Frame(self, bg=BG)
@@ -503,6 +509,194 @@ class CandleLabApp(tk.Tk):
                  wraplength=320, justify="left").pack(anchor="w", pady=(4, 0))
 
     # -- log kegiatan ---------------------------------------------------
+    def toggle_auto_click(self):
+        """Aktifkan/matikan klik otomatis dari jendela penuh."""
+        self.set_auto_click(not self.auto_click_enabled)
+
+    def set_auto_click(self, enable: bool) -> bool:
+        """Nyalakan/matikan klik otomatis. Aman dipanggil dari badge overlay.
+
+        Mengembalikan True bila keadaan berubah. Tidak memanggil ``refresh()``
+        agar tidak mengganggu mode overlay.
+        """
+        if not enable:
+            self.auto_click_enabled = False
+            self._log(INFO, "klik otomatis dimatikan")
+            self.set_status("Klik otomatis dimatikan.")
+            self._refresh_overlay()
+            return True
+        if not platform_supported():
+            messagebox.showinfo(
+                "Klik otomatis hanya di Windows",
+                "Fitur ini memakai SendInput Windows. Di sistem lain, gunakan "
+                "mode latihan (catat sinyal tanpa klik).", parent=self._dialog_parent())
+            return False
+        if not self.state.click_region:
+            messagebox.showinfo(
+                "Kalibrasi tombol belum ada",
+                "Klik otomatis perlu tahu posisi tombol Higher/Lower.\n\n"
+                "Gunakan ‘Kalibrasi tombol broker’ di halaman Data, lalu pilih "
+                "area yang memuat kedua tombol tersebut.", parent=self._dialog_parent())
+            return False
+        if not messagebox.askyesno(
+            "Aktifkan klik otomatis?",
+            "CandleLab akan MENGKLIK tombol Higher/Lower di layar Anda setiap "
+            "kali tebakan baru muncul.\n\n"
+            "Pengaman yang berlaku:\n"
+            "• hanya bila jendela broker sedang aktif\n"
+            "• hanya bila titik klik berada di area yang dikalibrasi\n"
+            "• maksimal satu klik per candle\n"
+            "• berhenti otomatis setelah 50 klik\n\n"
+            "Gunakan hanya pada akun demo. Lanjutkan?",
+            parent=self._dialog_parent(),
+        ):
+            return False
+        self.auto_click_enabled = True
+        self._log(INFO, f"klik otomatis AKTIF • area {self.state.click_region}")
+        self.click_guard = ClickLimiter()
+        self.click_status = ""
+        self.set_status("Klik otomatis AKTIF — hanya pada akun demo.")
+        self._refresh_overlay()
+        return True
+
+    def _dialog_parent(self):
+        """Induk dialog: badge saat overlay aktif, jika tidak jendela utama."""
+        if self.overlay is not None:
+            return self.overlay.window
+        return self
+
+    def calibrate_click_region(self):
+        """Pilih area panel tombol Higher/Lower."""
+        if self.live_active:
+            messagebox.showinfo(
+                "Hentikan live dulu",
+                "Kalibrasi tombol dilakukan saat live berhenti agar area chart "
+                "tidak tertukar.", parent=self)
+            return
+        captured = select_and_capture(self)
+        if captured is None:
+            return
+        image, box = captured
+        pair, reason = find_button_pair(image)
+        option_box, _ = find_new_option(image)
+        if pair is None and option_box is None:
+            messagebox.showwarning("Tombol tidak dikenali", reason, parent=self)
+            return
+        if pair is None and option_box is not None:
+            # Kalibrasi saat form order tertutup sah: tombol NEW OPTION yang
+            # tampil, dan Higher/Lower akan muncul setelahnya.
+            pesan_tambahan = ("\n\nSaat dikalibrasi hanya tombol NEW OPTION yang tampak. "
+                              "Itu tidak masalah: setelah NEW OPTION ditekan, Higher/Lower "
+                              "muncul di area yang sama.")
+        else:
+            pesan_tambahan = ""
+        self.state.click_region = box
+        if self._save():
+            messagebox.showinfo(
+                "Tombol dikenali",
+                "Area tombol broker dikenali.\n\n"
+                f"Area disimpan: {box[0]}, {box[1]} → {box[2]}, {box[3]}\n\n"
+                f"{pesan_tambahan}\n\n"
+                "KAPAN KLIK TERJADI:\n"
+                "Hanya saat mode live berjalan, ketika muncul tebakan BARU untuk "
+                "candle yang sedang berjalan. Maksimal satu klik per candle.\n\n"
+                "YANG HARUS MASUK AREA:\n"
+                "• tombol HIGHER dan LOWER (hijau & merah), dan\n"
+                "• tombol oranye + NEW OPTION bila terlihat.\n"
+                "Area harus memuat keduanya sekaligus, karena posisinya bertumpuk.\n\n"
+                "Urutan yang disarankan: mulai live dulu → atur durasi → baru "
+                "aktifkan klik otomatis.",
+                parent=self)
+
+    def _maybe_auto_click(self, direction: int):
+        """Klik sekali per candle, hanya bila semua pengaman lolos."""
+        if not self.auto_click_enabled or not self.state.click_region:
+            return
+        if direction not in (1, -1):
+            return
+        if not self.minute_gate.can_enter(time.time(), 11.999, self.last_entry_minute):
+            self._click_problem("Sinyal kedaluwarsa atau menit ini sudah diklik.")
+            return
+        allowed, reason = self.click_guard.allow(time.monotonic())
+        if not allowed:
+            self._click_problem(reason)
+            return
+        try:
+            image = capture_region(self.state.click_region)
+        except (RuntimeError, ValueError) as exc:
+            self._click_problem(f"area tombol tidak terbaca ({exc}).")
+            return
+        # Tombol NEW OPTION harus ditekan lebih dulu: selama tombol itu tampil,
+        # tombol Higher/Lower belum ada di layar.
+        option_box, _ = find_new_option(image)
+        if option_box is not None:
+            point = new_option_point(image.size, self.state.click_region[:2], option_box)
+            guard = self._entry_guard(point)
+            if not guard.allowed:
+                self._click_problem(guard.reason)
+                return
+            left_click(point)
+            self.click_status = "NEW OPTION ditekan • menunggu Higher/Lower"
+            self._log(CLICK, f"NEW OPTION di {point[0]},{point[1]}")
+            self.set_status(self.click_status)
+            self._refresh_overlay()
+
+            def _still_there() -> bool:
+                try:
+                    lagi = capture_region(self.state.click_region)
+                except (RuntimeError, ValueError):
+                    return False
+                kotak, _ = find_new_option(lagi)
+                return kotak is not None
+
+            wait_for_new_option(_still_there, timeout=1.5)
+            try:
+                image = capture_region(self.state.click_region)
+            except (RuntimeError, ValueError) as exc:
+                self._click_problem(f"layar tidak terbaca ulang setelah NEW OPTION ({exc}).")
+                return
+
+        pair, reason = find_button_pair(image)
+        if pair is None:
+            self._click_problem(reason)
+            return
+        point = click_point(image.size, self.state.click_region[:2], pair, direction)
+        guard = self._entry_guard(point)
+        if not guard.allowed:
+            self._click_problem(guard.reason)
+            return
+        # NEW OPTION dan pemeriksaan fokus bisa melewati batas waktu.
+        now = time.time()
+        if not self.minute_gate.can_enter(now, 11.999, self.last_entry_minute):
+            self._click_problem("Jendela entry awal menit sudah lewat.")
+            return
+        self.last_entry_minute = int(now // 60)
+        left_click(point)
+        self.click_guard.record(time.monotonic())
+        arah = "Higher" if direction == 1 else "Lower"
+        self.click_status = (f"KLIK {arah} di {point[0]},{point[1]} • "
+                             f"{self.click_guard.count} klik sesi ini")
+        self._log(CLICK, f"{arah} di {point[0]},{point[1]} "
+                         f"(klik ke-{self.click_guard.count} sesi ini)")
+        self.set_status(self.click_status)
+
+    def _entry_guard(self, point):
+        region = self.state.click_region
+        guard = click_safety(point, region, True)
+        if not guard.allowed and self.screen_region and is_point_inside(point, region):
+            x1, y1, x2, y2 = self.screen_region
+            if restore_chart_focus(point, ((x1 + x2) // 2, (y1 + y2) // 2)):
+                self._log(INFO, "fokus dikembalikan ke jendela chart")
+                guard = click_safety(point, region, True)
+        return guard
+
+    def _click_problem(self, reason: str):
+        """Catat penolakan klik agar terlihat di badge, bukan hanya status live."""
+        self.click_status = "KLIK DITOLAK • " + reason
+        self._log(REJECT, reason)
+        self.set_status(self.click_status)
+        self._refresh_overlay()
+
     def open_log_window(self):
         """Tampilkan log untuk diperiksa dan disalin."""
         window = tk.Toplevel(self)
@@ -679,6 +873,7 @@ class CandleLabApp(tk.Tk):
         titles.pack(side="left", fill="x", expand=True)
         actions = tk.Frame(heading, bg=BG)
         actions.pack(side="right", padx=(15, 0))
+        button(actions, "Kalibrasi tombol broker", self.calibrate_click_region, "secondary").pack(side="left")
         button(actions, "Baca layar", self.read_screen, "secondary").pack(side="left", padx=3)
         button(actions, "Impor CSV", self.import_csv, "secondary").pack(side="left", padx=3)
         button(actions, "+ Tambah candle", self.add_candle_dialog, "primary").pack(side="left", padx=3)
@@ -944,6 +1139,8 @@ class CandleLabApp(tk.Tk):
     def stop_live_monitor(self, refresh=True):
         if self.live_monitor:
             self.live_monitor.stop()
+        self.auto_click_enabled = False
+        self._log(INFO, "live dihentikan • klik otomatis nonaktif")
         self.live_monitor = None
         self.live_generation += 1
         self.live_active = False
@@ -1118,7 +1315,7 @@ class CandleLabApp(tk.Tk):
         if self.overlay is None:
             self.overlay = OverlayBadge(
                 self, on_expand=self.expand_from_overlay,
-                on_stop=self.stop_live_monitor,
+                on_stop=self.stop_live_monitor, on_auto_click=self.toggle_auto_click,
             )
         corner = best_badge_corner(
             self.screen_region, self.winfo_screenwidth(), self.winfo_screenheight(),
@@ -1155,6 +1352,7 @@ class CandleLabApp(tk.Tk):
     def _refresh_overlay(self):
         if self.overlay is None:
             return
+        self.overlay.auto_button.configure(fg="#FF9900" if self.auto_click_enabled else "#83938A")
         if self.live_active:
             self.overlay.show_round(
                 self.rounds.current if self.minute_gate.has_current_signal(time.time()) else None,
@@ -1162,7 +1360,7 @@ class CandleLabApp(tk.Tk):
                 seconds_left=self.rounds.waiting_seconds(),
                 next_in=self.clock.seconds_to_next(time.monotonic()),
                 timeframe=self.clock.label(),
-                waiting_note=self._waiting_reason(),
+                waiting_note=self._waiting_reason(), automatic=self.auto_click_enabled,
                 expires_at=self.minute_gate.signal * 60 + 12,
             )
         else:
@@ -1263,8 +1461,13 @@ class CandleLabApp(tk.Tk):
             self._advance_round(result.candles)
             arah = {1: "Higher", -1: "Lower"}.get(self.locked_prediction.predicted_direction)
             detail = arah or self.locked_prediction.reason
-            self._log(INFO, f"Aba-aba manual 1m • {datetime.fromtimestamp(captured):%H:%M:%S}"
+            self._log(INFO, f"Aba-aba 1m • {datetime.fromtimestamp(captured):%H:%M:%S}"
                             f" • {detail} • {'posisi batang' if self.minute_gate.used_geometry else 'urutan warna'}")
+            if self.auto_click_enabled and arah:
+                try:
+                    self._maybe_auto_click(self.locked_prediction.predicted_direction)
+                except (OSError, RuntimeError, ValueError) as exc:
+                    self._click_problem(str(exc))
         if self._round_status and self._round_status != previous_status:
             # Hasil putaran lebih penting daripada statistik deteksi, tetapi
             # hanya ditampilkan sekali agar status tidak berkedip.

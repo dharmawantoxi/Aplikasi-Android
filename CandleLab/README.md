@@ -231,7 +231,7 @@ Workflow Windows menjalankan smoke test ini sebelum membuat `.exe`; test tidak m
 
 ## Aba-aba manual
 
-Gunakan F7 untuk badge live. Saat candle baru terkonfirmasi, badge menunjukkan KLIK HIGHER atau KLIK LOWER. CandleLab hanya membaca chart; Anda sendiri yang membuka form dan mengklik tombol broker. Mulai detik ke-12 dari awal menit candle, badge mengganti aba-aba dengan **KEDALUWARSA — Jangan klik. Tunggu sinyal baru.** Tidak perlu kalibrasi tombol. Aba-aba juga dicatat di log.
+Gunakan F7 untuk badge live. Saat candle baru terkonfirmasi, badge menunjukkan KLIK HIGHER atau KLIK LOWER. Bawaan tetap manual. Pada Windows demo, pilih Data → Kalibrasi tombol broker, lalu aktifkan ⚡ di badge. Sinyal baru langsung memicu pemeriksaan dan klik tanpa menunggu frame berikutnya. Stop Live mematikan klik otomatis; log sesi tetap dapat dibuka dari sidebar selama aplikasi belum ditutup. Mulai detik ke-12 dari awal menit candle, badge mengganti aba-aba dengan **KEDALUWARSA — Jangan klik. Tunggu sinyal baru.** Tidak perlu kalibrasi tombol. Aba-aba juga dicatat di log.
 
 ## Informasi harga
 

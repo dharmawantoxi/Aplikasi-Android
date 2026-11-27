@@ -63,7 +63,7 @@ class OverlayModeSafetyTests(unittest.TestCase):
                       "refresh() harus menahan diri saat overlay aktif")
         self.assertIn("return", source)
 
-    def test_live_is_manual_only(self):
-        self.assertNotIn("left_click", self.text)
-        self.assertNotIn("toggle_auto_click", self.text)
-        self.assertIn("Aba-aba manual", self.text)
+    def test_click_dispatched_only_from_new_signal(self):
+        self.assertNotIn("_maybe_auto_click", self._method_source("_refresh_overlay"))
+        self.assertIn("self._maybe_auto_click", self._method_source("_process_live_result"))
+        self.assertIn("self.auto_click_enabled = False", self._method_source("stop_live_monitor"))

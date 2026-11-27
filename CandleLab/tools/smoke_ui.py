@@ -173,7 +173,7 @@ with tempfile.TemporaryDirectory() as directory:
         assert app.wm_state() == state_before, "refresh() mengubah state saat overlay"
         # Badge manual hanya menyediakan kontrol jendela.
         labels = [child.cget("text") for child in app.overlay.buttons.winfo_children()]
-        assert labels == ["⚙", "✕"], f"kontrol badge tidak sesuai mode manual: {labels}"
+        assert labels == ["⚡", "⚙", "✕"], f"kontrol badge tidak sesuai mode manual: {labels}"
 
         # Tebak otomatis: tebakan dikunci, lalu dinilai saat chart bergeser.
         app.live_candles = list(make_demo_candles(8))
