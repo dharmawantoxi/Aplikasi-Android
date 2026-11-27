@@ -19,3 +19,16 @@ class MinuteTests(unittest.TestCase):
             gate = MinuteGate()
             for sec, seq in [(55, 'HHMMH'), (57, 'HHMMH'), (t, history), (t + 2, history)]:
                 self.assertFalse(gate.observe(sec, seq))
+
+    def test_four_closed_plus_one_forming_is_enough(self):
+        gate = MinuteGate()
+        for t, seq in [(55, 'HHMM'), (57, 'HHMM'), (61, 'HMMH')]:
+            self.assertFalse(gate.observe(t, seq))
+        self.assertTrue(gate.observe(63, 'HMMH'))
+        self.assertTrue(gate.can_enter(64, 8, -1))
+
+    def test_noisy_left_edge_does_not_block_confirmed_recent_shift(self):
+        gate = MinuteGate()
+        for t, seq in [(55, 'HHHMMHMHH'), (57, 'MHHMMHMHH'), (61, 'MHMMHMHHM')]:
+            self.assertFalse(gate.observe(t, seq))
+        self.assertTrue(gate.observe(63, 'HHMMHMHHM'))

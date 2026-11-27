@@ -256,7 +256,7 @@ class OverlayBadge:
 
     def show_round(self, round_obj, stats, candle_count: int, pending: bool = True,
                    seconds_left=None, next_in=None, timeframe="?",
-                   click_note: str = ""):
+                   click_note: str = "", waiting_note: str = ""):
         """Tampilkan tebakan yang sedang berjalan beserta skor benar/salah.
 
         ``round_obj`` adalah ``rounds.Round``; ``stats`` adalah
@@ -264,10 +264,9 @@ class OverlayBadge:
         apakah tebakan itu benar atau salah.
         """
         if round_obj is None:
-            from .rounds import needed_candles
-            kurang = needed_candles(candle_count)
-            self.headline.configure(text="Belum cukup", fg="#C9D6CF")
-            pesan = (f"perlu {kurang} candle lagi" if kurang else "menunggu data")
+            kurang = max(0, 5 - candle_count)
+            self.headline.configure(text="Belum cukup" if kurang else "Menunggu sinyal", fg="#C9D6CF")
+            pesan = f"perlu {kurang} candle lagi" if kurang else waiting_note or "menunggu awal menit"
             self.detail.configure(text=pesan, fg=DETAIL_FG)
             self._apply_geometry()
             return

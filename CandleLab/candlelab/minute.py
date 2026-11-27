@@ -6,22 +6,32 @@ class MinuteGate:
         self.base = None
         self.previous = None
         self.signal = -1
+        self.reason = "Menunggu pembacaan chart."
 
     def observe(self, captured, closed):
         minute, sec = divmod(captured, 60)
+        # Gangguan deteksi di tepi kiri tidak mengubah empat close strategi.
+        closed = closed[-8:]
         key = (int(minute), closed)
         confirmed = key == self.previous
         self.previous = key
-        if not confirmed or len(closed) < 5:
+        if len(closed) < 4:
+            self.reason = f"Terbaca {len(closed)}/4 candle tertutup; perlu 5 candle terlihat."
+            return False
+        if not confirmed:
+            self.reason = "Menunggu bacaan kedua yang sama."
             return False
         if sec >= 45:
+            self.reason = "Acuan siap; tunggu awal menit baru."
             self.base = key
             return False
+        self.reason = "Menunggu acuan akhir menit dan awal menit baru."
         if sec > 10 or minute <= self.signal or not self.base:
             return False
         old_minute, old = self.base
         if old_minute != minute - 1:
             return False
+        self.reason = "Pergeseran satu candle belum terkonfirmasi."
         if closed[:-1] != old and not (closed != old and closed[:-1] == old[1:]):
             return False
         self.signal = int(minute)
