@@ -627,12 +627,15 @@ class CandleLabApp(tk.Tk):
         window.title("Log CandleLab")
         window.configure(bg=BG)
         window.geometry("900x560")
-        window.transient(self)
+        if self.winfo_viewable():
+            window.transient(self)
         header = tk.Frame(window, bg=BG, padx=16, pady=10)
         header.pack(fill="x")
         text(header, "Log kegiatan", 13, INK, "bold", bg=BG).pack(side="left")
-        text(header, "  salin seluruhnya lalu kirim bila perlu bantuan", 8, MUTED,
-             bg=BG).pack(side="left", padx=(8, 0))
+        feedback = tk.StringVar(window, value="")
+        copy_button = button(header, "COPY LOG", lambda: _salin(), "primary")
+        copy_button.pack(side="right")
+        tk.Label(header, textvariable=feedback, bg=BG, fg=MUTED).pack(side="right", padx=8)
 
         body = tk.Text(window, bg="#0E1F19", fg="#C9D6CF", insertbackground="#C9D6CF",
                        font=(FONT, 8), wrap="none", padx=10, pady=8)
@@ -649,14 +652,16 @@ class CandleLabApp(tk.Tk):
 
         def _salin():
             isi = self.log.text()
+            if not isi:
+                feedback.set("Belum ada log untuk disalin.")
+                return
             self.clipboard_clear()
             self.clipboard_append(isi)
             self.update_idletasks()
-            self.set_status(f"{len(self.log.entries)} baris log disalin.")
+            feedback.set(f"{len(self.log.entries)} baris log disalin.")
 
         bar = tk.Frame(window, bg=BG, padx=16, pady=10)
         bar.pack(fill="x")
-        button(bar, "Salin semua", _salin, "primary").pack(side="left")
         button(bar, "Muat ulang", _isi, "secondary").pack(side="left", padx=6)
         button(bar, "Bersihkan", lambda: (self.log.clear(), _isi()), "secondary").pack(
             side="left")
