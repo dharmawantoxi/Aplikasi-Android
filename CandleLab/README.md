@@ -298,3 +298,5 @@ Dua tombol: *Uji hipotesis ini* (satu uji, sesuai anjuran) dan *Uji semua (dikor
 Hasil hanya layak dipakai bila **dua syarat terpenuhi bersama**: nilai-p < 0,05 *dan* akurasi melewati ambang impas (`1 / (1 + payout)`), yaitu 54,9% pada payout 82%.
 
 Satu hipotesis juga diverifikasi agar tidak menipu: efek jam sempat terlihat 60,4% pada data acak murni karena frekuensi dasarnya dihitung dari seluruh data (termasuk masa depan). Setelah dibuat walk-forward, hasilnya 51,7% dan tidak signifikan.
+
+**Strategi arah LIVE (TF 1 menit):** bandingkan close candle terakhir yang sudah tutup dengan rata-rata tiga close sebelumnya pada pembacaan layar yang sama. Di atas → Higher, di bawah → Lower, sama → arah live sebelumnya (tanpa arah awal: tunggu). Warna candle berjalan tidak dipakai. Ini aturan arah, bukan persentase peluang. Setelah putaran dinilai, log membandingkan hasil warna dengan model probabilitas lama tanpa membuka posisi kedua. Backtest model probabilitas di luar live tidak mengukur strategi ini.

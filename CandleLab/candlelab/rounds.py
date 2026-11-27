@@ -32,7 +32,7 @@ def accuracy_is_meaningful(played: int) -> bool:
 class Round:
     """Satu tebakan yang dikunci untuk satu candle tertentu."""
 
-    green_probability: float
+    green_probability: Optional[float]
     direction: int
     candle_count: int
     pattern: tuple[int, ...] = ()
@@ -54,7 +54,7 @@ class Round:
 
     def to_dict(self) -> dict:
         return {
-            "p": round(self.green_probability, 4),
+            "p": None if self.green_probability is None else round(self.green_probability, 4),
             "dir": self.direction,
             "actual": self.actual,
             "ok": self.correct,
@@ -190,7 +190,7 @@ class RoundTracker:
         self.rounds_opened += 1
         return Round(
             seq=self.rounds_opened,
-            green_probability=float(prediction.green_probability),
+            green_probability=prediction.green_probability,
             direction=int(prediction.predicted_direction),
             candle_count=candle_count,
             pattern=tuple(getattr(prediction, "pattern", ())),
@@ -203,12 +203,13 @@ class RoundTracker:
         if round_ is None:
             return None
         if actual == DOJI:
+            self.current = None
             self.stats.skipped += 1
             return None
         round_.actual = actual
         self.log.append(round_)
         del self.log[:-self.keep]
-        if round_.green_probability == 0.5:
+        if round_.direction == DOJI:
             # Tebakan seimbang tidak dinilai menang atau kalah.
             self.stats.skipped += 1
             return round_
