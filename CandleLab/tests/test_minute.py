@@ -37,3 +37,13 @@ class MinuteTests(unittest.TestCase):
         gate = MinuteGate()
         for t, seq in [(55, 'HHMM'), (57, 'HHMM'), (59, 'HMMM'), (61, 'HMMH')]:
             self.assertFalse(gate.observe(t, seq))
+
+    def test_badge_waits_after_missed_minute_then_accepts_fresh_signal(self):
+        gate = MinuteGate()
+        for t, history in [(55, 'HHMM'), (57, 'HHMM'), (61, 'HMMH')]:
+            gate.observe(t, history)
+        self.assertTrue(gate.has_current_signal(119))
+        self.assertFalse(gate.has_current_signal(120))
+        for t, history in [(175, 'HMMH'), (177, 'HMMH'), (181, 'MMHM')]:
+            gate.observe(t, history)
+        self.assertTrue(gate.has_current_signal(181))

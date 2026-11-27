@@ -1157,7 +1157,7 @@ class CandleLabApp(tk.Tk):
             return
         if self.live_active:
             self.overlay.show_round(
-                self.rounds.current,
+                self.rounds.current if self.minute_gate.has_current_signal(time.time()) else None,
                 self.rounds.stats, len(self.live_candles),
                 seconds_left=self.rounds.waiting_seconds(),
                 next_in=self.clock.seconds_to_next(time.monotonic()),
@@ -1240,12 +1240,18 @@ class CandleLabApp(tk.Tk):
             if self.live_candles:
                 self._log(INFO, self.minute_gate.reason)
             self.live_candles = []
+            self._refresh_overlay()
             self.set_status("LIVE • candle belum terbaca; periksa ukuran/warna area grafik.")
             return
         sequence = result.sequence
         captured = event.captured
         previous = self.minute_gate.signal
         changed = self.minute_gate.observe(captured, sequence[:-1]) if captured else False
+        if captured and captured % 60 <= 10 and not changed and not self.minute_gate.has_current_signal(captured):
+            key = (int(captured // 60), self.minute_gate.reason)
+            if getattr(self, "_last_wait_log", None) != key:
+                self._last_wait_log = key
+                self._log(INFO, f"Menunggu sinyal • {self.minute_gate.reason}")
         self.live_candles = list(result.candles)
         previous_status = self._round_status or ""
         if changed:

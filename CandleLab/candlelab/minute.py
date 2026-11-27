@@ -38,6 +38,9 @@ class MinuteGate:
         self.signal = int(minute)
         return True
 
+    def has_current_signal(self, now):
+        return self.signal >= 0 and self.signal == int(now // 60)
+
     def can_enter(self, now, seconds, last_entry):
         minute, sec = divmod(now, 60)
         return self.signal == minute and minute > last_entry and sec <= seconds
