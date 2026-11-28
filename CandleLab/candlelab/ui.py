@@ -548,7 +548,7 @@ class CandleLabApp(tk.Tk):
             "• hanya bila jendela broker sedang aktif\n"
             "• hanya bila titik klik berada di area yang dikalibrasi\n"
             "• maksimal satu klik per candle\n"
-            "• berhenti otomatis setelah 50 klik\n\n"
+            "• tanpa batas jumlah klik per sesi; matikan dengan ⚡ atau Stop Live\n\n"
             "Gunakan hanya pada akun demo. Lanjutkan?",
             parent=self._dialog_parent(),
         ):

@@ -110,7 +110,7 @@ class ClickSafetyTests(unittest.TestCase):
 
 class ClickLimiterTests(unittest.TestCase):
     def test_blocks_two_clicks_within_interval(self):
-        limiter = ClickLimiter(min_interval=20, max_per_session=10)
+        limiter = ClickLimiter(min_interval=20)
         self.assertTrue(limiter.allow(0)[0])
         limiter.record(0)
         allowed, reason = limiter.allow(5)
@@ -118,21 +118,19 @@ class ClickLimiterTests(unittest.TestCase):
         self.assertIn("Terlalu cepat", reason)
 
     def test_allows_after_interval(self):
-        limiter = ClickLimiter(min_interval=20, max_per_session=10)
+        limiter = ClickLimiter(min_interval=20)
         limiter.record(0)
         self.assertTrue(limiter.allow(25)[0])
 
-    def test_stops_at_session_limit(self):
-        limiter = ClickLimiter(min_interval=0, max_per_session=2)
-        for moment in (0, 10):
+    def test_continues_past_fifty(self):
+        limiter = ClickLimiter()
+        for moment in range(0, 60 * 55, 60):
             self.assertTrue(limiter.allow(moment)[0])
             limiter.record(moment)
-        allowed, reason = limiter.allow(99)
-        self.assertFalse(allowed)
-        self.assertIn("Batas", reason)
+        self.assertEqual(limiter.count, 55)
 
     def test_reset_clears_count(self):
-        limiter = ClickLimiter(min_interval=0, max_per_session=1)
+        limiter = ClickLimiter()
         limiter.record(0)
         self.assertFalse(limiter.allow(10)[0])
         limiter.reset()
