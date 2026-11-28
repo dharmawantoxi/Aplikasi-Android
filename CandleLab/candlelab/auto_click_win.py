@@ -295,22 +295,14 @@ def wait_for_new_option(probe, timeout: float = 1.5, interval: float = 0.15):
 
 
 class ClickLimiter:
-    """Batas jumlah klik agar kesalahan deteksi tidak berulang-ulang.
+    """Hitung klik sesi dan cegah klik yang terlalu berdekatan."""
 
-    ``min_interval`` mencegah dua klik dalam satu candle; ``max_per_session``
-    menghentikan sesi sebelum kerugian menumpuk tanpa disadari.
-    """
-
-    def __init__(self, min_interval: float = 20.0, max_per_session: int = 50) -> None:
+    def __init__(self, min_interval: float = 20.0) -> None:
         self.min_interval = min_interval
-        self.max_per_session = max_per_session
         self.count = 0
         self._last = -1e9
 
     def allow(self, now: float) -> tuple[bool, str]:
-        if self.count >= self.max_per_session:
-            return False, (f"Batas {self.max_per_session} klik per sesi tercapai. "
-                           "Mulai sesi baru untuk melanjutkan.")
         if self.count and now - self._last < self.min_interval:
             # count == 0 berarti ini klik pertama; tidak ada yang perlu ditunggu.
             return False, "Terlalu cepat sejak klik sebelumnya; menunggu candle berikutnya."
