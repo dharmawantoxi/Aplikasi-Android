@@ -16,3 +16,14 @@ class CloseSignalTests(unittest.TestCase):
         for previous in [-1, 0, 1]:
             self.assertEqual(self.signal([100, 102, 101, 101], previous).predicted_direction, previous)
         self.assertFalse(self.signal([102, 101, 100], 1).available)
+
+
+class RangeTests(unittest.TestCase):
+    def test_range_and_midpoint(self):
+        from candlelab.model import range_reversion
+        prior = [Candle(4, 10, 0, 4)] * 3
+        self.assertFalse(range_reversion(prior).available)
+        for close, expected in [(1, 1), (9, -1), (5, 0)]:
+            bars = prior + [Candle(close, close, close, close)]
+            self.assertEqual(range_reversion(bars).predicted_direction, expected)
+        self.assertEqual(range_reversion(bars, -1).predicted_direction, -1)

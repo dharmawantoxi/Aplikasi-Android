@@ -32,7 +32,7 @@ from .model import (
     MIN_CANDLES,
     MIN_DIRECTIONAL,
     DOJI, GREEN as GREEN_DIRECTION, PRIOR_STRENGTH, RED as RED_DIRECTION,
-    Candle, CandleModel, CloseSignal, close_vs_three, make_demo_candles,
+    Candle, CandleModel, CloseSignal, range_reversion, make_demo_candles,
 )
 from .positions import Position, session_result
 from .storage import JsonStore, LIVE_ROUNDS_KEPT
@@ -61,7 +61,7 @@ class CandleLabApp(tk.Tk):
         # Putaran tebak otomatis: tebakan dikunci per candle lalu dinilai
         # oleh candle itu sendiri saat selesai.
         self.rounds = RoundTracker()
-        self.position_session = datetime.now().isoformat(sep=" ", timespec="seconds")
+        self.position_session = datetime.now().isoformat(sep=" ", timespec="seconds") + " • Pantulan rentang 4"
         self.minute_gate = MinuteGate()
         self.locked_prediction = None
         self.clock = CandleClock()
@@ -371,7 +371,7 @@ class CandleLabApp(tk.Tk):
         prediction = self._prediction()
         text(parent, "ESTIMASI CANDLE BERIKUTNYA", 8, GREEN_BRIGHT, "bold", SIDEBAR).pack(anchor="w")
         if self.live_active:
-            text(parent, "LIVE • Close vs rata-rata 3", 14, GREEN_BRIGHT, "bold", SIDEBAR).pack(anchor="w")
+            text(parent, "LIVE • Pantulan rentang 4", 14, GREEN_BRIGHT, "bold", SIDEBAR).pack(anchor="w")
             text(parent, prediction.reason, 9, "#B8C9C1", bg=SIDEBAR).pack(anchor="w")
             self._fill_round_panel(parent)
             return
@@ -1037,7 +1037,7 @@ class CandleLabApp(tk.Tk):
         # dari area pembacaan yang berbeda.
         self.rounds.reset()
         self.clock.reset()
-        self.position_session = datetime.now().isoformat(sep=" ", timespec="seconds")
+        self.position_session = datetime.now().isoformat(sep=" ", timespec="seconds") + " • Pantulan rentang 4"
         self.minute_gate = MinuteGate()
         self.locked_prediction = None
         try:
@@ -1399,7 +1399,7 @@ class CandleLabApp(tk.Tk):
         """Kunci atau nilai satu putaran tebak otomatis."""
         history = list(candles[:-1]) if candles else []
         previous = self.locked_prediction.predicted_direction if self.locked_prediction else DOJI
-        prediction = close_vs_three(history, previous)
+        prediction = range_reversion(history, previous)
         benchmark = CandleModel.predict(history, self._order(), self._window())
         prior_benchmark = getattr(self, "_benchmark_direction", DOJI)
         self._benchmark_direction = benchmark.predicted_direction if benchmark.available else DOJI
@@ -1409,7 +1409,7 @@ class CandleLabApp(tk.Tk):
         if finished is not None and finished.correct is not None:
             pembanding = ("seimbang/tidak tersedia" if not prior_benchmark else
                           "benar" if prior_benchmark == finished.actual else "salah")
-            self._log(INFO, f"Close vs rata-rata 3: {'benar' if finished.correct else 'salah'}"
+            self._log(INFO, f"Pantulan rentang 4: {'benar' if finished.correct else 'salah'}"
                       f" • model lama: {pembanding} (tanpa klik)")
             self.state.record_live_round(finished.correct)
             self._save_quietly()

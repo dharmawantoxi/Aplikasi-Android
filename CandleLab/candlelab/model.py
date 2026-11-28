@@ -62,6 +62,19 @@ class CloseSignal:
         return self.predicted_direction != DOJI
 
 
+def range_reversion(history: Sequence[Candle], previous: int = DOJI) -> CloseSignal:
+    if len(history) < 4:
+        return CloseSignal(reason="Perlu empat candle tertutup.")
+    bars = history[-4:]
+    low, high = min(c.low for c in bars), max(c.high for c in bars)
+    close = bars[-1].close
+    if close - low < high - close:
+        return CloseSignal(GREEN, "Close di separuh bawah rentang 4: uji pantulan naik.")
+    if close - low > high - close:
+        return CloseSignal(RED, "Close di separuh atas rentang 4: uji pantulan turun.")
+    return CloseSignal(previous, "Close di tengah rentang; pertahankan arah jika tersedia.")
+
+
 def close_vs_three(history: Sequence[Candle], previous: int = DOJI) -> CloseSignal:
     if len(history) < 4:
         return CloseSignal(reason="Perlu empat candle tertutup.")

@@ -37,6 +37,7 @@ def session_result(rows, session):
     wins, losses, ties = (scores.count(k) for k in (1, -1, 0))
     def pct(n):
         return f'{100*n/(wins+losses):.1f}%' if wins+losses else '—'
-    return (f'Close vs rata-rata 3: {wins} benar, {losses} salah ({pct(wins)})  •  '
+    strategy = 'Pantulan rentang 4' if session.endswith(' • Pantulan rentang 4') else 'Close vs rata-rata 3'
+    return (f'{strategy}: {wins} benar, {losses} salah ({pct(wins)})  •  '
             f'Arah terbalik: {losses} benar, {wins} salah ({pct(losses)})\n'
             f'Seri {ties} (di luar akurasi)  •  Belum diisi {scores.count(None)}')
