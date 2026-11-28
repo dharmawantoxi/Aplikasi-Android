@@ -19,8 +19,10 @@ class ScrollFrame(ttk.Frame):
         self.window = self.canvas.create_window((0, 0), window=self.interior, anchor="nw")
         self.interior.bind("<Configure>", self._content_changed)
         self.canvas.bind("<Configure>", self._canvas_changed)
-        self.canvas.bind("<Enter>", self._bind_wheel)
-        self.canvas.bind("<Leave>", self._unbind_wheel)
+        self._top = self.winfo_toplevel()
+        self._wheel_bindings = {seq: self._top.bind(seq, self._wheel, add="+")
+                                for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>")}
+        self.bind("<Destroy>", self._unbind_wheel)
 
     def _content_changed(self, _event=None):
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
@@ -28,17 +30,18 @@ class ScrollFrame(ttk.Frame):
     def _canvas_changed(self, event):
         self.canvas.itemconfigure(self.window, width=event.width)
 
-    def _bind_wheel(self, _event=None):
-        self.canvas.bind_all("<MouseWheel>", self._wheel)
-        self.canvas.bind_all("<Button-4>", self._wheel)
-        self.canvas.bind_all("<Button-5>", self._wheel)
-
-    def _unbind_wheel(self, _event=None):
-        self.canvas.unbind_all("<MouseWheel>")
-        self.canvas.unbind_all("<Button-4>")
-        self.canvas.unbind_all("<Button-5>")
+    def _unbind_wheel(self, event):
+        if event.widget is self:
+            for seq, token in self._wheel_bindings.items():
+                self._top.unbind(seq, token)
+            self._wheel_bindings.clear()
 
     def _wheel(self, event):
+        widget = event.widget
+        while widget is not self:
+            widget = getattr(widget, "master", None)
+            if widget is None:
+                return
         if getattr(event, "num", None) == 4:
             delta = -1
         elif getattr(event, "num", None) == 5:
